@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Cache Components (PPR) intentionally left off for Phase 1: nearly every
+  // route is auth-gated/dynamic, so there is no static shell to benefit from
+  // it yet. Revisit in the Map phase once public Place listings are cacheable.
   turbopack: {
     rules: {
       "*.css": {
