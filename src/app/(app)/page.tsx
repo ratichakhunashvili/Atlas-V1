@@ -3,18 +3,11 @@ import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
 import { Field } from "@/components/shared/field";
 import { findCurrentStayForUser } from "@/db/queries/hotel-stays";
-import { listPlacesNear } from "@/db/queries/places";
 import { checkInToHotelFormAction } from "@/features/hotel-stays/actions";
 import { requireUser } from "@/lib/authorization";
-import { GEORGIA_CENTER } from "@/services/mapbox/georgiaBoundary";
+import { getEligibleMapPlacesForGuest } from "@/services/eligibility";
 import { getCurrentItineraryForUser } from "@/services/advisor/current-itinerary";
 import { AdvisorMapSection } from "./advisor-map-section";
-
-// Initial, broad radius for the first server render (no browser GPS yet at
-// this point — see AtlasMap, which narrows to a 5km radius once the client's
-// real location resolves). ~covers Georgia at Phase 2's place counts; revisit
-// if the catalog grows enough that "everything in range" stops being cheap.
-const INITIAL_RADIUS_M = 300_000;
 
 export default async function HomePage({
   searchParams,
@@ -25,10 +18,10 @@ export default async function HomePage({
   const user = await requireUser();
   const stay = await findCurrentStayForUser(user.id);
 
-  const center = stay
-    ? { lat: stay.place.latitude, lng: stay.place.longitude }
-    : { lat: GEORGIA_CENTER[1], lng: GEORGIA_CENTER[0] };
-  const places = await listPlacesNear(center, INITIAL_RADIUS_M);
+  // Only Places eligible for THIS guest's own active-stay hotel: its facilities + its confirmed,
+  // active partners. No valid stay => no places (never "everything nearby"). The hotel is derived
+  // server-side from the session, not from any request parameter.
+  const { places } = await getEligibleMapPlacesForGuest({ userId: user.id });
   const itinerary = await getCurrentItineraryForUser(user.id);
 
   return (

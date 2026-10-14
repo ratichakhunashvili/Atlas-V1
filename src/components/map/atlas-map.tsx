@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MapService } from "@/services/mapbox/mapService";
+import { MapService, type AnchorMarker, type FocusBounds } from "@/services/mapbox/mapService";
 import { getPerformanceSettings } from "@/services/mapbox/performance";
 import { mapThemeService } from "@/services/mapbox/mapTheme";
 import { attachPlaceSelection, attachItineraryStopSelection, externallyDeselect } from "@/services/mapbox/selection";
@@ -11,7 +11,7 @@ import { locationService, type LocationState } from "@/services/location";
 import type { PlaceMapPoint } from "@/db/queries/places";
 import type { RouteGeometry } from "@/services/routing";
 import type { AdvisorStopView } from "@/services/advisor/current-itinerary";
-import { addLocateControl, addThemeToggleControl } from "./controls";
+import { addFramingControl, addLocateControl, addThemeToggleControl, addViewModeControl } from "./controls";
 import { PlaceDetailsPanel } from "./place-details-panel";
 import "./atlas-map.css";
 
@@ -51,8 +51,23 @@ export function AtlasMap({
   route,
   itineraryStops,
   onItineraryStopSelect,
+  focusBounds,
+  focusLabel = "Trip",
+  anchorMarker,
+  isolatedPreview = false,
 }: {
   places: PlaceMapPoint[];
+  /** Optional area the camera should open on (e.g. a sample trip). Read once at mount. A framing button then flips between it and the Georgia overview. */
+  focusBounds?: FocusBounds;
+  /** Short label for the button that returns to the focus area, e.g. "Trip". */
+  focusLabel?: string;
+  /** One clearly labelled marker (e.g. "H" for the hotel at the start and end of a route). */
+  anchorMarker?: AnchorMarker;
+  /**
+   * Development previews only: the map does not request the guest's location, does not fly to it, and does not replace
+   * `places` with the guest's eligible places, so what the page passes in is exactly what is shown. Never set on real guest pages.
+   */
+  isolatedPreview?: boolean;
   /** The Advisor's persisted itinerary route — undefined/null both mean "nothing to show," never a second routing implementation; this is purely the already-computed geometry being rendered. */
   route?: RouteGeometry | null;
   /** The Advisor's own itinerary stops — rendered on a layer separate from `places`, with status-based styling (current-itinerary.ts decides status; this component only draws it). */
@@ -68,6 +83,9 @@ export function AtlasMap({
   const onItineraryStopSelectRef = useRef(onItineraryStopSelect);
   const selectedIdRef = useRef<string | null>(null);
   const hasFetchedNearbyRef = useRef(false);
+  const focusBoundsRef = useRef(focusBounds ?? null);
+  const anchorMarkerRef = useRef(anchorMarker ?? null);
+  const isolatedPreviewRef = useRef(isolatedPreview);
 
   const [selectedPlace, setSelectedPlace] = useState<PlaceMapPoint | null>(null);
   const [locationState, setLocationState] = useState<LocationState>(locationService.getState());
@@ -88,7 +106,7 @@ export function AtlasMap({
     let cancelled = false;
     const cleanups: Array<() => void> = [];
 
-    const service = new MapService(containerRef.current, mapThemeService.getTheme(), getPerformanceSettings());
+    const service = new MapService(containerRef.current, mapThemeService.getTheme(), getPerformanceSettings(), focusBoundsRef.current);
     mapServiceRef.current = service;
 
     service
@@ -100,6 +118,7 @@ export function AtlasMap({
         }
 
         service.updatePlaces(toFeatureCollection(placesRef.current));
+        service.setAnchorMarker(anchorMarkerRef.current);
         service.updateRoute(routeRef.current);
         service.updateItineraryStops(toItineraryStopFeatureCollection(itineraryStopsRef.current));
 
@@ -122,6 +141,23 @@ export function AtlasMap({
         const { setTheme } = addThemeToggleControl(map, mapThemeService.getTheme(), () => mapThemeService.toggle());
         cleanups.push(mapThemeService.onChange(setTheme));
 
+        // 2D/3D: the map starts in a stable tilted view (flat on low-power devices / reduced motion); this toggle is the
+        // flat fallback and the way back. The label follows the real pitch, so a manual tilt gesture keeps it honest.
+        const { setMode } = addViewModeControl(map, service.getViewMode(), () =>
+          service.setViewMode(service.getViewMode() === "3d" ? "2d" : "3d")
+        );
+        const syncViewMode = () => setMode(service.getViewMode());
+        map.on("pitchend", syncViewMode);
+        cleanups.push(() => map.off("pitchend", syncViewMode));
+
+        // When the page gave a focus area, one tap flips between it and the whole-country Georgia overview.
+        if (service.hasFocusArea()) {
+          const { setTarget } = addFramingControl(map, service.getFraming(), focusLabel, () => {
+            service.showFraming(service.getFraming() === "focus" ? "georgia" : "focus");
+            setTarget(service.getFraming());
+          });
+        }
+
         cleanups.push(
           locationService.onChange((state) => {
             setLocationState(state);
@@ -130,6 +166,8 @@ export function AtlasMap({
             if (state.status === "active" && state.coords) {
               const coords = { lat: state.coords.latitude, lng: state.coords.longitude };
               service.setUserLocation(coords, state.accuracy);
+              // A development preview keeps its own camera and data: no auto-centering, no nearby swap.
+              if (isolatedPreviewRef.current) return;
               service.centerOnUser(coords);
 
               // Narrow from the broad initial set to a tight radius around the
@@ -150,8 +188,11 @@ export function AtlasMap({
             }
           })
         );
-        locationService.start();
-        cleanups.push(() => locationService.stop());
+        // A development preview never asks for the guest's location by itself (the locate button still works).
+        if (!isolatedPreviewRef.current) {
+          locationService.start();
+          cleanups.push(() => locationService.stop());
+        }
       })
       .catch((error: unknown) => {
         if (cancelled) return;

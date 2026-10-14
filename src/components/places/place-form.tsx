@@ -1,4 +1,4 @@
-import { PLACE_CATEGORIES, type Place } from "@/db/schema";
+import { PLACE_CATEGORIES, PUBLICATION_STATUSES, VERIFICATION_STATUSES, type Place } from "@/db/schema";
 import { Alert } from "@/components/shared/alert";
 import { Button } from "@/components/shared/button";
 import { Field } from "@/components/shared/field";
@@ -59,6 +59,27 @@ export function PlaceForm({
       <Field label="Image URL" name="imageUrl" defaultValue={place?.imageUrl ?? ""} />
       <Field label="Website" name="website" defaultValue={place?.website ?? ""} />
       <Field label="Phone" name="phone" defaultValue={place?.phone ?? ""} />
+
+      <div className="grid grid-cols-2 gap-4">
+        <Select label="Publication" name="publicationStatus" defaultValue={place?.publicationStatus ?? "draft"}>
+          {PUBLICATION_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </Select>
+        <Select label="Verification" name="verificationStatus" defaultValue={place?.verificationStatus ?? "unverified"}>
+          {VERIFICATION_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <p className="text-xs text-slate-500">
+        A place is only ever shown to guests when it is published, verified, not archived, and linked to their hotel as a facility or an
+        active partner.
+      </p>
 
       <Button type="submit">{place ? "Save changes" : "Create place"}</Button>
     </form>

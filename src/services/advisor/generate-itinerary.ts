@@ -1,10 +1,12 @@
-import { PLACE_CATEGORIES, type CheckInMethod, type Hotel, type ItineraryDay, type ItineraryStop, type Place, type PlaceCategory, type User, type UserPreferences } from "@/db/schema";
+import { type CheckInMethod, type Hotel, type ItineraryDay, type ItineraryStop, type Place, type PlaceCategory, type User, type UserPreferences } from "@/db/schema";
 import type { LatLng } from "@/lib/geo";
-import { buildCandidates, MAX_CANDIDATE_DISTANCE_METERS, type AdvisorCandidate } from "./candidates";
-import { rankCandidates, type UsageHistory } from "./scoring";
+import { buildCandidates, type AdvisorCandidate } from "./candidates";
+import type { UsageHistory } from "./scoring";
+import { chooseStops, resolveCandidateCategories } from "./stop-selection";
 import { calculateNextStopCount, type PreviousDayOutcome } from "./difficulty";
 import { calculateDayNumber } from "./stay-day";
 import { optimizeWalkingRoute } from "@/services/routing";
+import type { EligiblePlace } from "@/services/eligibility/rules";
 
 // Type-only import: erased at compile time, so this module never statically
 // pulls in a `server-only`-guarded db/queries module. Production callers get
@@ -24,7 +26,8 @@ export type GenerationFailureReason =
   | "no_active_stay"
   | "outside_stay_period"
   | "no_preferences"
-  | "insufficient_candidates"
+  /** No eligible hotel facility or active partner is available (at all, or for these interests/distance). Never filled with a substitute. */
+  | "no_eligible_experiences"
   | "routing_failed"
   | "persistence_failed";
 
@@ -37,14 +40,6 @@ export type ActiveHotelStay = {
   checkIn: Date;
   checkOut: Date | null;
   hotel: Hotel;
-  place: Place;
-};
-
-export type HotelPlaceRow = {
-  hotelId: string;
-  placeId: string;
-  priority: number | null;
-  createdAt: Date;
   place: Place;
 };
 
@@ -61,8 +56,8 @@ export type GenerateItineraryDependencies = {
   findUserById: (id: string) => Promise<User | null>;
   findActiveStayForUser: (userId: string) => Promise<ActiveHotelStay | null>;
   findPreferencesForUser: (userId: string) => Promise<UserPreferences | null>;
-  listFullPlacesNear: (center: LatLng, radiusMeters: number) => Promise<Place[]>;
-  listPlacesForHotel: (hotelId: string) => Promise<HotelPlaceRow[]>;
+  /** The ONLY source of candidate Places: the hotel's own active facilities + its active, confirmed partners (services/eligibility). The hotelId passed in is always the one from the guest's own active stay. */
+  listEligiblePlacesForStay: (stay: Pick<ActiveHotelStay, "hotel" | "place">, now: Date) => Promise<EligiblePlace[]>;
   findItineraryDay: (userId: string, hotelId: string, dayNumber: number) => Promise<ItineraryDay | null>;
   findLatestItineraryDayBefore: (userId: string, hotelId: string, beforeDayNumber: number) => Promise<ItineraryDay | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
@@ -72,12 +67,11 @@ export type GenerateItineraryDependencies = {
 };
 
 async function loadDefaultDependencies(): Promise<GenerateItineraryDependencies> {
-  const [usersQ, hotelStaysQ, preferencesQ, placesQ, hotelPlacesQ, itineraryQ] = await Promise.all([
+  const [usersQ, hotelStaysQ, preferencesQ, eligibilityM, itineraryQ] = await Promise.all([
     import("@/db/queries/users"),
     import("@/db/queries/hotel-stays"),
     import("@/db/queries/preferences"),
-    import("@/db/queries/places"),
-    import("@/db/queries/hotel-places"),
+    import("@/services/eligibility"),
     import("@/db/queries/itinerary"),
   ]);
 
@@ -85,8 +79,7 @@ async function loadDefaultDependencies(): Promise<GenerateItineraryDependencies>
     findUserById: usersQ.findUserById,
     findActiveStayForUser: hotelStaysQ.findActiveStayForUser,
     findPreferencesForUser: preferencesQ.findPreferencesForUser,
-    listFullPlacesNear: placesQ.listFullPlacesNear,
-    listPlacesForHotel: hotelPlacesQ.listPlacesForHotel,
+    listEligiblePlacesForStay: (stay, now) => eligibilityM.listEligiblePlacesForStay(stay, now),
     findItineraryDay: itineraryQ.findItineraryDay,
     findLatestItineraryDayBefore: itineraryQ.findLatestItineraryDayBefore,
     listItineraryStops: itineraryQ.listItineraryStops,
@@ -96,40 +89,32 @@ async function loadDefaultDependencies(): Promise<GenerateItineraryDependencies>
   };
 }
 
-function toPlaceCategories(categories: readonly string[]): PlaceCategory[] {
-  const valid = new Set<string>(PLACE_CATEGORIES);
-  return categories.filter((category): category is PlaceCategory => valid.has(category));
-}
-
 function resolveCheckInMethod(candidate: AdvisorCandidate): CheckInMethod {
   if (candidate.isPartner) return "qr";
   if (QR_CHECK_IN_CATEGORIES.includes(candidate.place.category)) return "qr";
   return "gps";
 }
 
+/** Every stop is a real eligible Place the guest actually has to visit; the hotel is only the route's origin/return point, never a stop. */
 type SelectedStop = {
   placeId: string;
-  isHotelStop: boolean;
   checkInMethod: CheckInMethod;
   name: string;
   category: PlaceCategory | null;
   latitude: number;
   longitude: number;
   imageUrl: string | null;
-  visitedAt: Date | null;
 };
 
 function fromCandidate(candidate: AdvisorCandidate): SelectedStop {
   return {
     placeId: candidate.place.id,
-    isHotelStop: false,
     checkInMethod: resolveCheckInMethod(candidate),
     name: candidate.place.name,
     category: candidate.place.category,
     latitude: candidate.place.latitude,
     longitude: candidate.place.longitude,
     imageUrl: candidate.place.imageUrl,
-    visitedAt: null,
   };
 }
 
@@ -150,14 +135,16 @@ async function buildPreviousDayOutcome(
     allStopsVisited,
     completedAt: previous.completedAt,
     generatedAt: previous.generatedAt,
-    totalDurationSeconds: previous.totalDurationSeconds,
+    // The ORIGINAL generated estimate (a repair updates totalDurationSeconds to the repaired route, but the
+    // ratchet must keep judging the guest against what was originally planned). Older rows fall back to the total.
+    totalDurationSeconds: previous.originalDurationSeconds ?? previous.totalDurationSeconds,
   };
 }
 
 /**
  * The Advisor orchestration layer: active HotelStay -> dayNumber -> cooldown
- * check -> difficulty -> candidates -> scoring -> partner guarantee ->
- * routing -> transactional persistence. Resolves everything itself from a
+ * check -> difficulty -> eligible candidates -> scoring -> partner priority ->
+ * routing (hotel = origin and return point) -> transactional persistence. Resolves everything itself from a
  * plain `userId` (no session/auth here — that's the caller's job, matching
  * every other services/* module in Atlas); accepts `deps` purely for testing
  * so a caller never needs a real DB or a real Mapbox account to exercise
@@ -191,7 +178,10 @@ export async function generateItineraryForUser(
   if (existingDay) {
     const hoursSinceGeneration = (now.getTime() - existingDay.generatedAt.getTime()) / 3600000;
     // Admins bypass the cooldown (preserved from the original's `if (previousDay && !isAdmin)`)
-    // so they can regenerate today's plan immediately while testing.
+    // so they can regenerate today's plan immediately while testing. This is the ONLY cooldown
+    // exception here: an ordinary Generate never changes an existing day, even when one of its
+    // pending stops has become unavailable — that needs the dedicated, explicit plan-repair action
+    // (services/advisor/plan-repair.ts), so the route can never change silently.
     if (hoursSinceGeneration < GENERATION_COOLDOWN_HOURS && !isAdmin) {
       const stops = await d.listItineraryStops(existingDay.id);
       return { ok: true, itinerary: { day: existingDay, stops }, regenerated: false };
@@ -199,90 +189,54 @@ export async function generateItineraryForUser(
   }
 
   const preferences = await d.findPreferencesForUser(userId);
-  const selectedCategories = toPlaceCategories(preferences?.categories ?? []);
-  // Admins testing without preferences set get the unfiltered pool; everyone
-  // else must pick at least one interest before they can generate a plan —
-  // exact original fallback (itinerary.ts: `filterByPreference`).
-  const filterByPreference = !(isAdmin && selectedCategories.length === 0);
-  if (filterByPreference && selectedCategories.length === 0) {
+  // Admins testing without preferences get the unfiltered pool; everyone else must pick at least one
+  // interest before they can generate a plan — exact original fallback.
+  const categoriesForCandidates = resolveCandidateCategories(isAdmin, preferences);
+  if (!categoriesForCandidates) {
     return { ok: false, reason: "no_preferences", message: "Pick your interests in your profile before generating a plan." };
   }
-  const categoriesForCandidates = filterByPreference ? selectedCategories : [...PLACE_CATEGORIES];
 
   const hotelLocation: LatLng = { lat: stay.place.latitude, lng: stay.place.longitude };
 
-  const [nearbyPlaces, hotelPlaceRows] = await Promise.all([
-    d.listFullPlacesNear(hotelLocation, MAX_CANDIDATE_DISTANCE_METERS),
-    d.listPlacesForHotel(stay.hotel.id),
-  ]);
+  // Eligibility is resolved from THIS guest's own active stay (stay.hotel), never from a client-supplied id.
+  const eligiblePlaces = await d.listEligiblePlacesForStay(stay, now);
 
   const candidates = buildCandidates({
     hotelLocation,
     hotelPlaceId: stay.place.id,
-    nearbyPlaces,
+    eligiblePlaces,
     selectedCategories: categoriesForCandidates,
-    hotelPlaceRelations: hotelPlaceRows.map((row) => ({ placeId: row.placeId, priority: row.priority })),
   });
+
+  // A rebuild of an existing day KEEPS its completed stops (history and scoring are never touched); only
+  // PENDING stops are superseded, and only as many new stops are added as the target still needs.
+  const existingStops = existingDay ? await d.listItineraryStops(existingDay.id) : [];
+  const completedStops = existingStops.filter((stop) => stop.visitedAt !== null);
+  const completedPlaceIds = new Set(completedStops.flatMap((stop) => (stop.placeId ? [stop.placeId] : [])));
 
   const usageHistory: UsageHistory = await d.getStopUsageHistory(userId, stay.hotel.id);
   const previousDayOutcome = await buildPreviousDayOutcome(d, userId, stay.hotel.id, dayNumber);
   const targetStopCount = calculateNextStopCount(previousDayOutcome);
+  const neededNewStops = Math.max(0, targetStopCount - completedStops.length);
 
-  const rankedAll = rankCandidates(candidates, usageHistory);
-  const rankedPartners = rankCandidates(
-    candidates.filter((candidate) => candidate.isPartner),
-    usageHistory
-  );
-
-  // At least one stop today must be a partner, or the hotel itself if none
-  // are assigned yet — exact original rule (itinerary.ts: `usedHotelFallback`).
-  const guaranteedSlotUsesHotelFiller = rankedPartners.length === 0;
-  const chosen: AdvisorCandidate[] = [];
-  const chosenPlaceIds = new Set<string>();
-
-  if (!guaranteedSlotUsesHotelFiller) {
-    const bestPartner = rankedPartners[0];
-    chosen.push(bestPartner);
-    chosenPlaceIds.add(bestPartner.place.id);
+  if (existingDay && neededNewStops === 0) {
+    // The day already has all the completed stops it is meant to have: nothing to add, nothing to change.
+    return { ok: true, itinerary: { day: existingDay, stops: existingStops }, regenerated: false };
   }
 
-  // The guaranteed slot (partner or filler) always accounts for exactly one
-  // of targetStopCount; everything else comes from the ranked pool. Unlike
-  // the original, a pool smaller than needed yields FEWER total stops rather
-  // than repeating candidates — Atlas requires unique Places per itinerary.
-  const targetChosenLength = guaranteedSlotUsesHotelFiller ? targetStopCount - 1 : targetStopCount;
-  for (const candidate of rankedAll) {
-    if (chosen.length >= targetChosenLength) break;
-    if (chosenPlaceIds.has(candidate.place.id)) continue;
-    chosen.push(candidate);
-    chosenPlaceIds.add(candidate.place.id);
-  }
-
+  const chosen = chooseStops({ candidates, usageHistory, targetCount: neededNewStops, excludePlaceIds: completedPlaceIds });
   const selectedStops: SelectedStop[] = chosen.map(fromCandidate);
-  if (guaranteedSlotUsesHotelFiller) {
-    // The filler stop IS the hotel's own real Place — not a second kind of
-    // Place entity. Auto-visited immediately (matches the original Advisor's
-    // behavior, and Step 6's GPS check-in never requires a guest to
-    // physically GPS-check-in at their own hotel): checkInMethod="auto"
-    // means "already done," not "pending a future auto-completion step."
-    selectedStops.push({
-      placeId: stay.place.id,
-      isHotelStop: true,
-      checkInMethod: "auto",
-      name: `Relax at ${stay.place.name}`,
-      category: stay.place.category,
-      latitude: stay.place.latitude,
-      longitude: stay.place.longitude,
-      imageUrl: stay.place.imageUrl,
-      visitedAt: now,
-    });
-  }
 
   if (selectedStops.length === 0) {
-    // Should be unreachable: the hotel filler alone guarantees >=1 stop
-    // whenever zero partners exist, and the hotel's own Place always has
-    // valid coordinates (schema-enforced). Kept as a defensive guard.
-    return { ok: false, reason: "insufficient_candidates", message: "No eligible stops were found near this hotel." };
+    // Nothing is persisted: no empty day, no fake stop. An existing day (and its history) is left untouched.
+    return {
+      ok: false,
+      reason: "no_eligible_experiences",
+      message:
+        eligiblePlaces.length === 0
+          ? `${stay.place.name} doesn't have any approved facilities or partners available yet.`
+          : "None of your hotel's approved experiences match your interests within walking distance. Try different interests.",
+    };
   }
 
   const routeResult = await d.optimizeWalkingRoute({
@@ -298,19 +252,8 @@ export async function generateItineraryForUser(
   if (order.length !== selectedStops.length || order.some((index) => selectedStops[index] === undefined)) {
     return { ok: false, reason: "routing_failed", message: "Mapbox returned a malformed route order." };
   }
-  const walkOrderedStops = order.map((index) => selectedStops[index]);
-
-  // The hotel filler is a relax activity, not a destination — it always
-  // leads the day so it never sits awkwardly mid-route (original rationale,
-  // itinerary.ts lines 219-224).
-  const hotelStop = walkOrderedStops.find((stop) => stop.isHotelStop);
-  const finalStops = hotelStop ? [hotelStop, ...walkOrderedStops.filter((stop) => stop !== hotelStop)] : walkOrderedStops;
-
-  // Normally false (every real stop starts unvisited) — true only in the
-  // edge case where the itinerary is just the auto-visited hotel filler
-  // (zero outside candidates at all), matching the same "all stops visited"
-  // rule markStopVisitedViaGps applies after a GPS check-in.
-  const allStopsAlreadyVisited = finalStops.every((stop) => stop.visitedAt !== null);
+  // The route order is whatever the optimizer returned: hotel -> stops -> hotel. The hotel itself is never a stop.
+  const finalStops = order.map((index) => selectedStops[index]);
 
   const persistResult = await d.persistItinerary({
     userId,
@@ -322,17 +265,21 @@ export async function generateItineraryForUser(
     // Mapbox returns fractional seconds (e.g. 448.9); itinerary_days.total_duration_seconds is an integer column.
     totalDurationSeconds: Math.round(totalDurationSeconds),
     generatedAt: now,
-    completedAt: allStopsAlreadyVisited ? now : null,
+    // Every new stop starts unvisited, so a freshly generated day is never already complete.
+    completedAt: null,
+    // Only the NEW pending stops: on a rebuild the persistence layer keeps completed stops and supersedes
+    // (never deletes) the old pending ones.
     stops: finalStops.map((stop) => ({
       placeId: stop.placeId,
-      isHotelStop: stop.isHotelStop,
+      // Legacy column: only itineraries generated before the filler was removed contain a hotel stop.
+      isHotelStop: false,
       checkInMethod: stop.checkInMethod,
       name: stop.name,
       category: stop.category,
       latitude: stop.latitude,
       longitude: stop.longitude,
       imageUrl: stop.imageUrl,
-      visitedAt: stop.visitedAt,
+      visitedAt: null,
     })),
   });
 

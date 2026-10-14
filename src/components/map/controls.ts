@@ -80,3 +80,62 @@ export function addThemeToggleControl(
 
   return { control, setTheme };
 }
+
+/**
+ * A 2D/3D toggle. The label always names the view you would switch TO, so "2D" while tilted and "3D" while flat.
+ * Gives every guest a usable flat fallback (and a way back to the tilted view) without any gesture.
+ */
+export function addViewModeControl(
+  map: MapboxMap,
+  initial: "3d" | "2d",
+  onToggle: () => void
+): { control: IControl; setMode: (mode: "3d" | "2d") => void } {
+  const button = document.createElement("button");
+  button.className = "atlas-map-control-btn atlas-view-btn";
+  button.type = "button";
+  button.addEventListener("click", onToggle);
+
+  const setMode = (mode: "3d" | "2d"): void => {
+    button.textContent = mode === "3d" ? "2D" : "3D";
+    const label = mode === "3d" ? "Switch to flat 2D view" : "Switch to tilted 3D view";
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.dataset.mode = mode;
+  };
+  setMode(initial);
+
+  const control = wrapAsControl(button);
+  map.addControl(control, "top-right");
+
+  return { control, setMode };
+}
+
+/**
+ * A framing toggle for pages that give the map a focus area (e.g. a sample trip): one tap flips between the focus
+ * area and the whole-country Georgia overview. The label names where a tap will take you.
+ */
+export function addFramingControl(
+  map: MapboxMap,
+  initial: "georgia" | "focus",
+  focusLabel: string,
+  onToggle: () => void
+): { control: IControl; setTarget: (target: "georgia" | "focus") => void } {
+  const button = document.createElement("button");
+  button.className = "atlas-map-control-btn atlas-framing-btn";
+  button.type = "button";
+  button.addEventListener("click", onToggle);
+
+  const setTarget = (target: "georgia" | "focus"): void => {
+    button.textContent = target === "focus" ? "Georgia" : focusLabel;
+    const label = target === "focus" ? "Show the whole of Georgia" : `Zoom to the ${focusLabel.toLowerCase()}`;
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.dataset.target = target;
+  };
+  setTarget(initial);
+
+  const control = wrapAsControl(button);
+  map.addControl(control, "top-right");
+
+  return { control, setTarget };
+}

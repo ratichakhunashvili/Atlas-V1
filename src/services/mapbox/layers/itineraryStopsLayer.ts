@@ -25,6 +25,8 @@ const STATUS_COLOR: ExpressionSpecification = [
   "#16a34a",
   "current",
   "#2563eb",
+  "unavailable",
+  "#d97706", // amber: the stop's partnership/facility is no longer eligible (the only Mapbox change in the check-in phase)
   "#94a3b8", // upcoming (and any unrecognized value, as a safe fallback)
 ] as unknown as ExpressionSpecification;
 

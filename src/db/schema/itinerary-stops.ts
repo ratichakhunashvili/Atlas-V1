@@ -17,6 +17,14 @@ import { enumCheck } from "./sql-helpers";
 export const CHECK_IN_METHODS = ["gps", "qr", "auto"] as const;
 export type CheckInMethod = (typeof CHECK_IN_METHODS)[number];
 
+// Why a PENDING stop was taken out of the active plan. Superseded rows are kept
+// (never deleted) so the saved snapshot stays available as history.
+//  - stop_unavailable:   replaced because its partnership/facility is no longer eligible
+//  - plan_regenerated:   pending stop replaced by a full explicit rebuild
+//  - removed_unavailable: explicitly removed by the guest because it became unavailable
+export const STOP_SUPERSEDED_REASONS = ["stop_unavailable", "plan_regenerated", "removed_unavailable"] as const;
+export type StopSupersededReason = (typeof STOP_SUPERSEDED_REASONS)[number];
+
 // Schema-only for now (Phase 3 Step 2) — no itinerary engine reads or writes
 // this yet. One ordered stop within a generated day. Snapshots name/category/
 // location/image so the plan stays historically readable even if the source
@@ -45,8 +53,19 @@ export const itineraryStops = pgTable(
     imageUrl: text("image_url"),
     position: integer("position").notNull(),
     visitedAt: timestamp("visited_at", { withTimezone: true }),
+    // Set when a PENDING stop leaves the active plan. The row is never deleted. A visited
+    // (completed) stop can never be superseded — enforced by a CHECK below.
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    supersededReason: text("superseded_reason").$type<StopSupersededReason>(),
   },
   (table) => [
+    // History is sacred: a completed visit is never superseded, in any regeneration or rebuild path.
+    check("itinerary_stops_completed_never_superseded_check", sql`${table.supersededAt} is null or ${table.visitedAt} is null`),
+    check("itinerary_stops_superseded_pair_check", sql`(${table.supersededAt} is null) = (${table.supersededReason} is null)`),
+    check(
+      "itinerary_stops_superseded_reason_check",
+      sql`${table.supersededReason} is null or ${enumCheck(table.supersededReason, STOP_SUPERSEDED_REASONS)}`
+    ),
     // The ordered stop list is read on every itinerary page view.
     index("itinerary_stops_day_position_idx").on(table.dayId, table.position),
     check("itinerary_stops_check_in_method_check", enumCheck(table.checkInMethod, CHECK_IN_METHODS)),

@@ -23,7 +23,14 @@ export const itineraryDays = pgTable(
     stopCount: integer("stop_count").notNull(),
     /** Cached Mapbox Optimization API result (GeoJSON LineString) for the round trip. */
     routeGeoJson: jsonb("route_geo_json"),
+    /** Walking time of the ACTIVE route (what the guest sees). Updated when a plan is repaired, so it always matches the stops still on the route. */
     totalDurationSeconds: integer("total_duration_seconds"),
+    /**
+     * The estimate when the plan was GENERATED. Never changed by a repair, so the adaptive-difficulty ratchet
+     * keeps comparing the guest's real completion time with the original estimate. Null on days created before
+     * this column existed (the difficulty system then falls back to totalDurationSeconds).
+     */
+    originalDurationSeconds: integer("original_duration_seconds"),
     generatedAt: timestamp("generated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { Alert } from "@/components/shared/alert";
 import { PlaceTable } from "@/components/places/place-table";
 import { buttonStyles } from "@/components/shared/button";
 import { listPlaces } from "@/db/queries/places";
 
-export default async function AdminPlacesPage() {
+export default async function AdminPlacesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
   const places = await listPlaces();
 
   return (
@@ -14,6 +16,7 @@ export default async function AdminPlacesPage() {
           New place
         </Link>
       </div>
+      {error && <Alert>{error}</Alert>}
       <PlaceTable places={places} />
     </div>
   );

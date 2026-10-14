@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PLACE_CATEGORIES } from "@/db/schema";
+import { PLACE_CATEGORIES, PUBLICATION_STATUSES, VERIFICATION_STATUSES } from "@/db/schema";
 
 const optionalText = (max: number) =>
   z
@@ -24,6 +24,8 @@ export const placeSchema = z.object({
   imageUrl: optionalText(500),
   website: optionalText(300),
   phone: optionalText(50),
+  publicationStatus: z.enum([...PUBLICATION_STATUSES]).default("draft"),
+  verificationStatus: z.enum([...VERIFICATION_STATUSES]).default("unverified"),
 });
 
 export type PlaceFormValues = z.infer<typeof placeSchema>;

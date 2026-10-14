@@ -4,9 +4,14 @@ import { requireUser } from "@/lib/authorization";
 import { checkInStopWithGps, type CheckInResult } from "@/services/advisor/check-in";
 import { checkInStopWithQr, type QrCheckInResult } from "@/services/advisor/check-in-qr";
 import { generateItineraryForUser, type GenerateItineraryResult } from "@/services/advisor/generate-itinerary";
-import { getWalkingDirections, type DirectionsRoute, type RoutingFailureReason } from "@/services/routing";
-import { findItineraryStopWithDay } from "@/db/queries/itinerary";
-import { checkInGpsSchema, checkInQrSchema, directionsToStopSchema } from "./schema";
+import { getDirectionsToStopForUser, type DirectionsToStopResult } from "@/services/advisor/directions-to-stop";
+import {
+  removeUnavailableStopForUser,
+  replaceUnavailableStopsForUser,
+  type RemoveUnavailableStopResult,
+  type ReplaceUnavailableStopsResult,
+} from "@/services/advisor/plan-repair";
+import { checkInGpsSchema, checkInQrSchema, directionsToStopSchema, removeStopSchema } from "./schema";
 
 /**
  * Thin authentication/input boundary: `requireUser()` resolves the
@@ -73,18 +78,13 @@ export async function generateItineraryAction(): Promise<GenerateItineraryResult
   return generateItineraryForUser(user.id);
 }
 
-export type DirectionsToStopResult =
-  | { ok: true; route: DirectionsRoute }
-  | { ok: false; reason: RoutingFailureReason | "not_found"; message: string };
+export type { DirectionsToStopResult };
 
 /**
- * One Directions-API leg (current location -> one stop), never the full
- * Optimization call generation uses — this is "show me the way to my
- * current stop," not itinerary (re)generation. The destination is always
- * resolved server-side from the stop's own persisted coordinates via
- * findItineraryStopWithDay, which also enforces ownership — a client can
- * supply its own current coordinates (the only thing it actually knows),
- * never the destination.
+ * One Directions-API leg (current location -> one stop). The destination is always resolved server-side
+ * from the stop's own persisted coordinates, ownership is enforced from the stop's day, and a pending stop
+ * that is no longer available is refused (see services/advisor/directions-to-stop.ts). A client supplies
+ * only its own current coordinates — never the destination or any hotel/place id.
  */
 export async function getDirectionsToStopAction(
   stopId: string,
@@ -98,13 +98,32 @@ export async function getDirectionsToStopAction(
     return { reason: "not_found" as const, ok: false, message: parsed.error.issues[0]?.message ?? "Invalid request." };
   }
 
-  const found = await findItineraryStopWithDay(parsed.data.stopId);
-  if (!found || found.day.userId !== user.id) {
+  return getDirectionsToStopForUser({
+    userId: user.id,
+    stopId: parsed.data.stopId,
+    origin: { lat: parsed.data.latitude, lng: parsed.data.longitude },
+  });
+}
+
+/**
+ * The ONLY entry point for replacing unavailable pending stops. It takes no arguments at all: which stops
+ * are unavailable is decided on the server from the authenticated guest's own stay, never from the client.
+ * Separate from generateItineraryAction, which keeps its normal cooldown behaviour and never changes an
+ * existing day on its own.
+ */
+export async function replaceUnavailableStopsAction(): Promise<ReplaceUnavailableStopsResult> {
+  const user = await requireUser();
+  return replaceUnavailableStopsForUser(user.id);
+}
+
+/** Explicitly removes ONE unavailable pending stop (when no replacement exists). Its snapshot is kept as history. */
+export async function removeUnavailableStopAction(stopId: string): Promise<RemoveUnavailableStopResult> {
+  const user = await requireUser();
+
+  const parsed = removeStopSchema.safeParse({ stopId });
+  if (!parsed.success) {
     return { ok: false, reason: "not_found", message: "Stop not found." };
   }
 
-  return getWalkingDirections({
-    origin: { lat: parsed.data.latitude, lng: parsed.data.longitude },
-    destination: { lat: found.stop.latitude, lng: found.stop.longitude },
-  });
+  return removeUnavailableStopForUser({ userId: user.id, stopId: parsed.data.stopId });
 }

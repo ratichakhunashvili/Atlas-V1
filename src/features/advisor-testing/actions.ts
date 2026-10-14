@@ -36,7 +36,9 @@ const SCENARIO_NOT_FOUND: ScenarioNotFound = {
  * scenario's records are created/found/deleted.
  */
 export async function createAdvisorTestScenarioAction(type: string, role: string): Promise<void> {
-  await requireAdmin();
+  // The admin id (used to attribute the scenario's partnership confirmations) comes from the
+  // authenticated session, never from a form value. The service itself also refuses to run in production.
+  const admin = await requireAdmin();
 
   const parsedType = scenarioTypeSchema.safeParse(type);
   const parsedRole = testUserRoleSchema.safeParse(role);
@@ -44,7 +46,7 @@ export async function createAdvisorTestScenarioAction(type: string, role: string
     redirect("/admin/advisor?error=Invalid+scenario+type+or+role");
   }
 
-  const scenario = await createAdvisorTestScenario(parsedType.data as ScenarioType, parsedRole.data);
+  const scenario = await createAdvisorTestScenario(parsedType.data as ScenarioType, parsedRole.data, { adminId: admin.id });
   revalidatePath("/admin/advisor");
   redirect(`/admin/advisor/${scenario.tag}`);
 }

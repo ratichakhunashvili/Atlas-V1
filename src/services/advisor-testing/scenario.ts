@@ -14,11 +14,11 @@ import type { ItineraryStop, Place, PlaceCategory, User, UserRole } from "@/db/s
 export type ScenarioType = "A" | "B" | "C" | "D" | "E" | "F";
 
 export const SCENARIO_LABELS: Record<ScenarioType, string> = {
-  A: "Normal itinerary (4 GPS places, no partner)",
-  B: "Partner itinerary (partner guarantee, no QR)",
+  A: "Normal itinerary (4 GPS hotel facilities, no partner)",
+  B: "Partner itinerary (partner leads the day, no QR, plus an excluded non-partner decoy)",
   C: "QR partner (partner Place with a qrToken)",
-  D: "Mixed GPS + QR (2 QR-enabled + 2 GPS-only places)",
-  E: "Short candidate pool (fewer Places than the target stop count)",
+  D: "Mixed GPS + QR (2 QR-enabled + 2 GPS-only eligible places)",
+  E: "Short candidate pool (fewer eligible Places than the target stop count)",
   F: "Adaptive difficulty (seeds a completed Day 1, check-in dated yesterday)",
 };
 
@@ -68,9 +68,17 @@ function scenarioOrigin(tag: string): { lat: number; lng: number } {
   return { lat: 40 + gridX * 0.3, lng: 40 + gridY * 0.3 };
 }
 
+/**
+ * How a scenario Place relates to the scenario's hotel — mirrors real
+ * eligibility: a hotel-owned "facility", an external "partner" with an
+ * ACTIVE (admin-confirmed) partnership, or "none" (a nearby decoy with no
+ * relationship at all, which the Advisor must never recommend).
+ */
+export type ScenarioEligibility = "facility" | "partner" | "none";
+
 type ScenarioPlaceSpec = {
   category: PlaceCategory;
-  isPartner: boolean;
+  eligibility: ScenarioEligibility;
   partnerPriority?: number | null;
   hasQrToken: boolean;
   offset: { dLat: number; dLng: number };
@@ -99,47 +107,49 @@ export function scenarioPreset(type: ScenarioType): ScenarioPreset {
       return {
         preferredCategories: ["museum", "nature", "attraction", "activity"],
         places: [
-          { category: "museum", isPartner: false, hasQrToken: false, offset: OFFSETS[0] },
-          { category: "nature", isPartner: false, hasQrToken: false, offset: OFFSETS[1] },
-          { category: "attraction", isPartner: false, hasQrToken: false, offset: OFFSETS[2] },
-          { category: "activity", isPartner: false, hasQrToken: false, offset: OFFSETS[3] },
+          { category: "museum", eligibility: "facility", hasQrToken: false, offset: OFFSETS[0] },
+          { category: "nature", eligibility: "facility", hasQrToken: false, offset: OFFSETS[1] },
+          { category: "attraction", eligibility: "facility", hasQrToken: false, offset: OFFSETS[2] },
+          { category: "activity", eligibility: "facility", hasQrToken: false, offset: OFFSETS[3] },
         ],
       };
     case "B":
       return {
         preferredCategories: ["museum", "nature", "attraction", "restaurant"],
         places: [
-          { category: "museum", isPartner: false, hasQrToken: false, offset: OFFSETS[0] },
-          { category: "nature", isPartner: false, hasQrToken: false, offset: OFFSETS[1] },
-          { category: "attraction", isPartner: false, hasQrToken: false, offset: OFFSETS[2] },
-          { category: "restaurant", isPartner: true, partnerPriority: 1, hasQrToken: false, offset: OFFSETS[3] },
+          { category: "museum", eligibility: "facility", hasQrToken: false, offset: OFFSETS[0] },
+          { category: "nature", eligibility: "facility", hasQrToken: false, offset: OFFSETS[1] },
+          { category: "attraction", eligibility: "facility", hasQrToken: false, offset: OFFSETS[2] },
+          { category: "restaurant", eligibility: "partner", partnerPriority: 1, hasQrToken: false, offset: OFFSETS[3] },
+          // Nearby, matching the guest's interests — but NO relationship with this hotel, so it must be excluded.
+          { category: "museum", eligibility: "none", hasQrToken: false, offset: OFFSETS[4] },
         ],
       };
     case "C":
       return {
         preferredCategories: ["museum", "nature", "restaurant"],
         places: [
-          { category: "museum", isPartner: false, hasQrToken: false, offset: OFFSETS[0] },
-          { category: "nature", isPartner: false, hasQrToken: false, offset: OFFSETS[1] },
-          { category: "restaurant", isPartner: true, partnerPriority: 1, hasQrToken: true, offset: OFFSETS[2] },
+          { category: "museum", eligibility: "facility", hasQrToken: false, offset: OFFSETS[0] },
+          { category: "nature", eligibility: "facility", hasQrToken: false, offset: OFFSETS[1] },
+          { category: "restaurant", eligibility: "partner", partnerPriority: 1, hasQrToken: true, offset: OFFSETS[2] },
         ],
       };
     case "D":
       return {
         preferredCategories: ["museum", "nature", "restaurant", "landmark"],
         places: [
-          { category: "museum", isPartner: false, hasQrToken: false, offset: OFFSETS[0] },
-          { category: "restaurant", isPartner: true, partnerPriority: 1, hasQrToken: true, offset: OFFSETS[1] },
-          { category: "nature", isPartner: false, hasQrToken: false, offset: OFFSETS[2] },
-          { category: "landmark", isPartner: false, hasQrToken: true, offset: OFFSETS[3] },
+          { category: "museum", eligibility: "facility", hasQrToken: false, offset: OFFSETS[0] },
+          { category: "restaurant", eligibility: "partner", partnerPriority: 1, hasQrToken: true, offset: OFFSETS[1] },
+          { category: "nature", eligibility: "facility", hasQrToken: false, offset: OFFSETS[2] },
+          { category: "landmark", eligibility: "facility", hasQrToken: true, offset: OFFSETS[3] },
         ],
       };
     case "E":
       return {
         preferredCategories: ["museum", "nature"],
         places: [
-          { category: "museum", isPartner: false, hasQrToken: false, offset: OFFSETS[0] },
-          { category: "nature", isPartner: false, hasQrToken: false, offset: OFFSETS[1] },
+          { category: "museum", eligibility: "facility", hasQrToken: false, offset: OFFSETS[0] },
+          { category: "nature", eligibility: "facility", hasQrToken: false, offset: OFFSETS[1] },
         ],
       };
     case "F":
@@ -147,14 +157,21 @@ export function scenarioPreset(type: ScenarioType): ScenarioPreset {
         preferredCategories: ["museum", "nature", "attraction", "activity", "beach", "nightlife"],
         checkInDaysAgo: 1,
         places: [
-          { category: "museum", isPartner: false, hasQrToken: false, offset: OFFSETS[0] },
-          { category: "nature", isPartner: false, hasQrToken: false, offset: OFFSETS[1] },
-          { category: "attraction", isPartner: false, hasQrToken: false, offset: OFFSETS[2] },
-          { category: "activity", isPartner: false, hasQrToken: false, offset: OFFSETS[3] },
-          { category: "beach", isPartner: false, hasQrToken: false, offset: OFFSETS[4] },
-          { category: "nightlife", isPartner: false, hasQrToken: false, offset: OFFSETS[5] },
+          { category: "museum", eligibility: "facility", hasQrToken: false, offset: OFFSETS[0] },
+          { category: "nature", eligibility: "facility", hasQrToken: false, offset: OFFSETS[1] },
+          { category: "attraction", eligibility: "facility", hasQrToken: false, offset: OFFSETS[2] },
+          { category: "activity", eligibility: "facility", hasQrToken: false, offset: OFFSETS[3] },
+          { category: "beach", eligibility: "facility", hasQrToken: false, offset: OFFSETS[4] },
+          { category: "nightlife", eligibility: "facility", hasQrToken: false, offset: OFFSETS[5] },
         ],
       };
+  }
+}
+
+/** Throws in production. Exported so the guard is unit-testable independent of any DB. */
+export function assertScenarioToolEnabled(nodeEnv: string | undefined): void {
+  if (nodeEnv === "production") {
+    throw new Error("The Advisor test-scenario tool is disabled in production.");
   }
 }
 
@@ -171,8 +188,8 @@ export type CreatedScenario = {
 /**
  * Creates one isolated test scenario: a test User (random password, never
  * logged into — the admin tool invokes services with this userId directly),
- * a Hotel (+ its own Place), the scenario's Places (some possibly QR-enabled
- * partners via the real hotel_places relationship), matching preferences,
+ * a Hotel (+ its own Place), the scenario's Places (hotel-owned facilities and
+ * ACTIVE partnerships, some QR-enabled, plus an optional non-partner decoy), matching preferences,
  * and an active HotelStay. Every DB write goes through the same
  * db/queries/* functions the rest of Atlas uses — no raw SQL, no parallel
  * persistence path.
@@ -180,13 +197,20 @@ export type CreatedScenario = {
 export async function createAdvisorTestScenario(
   type: ScenarioType,
   role: UserRole = "user",
-  now: Date = new Date()
+  options: { adminId: string; now?: Date; nodeEnv?: string | undefined }
 ): Promise<CreatedScenario> {
-  const [usersQ, placesQ, hotelsQ, hotelPlacesQ, hotelStaysQ, preferencesQ, bcryptModule] = await Promise.all([
+  // Server-side production guard, enforced HERE (not only in the calling
+  // action): this tool writes ACTIVE partnerships/facilities, bypassing the
+  // normal admin confirmation workflow, so it must never run in production.
+  assertScenarioToolEnabled(options.nodeEnv ?? process.env.NODE_ENV);
+  const now = options.now ?? new Date();
+
+  const [usersQ, placesQ, hotelsQ, partnershipsQ, facilitiesQ, hotelStaysQ, preferencesQ, bcryptModule] = await Promise.all([
     import("@/db/queries/users"),
     import("@/db/queries/places"),
     import("@/db/queries/hotels"),
-    import("@/db/queries/hotel-places"),
+    import("@/db/queries/hotel-partnerships"),
+    import("@/db/queries/hotel-facilities"),
     import("@/db/queries/hotel-stays"),
     import("@/db/queries/preferences"),
     import("bcryptjs"),
@@ -208,6 +232,8 @@ export async function createAdvisorTestScenario(
     latitude: origin.lat,
     longitude: origin.lng,
     category: "hotel",
+    publicationStatus: "published",
+    verificationStatus: "verified",
   });
   const hotel = await hotelsQ.createHotel({ placeId: hotelPlace.id, qrToken: `${tag}-hotel-qr` });
 
@@ -215,17 +241,38 @@ export async function createAdvisorTestScenario(
   const categories = new Set<PlaceCategory>();
   for (const [index, spec] of preset.places.entries()) {
     const qrSuffix = spec.hasQrToken ? ", qr" : "";
-    const partnerSuffix = spec.isPartner ? ", partner" : "";
+    const eligibilitySuffix = spec.eligibility === "partner" ? ", partner" : spec.eligibility === "facility" ? ", facility" : ", non-partner decoy";
     const place = await placesQ.createPlace({
-      name: `${marker} Place ${index + 1} (${spec.category}${partnerSuffix}${qrSuffix})`,
+      name: `${marker} Place ${index + 1} (${spec.category}${eligibilitySuffix}${qrSuffix})`,
       latitude: origin.lat + spec.offset.dLat,
       longitude: origin.lng + spec.offset.dLng,
       category: spec.category,
       qrToken: spec.hasQrToken ? `${tag}-place-${index + 1}-qr` : null,
+      // Test data only. Published + verified so eligibility is decided purely by the facility/partnership row
+      // (the "none" decoy is still excluded: it has no relationship with the hotel).
+      publicationStatus: "published",
+      verificationStatus: "verified",
     });
     placeIds.push(place.id);
     categories.add(spec.category);
-    if (spec.isPartner) await hotelPlacesQ.assignPlaceToHotel(hotel.id, place.id, spec.partnerPriority ?? null);
+    if (spec.eligibility === "partner") {
+      // Created as an explicit admin confirmation: attributed to the admin running the tool (taken from the
+      // authenticated session by the caller, never from a form value).
+      const partnership = await partnershipsQ.createPendingPartnership({ hotelId: hotel.id, placeId: place.id });
+      if (!partnership) throw new Error("Scenario setup failed: duplicate partnership.");
+      await partnershipsQ.transitionPartnership(partnership.id, ["pending_review"], {
+        status: "active",
+        priority: spec.partnerPriority ?? null,
+        confirmedBy: options.adminId,
+        confirmedAt: now,
+      });
+    } else if (spec.eligibility === "facility") {
+      await facilitiesQ.createFacility({
+        hotelId: hotel.id,
+        placeId: place.id,
+        facilityType: spec.category === "restaurant" ? "dining" : "other",
+      });
+    }
   }
 
   await preferencesQ.upsertPreferences(user.id, { categories: [...categories], budget: null, activityLevel: null });
@@ -247,18 +294,18 @@ export type ScenarioState = {
   checkOut: Date | null;
   /** Every Place the scenario created, including the hotel's own Place — resolved purely from the naming marker, since ordinary Places have no FK back to a scenario. */
   places: Place[];
-  /** placeId -> priority, for every Place that's a partner of this scenario's hotel. */
+  /** placeId -> priority, for every Place with an ACTIVE, confirmed partnership with this scenario's hotel. */
   partnerPlaceIds: Map<string, number | null>;
 };
 
 export async function findAdvisorTestScenario(tag: string): Promise<ScenarioState | null> {
   if (!isSafeScenarioTag(tag)) return null;
 
-  const [usersQ, placesQ, hotelStaysQ, hotelPlacesQ] = await Promise.all([
+  const [usersQ, placesQ, hotelStaysQ, eligibilityM] = await Promise.all([
     import("@/db/queries/users"),
     import("@/db/queries/places"),
     import("@/db/queries/hotel-stays"),
-    import("@/db/queries/hotel-places"),
+    import("@/services/eligibility"),
   ]);
 
   const user = await usersQ.findUserByEmail(scenarioEmail(tag));
@@ -268,8 +315,9 @@ export async function findAdvisorTestScenario(tag: string): Promise<ScenarioStat
   if (!stay) return null;
 
   const places = await placesQ.listPlacesByNamePrefix(scenarioPlaceMarker(tag));
-  const hotelPlaceRows = await hotelPlacesQ.listPlacesForHotel(stay.hotel.id);
-  const partnerPlaceIds = new Map(hotelPlaceRows.map((row) => [row.placeId, row.priority]));
+  // Exactly what the Advisor itself sees: eligible partners only (active + confirmed + in-window).
+  const eligible = await eligibilityM.listEligiblePlacesForStay(stay);
+  const partnerPlaceIds = new Map(eligible.filter((entry) => entry.source === "partner").map((entry) => [entry.place.id, entry.priority]));
 
   return {
     tag,

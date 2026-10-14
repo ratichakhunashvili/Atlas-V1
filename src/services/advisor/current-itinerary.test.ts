@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Hotel, ItineraryDay, ItineraryStop, Place } from "@/db/schema";
-import { makeTestPlace } from "./test-utils";
+import { loadAllAvailable, makeTestPlace } from "./test-utils";
 import { getCurrentItineraryForUser, type CurrentItineraryDependencies } from "./current-itinerary";
 
 const NOW = new Date("2026-03-10T12:00:00Z");
@@ -26,6 +26,7 @@ function makeDay(overrides: Partial<ItineraryDay> = {}): ItineraryDay {
     stopCount: 2,
     routeGeoJson: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[44.8, 41.7]] } },
     totalDurationSeconds: 3600,
+    originalDurationSeconds: 3600,
     generatedAt: new Date("2026-03-10T08:00:00Z"),
     completedAt: null,
     ...overrides,
@@ -48,6 +49,8 @@ function makeStop(overrides: Partial<ItineraryStop> = {}): ItineraryStop {
     imageUrl: null,
     position: stopCounter,
     visitedAt: null,
+    supersededAt: null,
+    supersededReason: null,
     ...overrides,
   };
 }
@@ -65,6 +68,7 @@ function buildDeps(options: {
     findActiveStayForUser: async () => (stay ? { id: "stay-1", checkIn: stay.checkIn, checkOut: stay.checkOut, hotel, place: hotelPlace } : null),
     findItineraryDay: async () => options.day ?? null,
     listItineraryStops: async () => options.stops ?? [],
+    loadAvailabilityContext: loadAllAvailable,
   };
 }
 
@@ -161,6 +165,7 @@ test("this function never generates — it never calls anything beyond the three
     },
     findItineraryDay: base.findItineraryDay,
     listItineraryStops: base.listItineraryStops,
+    loadAvailabilityContext: base.loadAvailabilityContext,
   };
   await getCurrentItineraryForUser("user-1", NOW, deps);
   assert.equal(callCount, 1, "exactly one read, no retries or hidden generation side effects");

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   check,
   doublePrecision,
@@ -30,6 +31,16 @@ export const PLACE_CATEGORIES = [
 ] as const;
 export type PlaceCategory = (typeof PLACE_CATEGORIES)[number];
 
+// A Place is only ever recommended to guests when it is BOTH published (an
+// admin decided it is ready to show) AND verified (an admin confirmed it is a
+// real, correctly described place) AND not archived. See
+// services/eligibility/rules.ts — the one definition.
+export const PUBLICATION_STATUSES = ["draft", "published"] as const;
+export type PublicationStatus = (typeof PUBLICATION_STATUSES)[number];
+
+export const VERIFICATION_STATUSES = ["unverified", "verified"] as const;
+export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
+
 export const places = pgTable(
   "places",
   {
@@ -49,6 +60,16 @@ export const places = pgTable(
     // Place-level QR flows (partner check-in, AR/achievement unlocking) —
     // not used by hotel check-in, which reuses hotels.qrToken (unaffected).
     qrToken: text("qr_token").unique(),
+    // Soft-archive instead of hard delete: an archived Place is never
+    // eligible for recommendations, but its partnership/itinerary history
+    // stays intact (hotel_partnerships.place_id is ON DELETE RESTRICT).
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    // New and migrated Places start as draft / unverified so nothing becomes
+    // recommendable by accident; an admin publishes and verifies explicitly.
+    publicationStatus: text("publication_status").notNull().default("draft").$type<PublicationStatus>(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    verificationStatus: text("verification_status").notNull().default("unverified").$type<VerificationStatus>(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -63,6 +84,13 @@ export const places = pgTable(
     // PostGIS or a proper geo index instead.
     index("places_coordinates_idx").on(table.latitude, table.longitude),
     check("places_category_check", enumCheck(table.category, PLACE_CATEGORIES)),
+    check("places_publication_status_check", enumCheck(table.publicationStatus, PUBLICATION_STATUSES)),
+    check("places_verification_status_check", enumCheck(table.verificationStatus, VERIFICATION_STATUSES)),
+    // Status and its timestamp must agree, so a status can never be set without leaving an audit trail.
+    check("places_published_requires_date_check", sql`${table.publicationStatus} <> 'published' or ${table.publishedAt} is not null`),
+    check("places_verified_requires_date_check", sql`${table.verificationStatus} <> 'verified' or ${table.verifiedAt} is not null`),
+    // Archiving a Place always unpublishes it.
+    check("places_archived_not_published_check", sql`${table.archivedAt} is null or ${table.publicationStatus} <> 'published'`),
   ]
 );
 

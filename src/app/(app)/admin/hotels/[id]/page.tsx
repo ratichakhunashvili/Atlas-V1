@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { HotelForm } from "@/components/hotel/hotel-form";
 import { findHotelById } from "@/db/queries/hotels";
@@ -23,6 +24,14 @@ export default async function EditHotelPage({
     <div className="max-w-xl space-y-6">
       <h1 className="text-xl font-semibold">Edit hotel</h1>
       <p className="text-sm text-slate-500">QR token: {hotel.qrToken}</p>
+      <p className="flex gap-4 text-sm">
+        <Link href={`/admin/hotels/${hotel.id}/partnerships`} className="text-slate-700 underline">
+          Manage external partners
+        </Link>
+        <Link href={`/admin/hotels/${hotel.id}/facilities`} className="text-slate-700 underline">
+          Manage hotel-owned facilities
+        </Link>
+      </p>
       <HotelForm
         action={updateHotelAction.bind(null, hotel.id)}
         places={places}

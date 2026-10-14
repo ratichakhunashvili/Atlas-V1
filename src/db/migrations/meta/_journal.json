@@ -15,6 +15,27 @@
       "when": 1791377961002,
       "tag": "0001_robust_blackheart",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791885895650,
+      "tag": "0002_eligibility_partnerships_facilities",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791900658739,
+      "tag": "0003_place_publication_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791908481798,
+      "tag": "0004_itinerary_supersede_and_duration",
+      "breakpoints": true
     }
   ]
 }

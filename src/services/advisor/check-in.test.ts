@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ItineraryDay, ItineraryStop } from "@/db/schema";
 import { checkInStopWithGps, isValidCoordinate, CHECK_IN_RADIUS_METERS, type CheckInDependencies } from "./check-in";
+import { loadAllAvailable } from "./test-utils";
 
 let idCounter = 0;
 function makeStop(overrides: Partial<ItineraryStop> = {}): ItineraryStop {
@@ -19,6 +20,8 @@ function makeStop(overrides: Partial<ItineraryStop> = {}): ItineraryStop {
     imageUrl: null,
     position: idCounter,
     visitedAt: null,
+    supersededAt: null,
+    supersededReason: null,
     ...overrides,
   };
 }
@@ -33,6 +36,7 @@ function makeDay(overrides: Partial<ItineraryDay> = {}): ItineraryDay {
     stopCount: 3,
     routeGeoJson: null,
     totalDurationSeconds: null,
+    originalDurationSeconds: null,
     generatedAt: new Date("2026-03-10T08:00:00Z"),
     completedAt: null,
     ...overrides,
@@ -64,7 +68,7 @@ function createFakeStore(day: ItineraryDay, initialStops: ItineraryStop[]) {
   };
 
   return {
-    deps: { findItineraryStopWithDay, listItineraryStops, markStopVisited },
+    deps: { findItineraryStopWithDay, listItineraryStops, markStopVisited, loadAvailabilityContext: loadAllAvailable },
     getStops: () => stops,
     getCompletedAt: () => completedAt,
   };

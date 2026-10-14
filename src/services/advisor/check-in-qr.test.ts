@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Hotel, ItineraryDay, ItineraryStop, Place } from "@/db/schema";
-import { makeTestPlace } from "./test-utils";
+import { loadAllAvailable, makeTestPlace } from "./test-utils";
 import { checkInStopWithQr, type QrCheckInDependencies } from "./check-in-qr";
 
 // Same calendar date as every fixture's checkIn below -> dayNumber resolves to 1.
@@ -23,6 +23,8 @@ function makeStop(overrides: Partial<ItineraryStop> = {}): ItineraryStop {
     imageUrl: null,
     position: idCounter,
     visitedAt: null,
+    supersededAt: null,
+    supersededReason: null,
     ...overrides,
   };
 }
@@ -37,6 +39,7 @@ function makeDay(overrides: Partial<ItineraryDay> = {}): ItineraryDay {
     stopCount: 2,
     routeGeoJson: null,
     totalDurationSeconds: null,
+    originalDurationSeconds: null,
     generatedAt: new Date("2026-03-10T08:00:00Z"),
     completedAt: null,
     ...overrides,
@@ -96,7 +99,7 @@ function createFakeDeps(options: {
   };
 
   return {
-    deps: { findPlaceByQrToken, findActiveStayForUser, findItineraryDay, listItineraryStops, markStopVisited },
+    deps: { findPlaceByQrToken, findActiveStayForUser, findItineraryDay, listItineraryStops, markStopVisited, loadAvailabilityContext: loadAllAvailable },
     getStops: () => stops,
     getCompletedAt: () => completedAt,
   };
@@ -216,6 +219,10 @@ test("cross-user: User B's scan resolves only User B's own itinerary, never User
     findActiveStayForUser: async (uid) => (uid === "user-a" ? userAStay : uid === "user-b" ? userBStay : null),
     findItineraryDay: async (uid, hotelId) => (uid === "user-a" && hotelId === "hp-a" ? dayA : uid === "user-b" && hotelId === "hp-b" ? dayB : null),
     listItineraryStops: async (dayId) => stopsByDay.get(dayId) ?? [],
+    loadAvailabilityContext: async (uid) => ({
+      stay: { id: "stay-1", hotelId: uid === "user-a" ? "hp-a" : "hp-b", dayNumber: 1 },
+      eligiblePlaceIds: { has: () => true } as unknown as ReadonlySet<string>,
+    }),
     markStopVisited: async (stopId, dayId, checkInMethod) => {
       const stops = stopsByDay.get(dayId) ?? [];
       const target = stops.find((s) => s.id === stopId);

@@ -1,8 +1,9 @@
 import type { CheckInMethod, Hotel, ItineraryDay, ItineraryStop, Place } from "@/db/schema";
 import { calculateDayNumber } from "./stay-day";
 import { firstUnvisitedStop } from "./check-in";
+import { evaluateDayCheckIn, evaluatePendingStops, isAvailable, loadDefaultAvailabilityContext, type AvailabilityContextLoader } from "./stop-availability";
 
-export type QrCheckInFailureReason = "invalid_qr" | "no_active_itinerary" | "place_not_next";
+export type QrCheckInFailureReason = "invalid_qr" | "no_active_itinerary" | "place_not_next" | "stop_unavailable" | "wrong_day";
 
 export type QrCheckInResult =
   | {
@@ -18,6 +19,8 @@ export type QrCheckInResult =
       reason: QrCheckInFailureReason;
       message: string;
       nextStop?: { id: string; name: string };
+      /** Set when an earlier pending stop that is no longer available is blocking this one (stop order is kept). */
+      blockedByUnavailableStop?: { id: string; name: string };
     };
 
 type ActiveHotelStay = {
@@ -34,6 +37,8 @@ export type QrCheckInDependencies = {
   findItineraryDay: (userId: string, hotelId: string, dayNumber: number) => Promise<ItineraryDay | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
   markStopVisited: (stopId: string, dayId: string, checkInMethod: CheckInMethod) => Promise<{ stop: ItineraryStop; dayCompleted: boolean } | null>;
+  /** Re-evaluates eligibility server-side from the authenticated guest's own stay. Called early (to decide) and again immediately before the write. */
+  loadAvailabilityContext: AvailabilityContextLoader;
 };
 
 // Type-only imports only here — same lazy-load pattern as every other
@@ -51,6 +56,7 @@ async function loadDefaultDependencies(): Promise<QrCheckInDependencies> {
     findItineraryDay: itineraryQ.findItineraryDay,
     listItineraryStops: itineraryQ.listItineraryStops,
     markStopVisited: itineraryQ.markStopVisited,
+    loadAvailabilityContext: loadDefaultAvailabilityContext,
   };
 }
 
@@ -116,14 +122,52 @@ export async function checkInStopWithQr(
   }
 
   const required = firstUnvisitedStop(stops);
+
+  // Eligibility is re-checked server-side from the guest's own stay — a scanned code proves "this is Place A",
+  // never "Place A is still available to this guest".
+  const context = await d.loadAvailabilityContext(input.userId, now);
+
+  // Which day may be checked in: ONLY the guest's current day of their own current stay, computed on the server.
+  // The day above was looked up from the server-computed current day number, and this re-verifies it (defence in
+  // depth) so an earlier or future day's stop can never be written, whatever a dependency returns.
+  const dayCheck = evaluateDayCheckIn(day, context);
+  if (!dayCheck.ok && dayCheck.reason === "not_current_day") {
+    return { ok: false, reason: "wrong_day", message: "That stop belongs to a different day's route, so it can't be checked in now." };
+  }
+
+  const availability = evaluatePendingStops(stops, day, context);
+  if (!isAvailable(availability.get(matchingStop.id))) {
+    return {
+      ok: false,
+      reason: "stop_unavailable",
+      message: "This stop is no longer available through your hotel. Update your plan to continue.",
+      nextStop: required ? { id: required.id, name: required.name } : undefined,
+    };
+  }
+
   if (!required || required.id !== matchingStop.id) {
     // A valid QR for a real Place in the itinerary, but not the one the
-    // guest is allowed to complete yet — order still governs.
+    // guest is allowed to complete yet — order still governs. An unavailable earlier stop blocks later ones.
+    const blocker = required && !isAvailable(availability.get(required.id)) ? { id: required.id, name: required.name } : undefined;
     return {
       ok: false,
       reason: "place_not_next",
-      message: "Check in your stops in order — this isn't your next stop yet.",
+      message: blocker
+        ? "An earlier stop is no longer available, so later stops are on hold. Update your plan to continue."
+        : "Check in your stops in order — this isn't your next stop yet.",
       nextStop: required ? { id: required.id, name: required.name } : undefined,
+      blockedByUnavailableStop: blocker,
+    };
+  }
+
+  // Re-check eligibility FRESH as the very last step before the write. A revocation landing between this check
+  // and the UPDATE is a small, accepted race (see docs/phase-acceptance-criteria.md).
+  const fresh = evaluatePendingStops(stops, day, await d.loadAvailabilityContext(input.userId, now));
+  if (!isAvailable(fresh.get(matchingStop.id))) {
+    return {
+      ok: false,
+      reason: "stop_unavailable",
+      message: "This stop is no longer available through your hotel. Update your plan to continue.",
     };
   }
 

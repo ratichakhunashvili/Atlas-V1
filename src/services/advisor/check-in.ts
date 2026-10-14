@@ -1,10 +1,11 @@
 import { distanceMeters, type LatLng } from "@/lib/geo";
 import type { CheckInMethod, ItineraryDay, ItineraryStop } from "@/db/schema";
+import { evaluateDayCheckIn, evaluatePendingStops, isAvailable, loadDefaultAvailabilityContext, type AvailabilityContextLoader } from "./stop-availability";
 
 /** Exact radius as Map Advisor Functional's CHECKIN_RADIUS_METERS — never increase this, never make it client-configurable. */
 export const CHECK_IN_RADIUS_METERS = 150;
 
-export type CheckInFailureReason = "not_found" | "invalid_coordinates" | "stop_not_next" | "out_of_range";
+export type CheckInFailureReason = "not_found" | "invalid_coordinates" | "stop_not_next" | "stop_unavailable" | "wrong_day" | "out_of_range";
 
 export type CheckInResult =
   | {
@@ -22,12 +23,16 @@ export type CheckInResult =
       distanceMeters?: number;
       requiredRadiusMeters?: number;
       nextStop?: { id: string; name: string };
+      /** Set when an earlier pending stop that is no longer available is blocking this one (stop order is kept). */
+      blockedByUnavailableStop?: { id: string; name: string };
     };
 
 export type CheckInDependencies = {
   findItineraryStopWithDay: (stopId: string) => Promise<{ stop: ItineraryStop; day: ItineraryDay } | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
   markStopVisited: (stopId: string, dayId: string, checkInMethod: CheckInMethod) => Promise<{ stop: ItineraryStop; dayCompleted: boolean } | null>;
+  /** Re-evaluates eligibility server-side from the authenticated guest's own stay. Called twice per check-in: early (to decide) and again immediately before the write. */
+  loadAvailabilityContext: AvailabilityContextLoader;
 };
 
 // Type-only import, lazily resolved below — same reason as every other
@@ -43,6 +48,7 @@ async function loadDefaultDependencies(): Promise<CheckInDependencies> {
     findItineraryStopWithDay: itineraryQ.findItineraryStopWithDay,
     listItineraryStops: itineraryQ.listItineraryStops,
     markStopVisited: itineraryQ.markStopVisited,
+    loadAvailabilityContext: loadDefaultAvailabilityContext,
   };
 }
 
@@ -72,7 +78,8 @@ export function firstUnvisitedStop(stops: readonly ItineraryStop[]): ItinerarySt
  */
 export async function checkInStopWithGps(
   input: { userId: string; stopId: string; latitude: number; longitude: number },
-  deps?: CheckInDependencies
+  deps?: CheckInDependencies,
+  now: Date = new Date()
 ): Promise<CheckInResult> {
   const d = deps ?? (await loadDefaultDependencies());
 
@@ -98,12 +105,41 @@ export async function checkInStopWithGps(
 
   const stops = await d.listItineraryStops(day.id);
   const required = firstUnvisitedStop(stops);
+
+  // Eligibility is re-checked server-side from the guest's own stay. A client can never supply the
+  // hotel, place, or availability: only the stopId above, which resolves to a stop the guest owns.
+  const context = await d.loadAvailabilityContext(input.userId, now);
+
+  // Which day may be checked in: ONLY the guest's current day of their own current stay. The current day is
+  // computed on the server from the stay dates and the server clock (never from a client-supplied date), so a
+  // pending stop from an EARLIER day — even of the same stay — or a future day is refused with no write.
+  const dayCheck = evaluateDayCheckIn(day, context);
+  if (!dayCheck.ok && dayCheck.reason === "not_current_day") {
+    return { ok: false, reason: "wrong_day", message: "That stop belongs to a different day's route, so it can't be checked in now." };
+  }
+
+  const availability = evaluatePendingStops(stops, day, context);
+  if (!isAvailable(availability.get(stop.id))) {
+    return {
+      ok: false,
+      reason: "stop_unavailable",
+      message: "This stop is no longer available through your hotel. Update your plan to continue.",
+      nextStop: required ? { id: required.id, name: required.name } : undefined,
+    };
+  }
+
   if (!required || required.id !== stop.id) {
+    // Stop order is kept: an unavailable stop blocks itself AND every later stop, while earlier available
+    // stops (which are always the first unvisited ones) remain checkable.
+    const blocker = required && !isAvailable(availability.get(required.id)) ? { id: required.id, name: required.name } : undefined;
     return {
       ok: false,
       reason: "stop_not_next",
-      message: "Check in your stops in order — this isn't your next stop yet.",
+      message: blocker
+        ? "An earlier stop is no longer available, so later stops are on hold. Update your plan to continue."
+        : "Check in your stops in order — this isn't your next stop yet.",
       nextStop: required ? { id: required.id, name: required.name } : undefined,
+      blockedByUnavailableStop: blocker,
     };
   }
 
@@ -119,6 +155,18 @@ export async function checkInStopWithGps(
       message: `You're about ${Math.round(distance)}m away — get within ${CHECK_IN_RADIUS_METERS}m to check in.`,
       distanceMeters: Math.round(distance),
       requiredRadiusMeters: CHECK_IN_RADIUS_METERS,
+    };
+  }
+
+  // Re-check eligibility FRESH as the very last step before the write. A revocation that lands between this
+  // check and the UPDATE below is a small, accepted race (see docs/phase-acceptance-criteria.md): the two are
+  // separate statements, and making them atomic would need locking across partnership rows.
+  const fresh = evaluatePendingStops(stops, day, await d.loadAvailabilityContext(input.userId, now));
+  if (!isAvailable(fresh.get(stop.id))) {
+    return {
+      ok: false,
+      reason: "stop_unavailable",
+      message: "This stop is no longer available through your hotel. Update your plan to continue.",
     };
   }
 

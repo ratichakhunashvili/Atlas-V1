@@ -96,3 +96,34 @@
     transition: none !important;
   }
 }
+
+/* The 2D/3D toggle shows text, not an icon. */
+.atlas-view-btn {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* The framing toggle ("Georgia" / "Trip") is a short word, so it is wider than the square icon buttons. */
+/* Two classes so it outranks Mapbox's own `.mapboxgl-ctrl-group button` sizing. */
+.mapboxgl-ctrl-group .atlas-framing-btn.atlas-map-control-btn {
+  width: auto;
+  min-width: 36px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* A single labelled anchor marker (e.g. "H" for the hotel in the development preview). */
+.atlas-anchor-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  font: 700 14px/24px system-ui, sans-serif;
+  text-align: center;
+}

@@ -2,6 +2,11 @@ import { index, integer, pgTable, primaryKey, timestamp, uuid } from "drizzle-or
 import { hotels } from "./hotels";
 import { places } from "./places";
 
+// LEGACY / FROZEN (Phase 1 eligibility): no application code reads or writes
+// this table any more. Its rows were copied into hotel_partnerships as
+// `pending_review` by migration 0002 and are kept untouched as the original
+// record. Any later cleanup (dropping it) needs separate, explicit approval.
+//
 // "This Place is a partner / priority location for this hotel" — a
 // relationship on the canonical `places` row, never a second Place entity.
 // A Place becomes a hotel's partner by gaining a row here; it never stops
