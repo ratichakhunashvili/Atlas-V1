@@ -114,6 +114,7 @@ const hotel: Hotel = { id: HOTEL_ID, placeId: hotelPlace.id, qrToken: null, crea
 const user: User = {
   id: "user-1",
   email: "arrival@example.test",
+  name: null,
   passwordHash: "x",
   role: "user",
   createdAt: NOW,

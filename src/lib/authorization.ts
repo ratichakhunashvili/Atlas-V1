@@ -24,7 +24,7 @@ export async function requireAdmin() {
   const user = await requireUser();
   const current = await findUserById(user.id);
   if (!current || current.role !== "admin") {
-    redirect("/");
+    redirect("/admin/denied");
   }
   // The authoritative role, not the token's: callers that read `user.role` afterwards must see the fresh value.
   return { ...user, role: current.role };

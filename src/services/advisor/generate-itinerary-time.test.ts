@@ -53,6 +53,7 @@ const hotel: Hotel = {
 const user: User = {
   id: "user-1",
   email: "guest@example.test",
+  name: null,
   passwordHash: "x",
   role: "user",
   createdAt: NOW,

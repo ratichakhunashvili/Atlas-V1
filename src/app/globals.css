@@ -177,3 +177,72 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 .atlas-field input[type="date"] { min-height: 44px; border: 1px solid #d7d3c5; border-radius: 12px; background: #fff; padding: 0 12px; font: inherit; color: #17211b; }
 .atlas-field input[readonly] { background: #f1eee0; color: #5b655e; }
 .atlas-panel-error { color: #b91c1c; }
+
+/*
+ * Atlas design system from the Figma file (figma.com/design/3N0YrlADgeuFyp8I8oh5of), ported from
+ * the Atlas Finalizing prototype. Screens built on it render inside `.atlas-app`, so the rules
+ * below stay scoped to them and the older screens keep their own styles.
+ */
+@theme {
+  --color-atlas-teal: #0a4a4f;
+  --color-atlas-teal-soft: #3b6b6f;
+  --color-atlas-paper: #f6f3ed;
+  --color-atlas-beige: #d7c4b1;
+  --color-atlas-sand: #ece4da;
+  --color-atlas-sand-deep: #e2d7ca;
+  --color-atlas-dune: #e6dccd;
+  --color-atlas-bronze: #a58d66;
+  --color-atlas-ink: #1d2929;
+  --color-atlas-slate: #4a5757;
+  --color-atlas-danger: #8a3b2e;
+  --color-atlas-danger-soft: #f8ece8;
+  --color-atlas-linen: #e9e3d9;
+  --color-atlas-umber: #8f7f6b;
+  --color-atlas-mist: #b9c2c2;
+  --color-atlas-water: #c3d6d2;
+  --color-atlas-night: #2b3838;
+  --color-atlas-fog: #d8dede;
+  --color-atlas-lagoon: #2a6266;
+}
+
+@theme inline {
+  --font-grotesk: var(--font-atlas-grotesk);
+  --font-manrope: var(--font-atlas-manrope);
+}
+
+@custom-variant wide {
+  @media (min-width: 768px), (orientation: landscape) and (max-height: 500px) {
+    @slot;
+  }
+}
+
+@custom-variant short {
+  @media (max-height: 500px) {
+    @slot;
+  }
+}
+
+.atlas-app {
+  background: var(--color-atlas-dune);
+  color: var(--color-atlas-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.atlas-hit {
+  position: relative;
+}
+
+.atlas-hit::after {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
+}
+
+.atlas-app :focus-visible {
+  outline: 3px solid var(--color-atlas-teal);
+  outline-offset: 2px;
+}
+
+.atlas-app .atlas-dark :focus-visible {
+  outline-color: var(--color-atlas-beige);
+}

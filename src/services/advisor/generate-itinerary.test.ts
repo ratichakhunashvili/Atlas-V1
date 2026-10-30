@@ -40,6 +40,7 @@ function makeUser(overrides: Partial<User> = {}): User {
   return {
     id: "user-1",
     email: "guest@example.com",
+    name: null,
     passwordHash: "hash",
     role: "user",
     createdAt: new Date("2026-01-01T00:00:00Z"),

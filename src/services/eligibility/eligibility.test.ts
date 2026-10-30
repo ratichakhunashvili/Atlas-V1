@@ -219,6 +219,7 @@ function advisorDeps(stay: GuestStay, eligibility: EligibilityDependencies): Gen
   const user: User = {
     id: "guest",
     email: "guest@example.com",
+    name: null,
     passwordHash: "x",
     role: "user",
     createdAt: new Date("2026-01-01T00:00:00Z"),

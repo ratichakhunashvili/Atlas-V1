@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import { authConfig } from "@/auth/config";
+import { adminRedirect } from "@/lib/admin-route-policy";
 import { shouldBlockDevelopmentOnlyPath } from "@/lib/development-route-policy";
 
 // Separate, edge-safe NextAuth() call (shares authConfig with src/auth/index.ts
@@ -9,7 +10,8 @@ import { shouldBlockDevelopmentOnlyPath } from "@/lib/development-route-policy";
 const { auth } = NextAuth(authConfig);
 
 const PROTECTED_EXACT = ["/"];
-const PROTECTED_PREFIXES = ["/profile", "/hotels", "/experiences", "/collection", "/admin", "/checkin"];
+// /admin has its own rules (admin sign-in, Access denied): see adminRedirect.
+const PROTECTED_PREFIXES = ["/profile", "/hotels", "/experiences", "/collection", "/checkin"];
 
 function isProtectedPath(pathname: string) {
   return (
@@ -29,14 +31,13 @@ export default auth((req) => {
     return new NextResponse(null, { status: 404 });
   }
 
+  const adminTarget = adminRedirect(pathname, req.auth ? { role: req.auth.user.role } : null);
+  if (adminTarget) return NextResponse.redirect(new URL(adminTarget, req.nextUrl.origin));
+
   if (isProtectedPath(pathname) && !req.auth) {
     const loginUrl = new URL("/login", req.nextUrl.origin);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
-  }
-
-  if (pathname.startsWith("/admin") && req.auth && req.auth.user.role !== "admin") {
-    return NextResponse.redirect(new URL("/", req.nextUrl.origin));
   }
 });
 

@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="390" height="844" viewBox="0 0 390 844" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Camera view" clip-path="url(#clip0_0_10)">
+<path id="Vector" d="M390 0H0V844H390V0Z" fill="#3A4A4A"/>
+<path id="Vector_2" d="M390 520H0V844H390V520Z" fill="#2B3838"/>
+<path id="Vector_3" d="M0 520V420H40V380H90V440H140L150 300L165 270L180 300L190 440H250V360H300V410H390V520H0Z" fill="#253232"/>
+</g>
+<defs>
+<clipPath id="clip0_0_10">
+<rect width="390" height="844" fill="white"/>
+</clipPath>
+</defs>
+</svg>
