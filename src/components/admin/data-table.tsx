@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { AtlasLink } from "@/components/atlas-ui/ui";
 import type { ScreenKey } from "@/components/atlas-ui/screen-hrefs";
@@ -87,10 +88,27 @@ export function MutedCell({ children }: { children: ReactNode }) {
   return <span className="text-atlas-slate">{children}</span>;
 }
 
-/** Edit ⇒ …Form / Revoke ⇒ AdminQRRevoke. `label` says which row, since every row reads "Edit". */
-export function RowAction({ to, label, children }: { to: ScreenKey; label: string; children: ReactNode }) {
+const ROW_ACTION = "atlas-hit inline-flex items-center font-semibold text-atlas-teal";
+
+/**
+ * Edit ⇒ …Form / Revoke ⇒ AdminQRRevoke. `label` says which row, since every row reads "Edit".
+ * Rows of real records pass `href` (that record's own editor) instead of a design screen key.
+ */
+export function RowAction({
+  to,
+  href,
+  label,
+  children,
+}: { label: string; children: ReactNode } & ({ to: ScreenKey; href?: never } | { href: string; to?: never })) {
+  if (href) {
+    return (
+      <Link href={href} aria-label={label} className={ROW_ACTION}>
+        {children}
+      </Link>
+    );
+  }
   return (
-    <AtlasLink to={to} label={label} className="atlas-hit inline-flex items-center font-semibold text-atlas-teal">
+    <AtlasLink to={to!} label={label} className={ROW_ACTION}>
       {children}
     </AtlasLink>
   );

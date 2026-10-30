@@ -101,7 +101,7 @@ test("no admin action trusts a role or permission sent by the client", () => {
 });
 
 test("every admin page sits behind the admin layout's guard, and the layout actually guards", () => {
-  const layout = stripComments(read("src/app/(app)/admin/layout.tsx"));
+  const layout = stripComments(read("src/app/(console)/layout.tsx"));
   assert.match(layout, /await requireAdmin\(\)/);
 
   // Belt and braces: the dev-only scenario tool refuses in production as well.
@@ -133,10 +133,10 @@ test("deleting a Place with history is refused and explained, never forced", () 
 
 test("QR raw credentials are never read back from storage by an admin screen", () => {
   for (const page of [
-    "src/app/(app)/admin/hotels/[id]/page.tsx",
-    "src/app/(app)/admin/places/[id]/page.tsx",
-    "src/app/(app)/admin/attractions/page.tsx",
-    "src/app/(app)/admin/partners/page.tsx",
+    "src/app/(console)/admin/hotels/[id]/page.tsx",
+    "src/app/(console)/admin/places/[id]/page.tsx",
+    "src/app/(console)/admin/attractions/page.tsx",
+    "src/app/(console)/admin/partners/page.tsx",
   ]) {
     const source = stripComments(read(page));
     assert.doesNotMatch(source, /tokenHash/, `${page} must not touch a credential hash`);
@@ -150,8 +150,8 @@ test("QR raw credentials are never read back from storage by an admin screen", (
 });
 
 test("the new catalog views read the canonical model and create no duplicate Place", () => {
-  const attractions = stripComments(read("src/app/(app)/admin/attractions/page.tsx"));
-  const partners = stripComments(read("src/app/(app)/admin/partners/page.tsx"));
+  const attractions = stripComments(read("src/app/(console)/admin/attractions/page.tsx"));
+  const partners = stripComments(read("src/app/(console)/admin/partners/page.tsx"));
 
   // They list and act on existing records; neither has a Place-creating form.
   for (const [name, source] of [
@@ -166,7 +166,7 @@ test("the new catalog views read the canonical model and create no duplicate Pla
 });
 
 test("admin sections that have no schema yet are absent rather than faked", () => {
-  const adminDir = join(process.cwd(), "src/app/(app)/admin");
+  const adminDir = join(process.cwd(), "src/app/(console)/admin");
   const sections = readdirSync(adminDir).filter((entry) => statSync(join(adminDir, entry)).isDirectory());
 
   /*

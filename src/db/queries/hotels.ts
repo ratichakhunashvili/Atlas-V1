@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, count, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { hotels, places, qrCredentials } from "@/db/schema";
+import { hotelFacilities, hotelPartnerships, hotels, places, qrCredentials } from "@/db/schema";
 
 export async function listHotelsWithPlace() {
   return db
@@ -74,4 +74,48 @@ export async function deleteHotel(id: string) {
 export async function countHotelDeletionBlockers(hotelId: string) {
   const { countHotelDeletionBlockers: operation } = await import("@/db/operations/hotel-deletion");
   return operation(db, hotelId);
+}
+
+/**
+ * The admin Hotels list (Figma AdminHotels 70:811): each hotel with its anchor Place and how many
+ * active facilities and currently active partnerships it has. "Currently active" is the same test
+ * the guest side applies — status active and `now` inside the optional window — so the number an
+ * admin reads is the number of partners a guest of that hotel can actually be shown (before the
+ * Place's own publication and verification checks).
+ */
+export async function listHotelsForAdminOverview(now: Date) {
+  const facilityCount = db
+    .select({ hotelId: hotelFacilities.hotelId, n: count().as("facility_n") })
+    .from(hotelFacilities)
+    .where(eq(hotelFacilities.status, "active"))
+    .groupBy(hotelFacilities.hotelId)
+    .as("facility_counts");
+  const partnerCount = db
+    .select({ hotelId: hotelPartnerships.hotelId, n: count().as("partner_n") })
+    .from(hotelPartnerships)
+    .where(
+      and(
+        eq(hotelPartnerships.status, "active"),
+        or(isNull(hotelPartnerships.startsAt), lte(hotelPartnerships.startsAt, now)),
+        or(isNull(hotelPartnerships.endsAt), gt(hotelPartnerships.endsAt, now))
+      )
+    )
+    .groupBy(hotelPartnerships.hotelId)
+    .as("partner_counts");
+
+  return db
+    .select({
+      id: hotels.id,
+      name: places.name,
+      address: places.address,
+      archivedAt: places.archivedAt,
+      publicationStatus: places.publicationStatus,
+      facilities: sql<number>`coalesce(${facilityCount.n}, 0)`.mapWith(Number),
+      activePartners: sql<number>`coalesce(${partnerCount.n}, 0)`.mapWith(Number),
+    })
+    .from(hotels)
+    .innerJoin(places, eq(hotels.placeId, places.id))
+    .leftJoin(facilityCount, eq(facilityCount.hotelId, hotels.id))
+    .leftJoin(partnerCount, eq(partnerCount.hotelId, hotels.id))
+    .orderBy(places.name);
 }

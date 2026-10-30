@@ -35,12 +35,12 @@ test("dev check-in pages are admin-only, read existing itineraries, and never ge
 
 test("database-held QR credentials are not rendered or serialized into view props", () => {
   const hotelTable = read("src/components/hotel/hotel-table.tsx");
-  const hotelDetail = read("src/app/(app)/admin/hotels/[id]/page.tsx");
+  const hotelDetail = read("src/app/(console)/admin/hotels/[id]/page.tsx");
   const hotelForm = read("src/components/hotel/hotel-form.tsx");
   const qrDevPage = read("src/app/(app)/dev/advisor-qr-check-in/page.tsx");
   const qrDevForm = read("src/app/(app)/dev/advisor-qr-check-in/qr-check-in-test-form.tsx");
-  const scenarioPage = read("src/app/(app)/admin/advisor/[tag]/page.tsx");
-  const scenarioPanel = read("src/app/(app)/admin/advisor/[tag]/scenario-test-panel.tsx");
+  const scenarioPage = read("src/app/(console)/admin/advisor/[tag]/page.tsx");
+  const scenarioPanel = read("src/app/(console)/admin/advisor/[tag]/scenario-test-panel.tsx");
 
   assert.doesNotMatch(hotelTable, /\{\s*hotel\.qrToken\s*\}/);
   assert.doesNotMatch(hotelDetail, /\{\s*hotel\.qrToken\s*\}/);

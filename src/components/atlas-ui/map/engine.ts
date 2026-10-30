@@ -32,6 +32,9 @@ function alongRoute(line: LngLat[]): LngLat {
   return line[Math.max(1, Math.floor(line.length / 4))] ?? line[0];
 }
 
+/** The hotel each map was last centred on, so a live scene centres once rather than on every update. */
+const centredHotel = new WeakMap<MapboxMap, string>();
+
 function markerFeatures(scene: MapScene): GeoJSON.FeatureCollection {
   const features: Feature[] = [];
   const line = scene.route ? ROUTE_LINES[scene.route] : undefined;
@@ -47,8 +50,11 @@ function markerFeatures(scene: MapScene): GeoJSON.FeatureCollection {
 
   // Draw order follows the design: places, then the hotel, then the guest on top.
   const ordered = [...scene.places].sort((a, b) => Number(a.marker.endsWith("selected")) - Number(b.marker.endsWith("selected")));
-  for (const place of ordered) features.push(point(PLACE_LNGLAT[place.id], place.marker, place.id));
-  if (scene.hotel) features.push(point(HOTEL_LNGLAT, "hotel"));
+  for (const place of ordered) {
+    const at = place.at ?? PLACE_LNGLAT[place.id as keyof typeof PLACE_LNGLAT];
+    if (at) features.push(point(at, place.marker, place.id));
+  }
+  if (scene.hotel) features.push(point(scene.hotelAt ?? HOTEL_LNGLAT, "hotel"));
   if (scene.you) features.push(point(YOU_LNGLAT, "you"));
   return { type: "FeatureCollection", features };
 }
@@ -166,6 +172,13 @@ export function applyScene(
   );
   container?.style.setProperty("--atlas-map-left-inset", `${panelEdge}px`);
 
+  // A screen on real data opens on the guest's own hotel, once per hotel (not on every re-render).
+  const hotelKey = scene.hotelAt ? scene.hotelAt.join(",") : "";
+  if (hotelKey && centredHotel.get(map) !== hotelKey) {
+    centredHotel.set(map, hotelKey);
+    map.jumpTo({ center: scene.hotelAt, zoom: DESIGN_ZOOM });
+  }
+
   const line = scene.route ? ROUTE_LINES[scene.route] : undefined;
   if (!line && framedRoute) {
     // Leaving a route screen: return to the design view.
@@ -199,8 +212,9 @@ export function applyDimension(map: MapboxMap, tilted: boolean, reducedMotion: b
 }
 
 /** Moves the camera to a map-control target. */
-export function applyCamera(map: MapboxMap, target: CameraTarget, reducedMotion: boolean): void {
-  const center = target === "you" ? YOU_LNGLAT : target === "hotel" ? HOTEL_LNGLAT : MAP_CENTER;
+export function applyCamera(map: MapboxMap, target: CameraTarget, reducedMotion: boolean, hotelAt?: LngLat): void {
+  const hotel = hotelAt ?? HOTEL_LNGLAT;
+  const center = target === "you" ? YOU_LNGLAT : target === "hotel" ? hotel : hotelAt ?? MAP_CENTER;
   const options = { center, zoom: target === "design" ? DESIGN_ZOOM : 15.2 };
   if (reducedMotion) map.jumpTo(options);
   else map.flyTo({ ...options, duration: 800 });

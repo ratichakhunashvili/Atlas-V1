@@ -77,7 +77,7 @@ describe("the fixture mapping is fictional and fixed", () => {
 });
 
 describe("the offer on the home page is presentation only", () => {
-  const home = stripComments(read("src/app/(app)/page.tsx"));
+  const home = stripComments(read("src/app/(guest)/(map)/page.tsx"));
 
   it("shows the button only when the server says so, through the same decision", () => {
     assert.match(home, /isTestEntryOffered\(user\.id\)/);
@@ -86,6 +86,6 @@ describe("the offer on the home page is presentation only", () => {
   });
 
   it("is documented as non-production in what the guest reads", () => {
-    assert.match(read("src/app/(app)/page.tsx"), /non-production only/);
+    assert.match(read("src/app/(guest)/(map)/page.tsx"), /non-production only/);
   });
 });

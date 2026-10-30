@@ -11,6 +11,9 @@ export type AdminStatus =
   | "Draft"
   | "Revoked"
   | "Expired"
+  | "Pending"
+  | "Suspended"
+  | "Archived"
   | "Hotel entry"
   | "Place check-in";
 
@@ -21,6 +24,9 @@ const TONES: Record<AdminStatus, string> = {
   Inactive: "bg-atlas-sand text-atlas-slate",
   Draft: "bg-atlas-sand text-atlas-slate",
   Expired: "bg-atlas-beige text-atlas-ink",
+  Pending: "bg-atlas-sand text-atlas-teal",
+  Suspended: "bg-atlas-beige text-atlas-ink",
+  Archived: "bg-atlas-sand text-atlas-slate",
   // #f4e0db is the design's Revoked fill; it is not one of the palette tokens.
   Revoked: "bg-[#f4e0db] text-atlas-danger",
   "Hotel entry": "bg-atlas-sand text-atlas-teal",

@@ -88,8 +88,8 @@ test("credential rows are written with a hash, never a raw token", () => {
 
 test("admin screens report only whether a credential exists", () => {
   for (const page of [
-    "src/app/(app)/admin/hotels/[id]/page.tsx",
-    "src/app/(app)/admin/places/[id]/page.tsx",
+    "src/app/(console)/admin/hotels/[id]/page.tsx",
+    "src/app/(console)/admin/places/[id]/page.tsx",
   ]) {
     const source = read(page);
     assert.match(source, /findActiveQrCredentialFor(Hotel|Place)/);

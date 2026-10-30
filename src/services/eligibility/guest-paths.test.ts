@@ -107,10 +107,10 @@ describe("no guest-facing code can read Places without eligibility", () => {
   test("the nearby API route, the home page and the Advisor all go through services/eligibility", () => {
     const get = (p: string) => files.find((f) => f.path === p)?.text ?? "";
     assert.match(get("app/api/places/nearby/route.ts"), /getEligibleMapPlacesForGuest/);
-    assert.match(get("app/(app)/page.tsx"), /getEligibleMapPlacesForGuest/);
+    assert.match(get("app/(guest)/(map)/page.tsx"), /getEligibleMapPlacesForGuest/);
     assert.match(get("services/advisor/generate-itinerary.ts"), /listEligiblePlacesForStay/);
     assert.doesNotMatch(get("app/api/places/nearby/route.ts"), /@\/db\/queries\/places/);
-    assert.doesNotMatch(get("app/(app)/page.tsx"), /@\/db\/queries\/places/);
+    assert.doesNotMatch(get("app/(guest)/(map)/page.tsx"), /@\/db\/queries\/places/);
   });
 
   test("the nearby route never reads a hotel or place id from the request", () => {
@@ -167,8 +167,8 @@ describe("eligibility rules live in exactly one place", () => {
     const allowed = new Set([
       "services/eligibility/rules.ts",
       "db/queries/places.ts",
-      "app/(app)/admin/hotels/[id]/facilities/page.tsx",
-      "app/(app)/admin/hotels/[id]/partnerships/page.tsx",
+      "app/(console)/admin/hotels/[id]/facilities/page.tsx",
+      "app/(console)/admin/hotels/[id]/partnerships/page.tsx",
     ]);
     const patterns = [
       /publicationStatuss*===s*["']published["']/,

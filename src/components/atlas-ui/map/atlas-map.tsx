@@ -47,7 +47,7 @@ export function AtlasMap() {
         },
         onUnauthorized: () => setFailed("unauthorized"),
         onPlaceClick: (placeId) => {
-          if (placeClickRef.current) placeClickRef.current(placeId as never);
+          if (placeClickRef.current) placeClickRef.current(placeId);
         },
       });
     })().catch(() => setFailed("load"));
@@ -75,12 +75,18 @@ export function AtlasMap() {
     engine.applyDimension(map, scene.allowTilt && dimension === "3D", reducedMotion);
   }, [dimension, ready, scene, reducedMotion]);
 
+  // The live scene's hotel, read by camera requests without making every scene change move the camera.
+  const hotelAtRef = useRef<[number, number] | undefined>(undefined);
+  useEffect(() => {
+    hotelAtRef.current = scene?.hotelAt;
+  }, [scene]);
+
   // Camera requests from the map controls.
   useEffect(() => {
     const map = mapRef.current;
     const engine = engineRef.current;
     if (!map || !engine || !ready || camera.seq === 0) return;
-    engine.applyCamera(map, camera.target, reducedMotion);
+    engine.applyCamera(map, camera.target, reducedMotion, hotelAtRef.current);
   }, [camera, ready, reducedMotion]);
 
   return (

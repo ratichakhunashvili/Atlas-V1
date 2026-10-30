@@ -115,7 +115,8 @@ export function MissionsMap({ initialToast, locationOff = false }: { initialToas
   const places: ScenePlace[] = visible.map((id) => ({ id, marker: markerFor(id, id === selected) }));
 
   const selectPlace = useCallback(
-    (id: PlaceId) => {
+    (markerId: string) => {
+      const id = markerId as PlaceId;
       if (FILTER_PLACES[filter].places.includes(id)) {
         setSelected(id);
         setCollapsed(false);

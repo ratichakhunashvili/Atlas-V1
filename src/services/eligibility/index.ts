@@ -1,7 +1,7 @@
 import type { Hotel, Place, PlaceCategory } from "@/db/schema";
 import type { LatLng } from "@/lib/geo";
 import { calculateDayNumber, stayEndFor } from "@/services/advisor/stay-day";
-import { buildEligiblePlaces, filterEligibleByRadius, type EligiblePlace, type FacilityRow, type PartnershipRow } from "./rules";
+import { buildEligiblePlaces, filterEligibleByRadius, type EligiblePlace, type EligibilitySource, type FacilityRow, type PartnershipRow } from "./rules";
 
 export type { EligiblePlace, EligibilitySource } from "./rules";
 
@@ -196,9 +196,11 @@ export async function getEligibleExperienceForGuest(
 // Map adapter
 // ---------------------------------------------------------------------------
 
-/** The lean shape sent to the client map — structurally identical to db/queries/places.ts's PlaceMapPoint. */
+/** The lean shape sent to the client map: db/queries/places.ts's PlaceMapPoint plus where the eligibility came from. */
 export type EligibleMapPoint = {
   id: string;
+  /** The hotel's own facility, or an external partner it has approved. */
+  source: EligibilitySource;
   name: string;
   description: string | null;
   category: Place["category"];
@@ -235,8 +237,9 @@ export async function getEligibleMapPlacesForGuest(
   return {
     status: "ok",
     hotelLocation: result.hotelLocation,
-    places: result.experiences.map(({ place }) => ({
+    places: result.experiences.map(({ place, source }) => ({
       id: place.id,
+      source,
       name: place.name,
       description: place.description,
       category: place.category,

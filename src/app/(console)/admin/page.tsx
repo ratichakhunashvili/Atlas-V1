@@ -1,46 +1,63 @@
 import type { Metadata } from "next";
-import { AdminTable, RowAction } from "@/components/admin/data-table";
-import { ADMIN_HOTELS } from "@/components/admin/fixtures";
-import { AdminHeaderAction, AdminPageHeader, SampleDataNote } from "@/components/admin/page-parts";
-import { StatusPill } from "@/components/admin/status-pill";
+import { AdminTable, MutedCell, RowAction } from "@/components/admin/data-table";
+import { AdminHeaderAction, AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
+import { StatusPill, type AdminStatus } from "@/components/admin/status-pill";
+import { listHotelsForAdminOverview } from "@/db/queries/hotels";
 
-/* AdminHotels · Hotels — Figma frame 70:811. The admin home. */
+/*
+ * AdminHotels · Hotels — Figma frame 70:811, the admin home, on real data. The layout has already
+ * required the admin role. "Edit" and "New hotel" open the existing hotel editor and creation form.
+ *
+ * The design's City column shows the hotel's address: Atlas stores an address, not a city field.
+ */
 
-export const metadata: Metadata = { title: "Admin · Hotels" };
+export const metadata: Metadata = { title: "Hotels" };
+export const dynamic = "force-dynamic";
 
-export default function AdminHotelsPage() {
+function hotelStatus(row: { archivedAt: Date | null; publicationStatus: string }): AdminStatus {
+  if (row.archivedAt) return "Archived";
+  return row.publicationStatus === "published" ? "Active" : "Inactive";
+}
+
+export default async function AdminHotelsPage() {
+  const hotels = await listHotelsForAdminOverview(new Date());
+
   return (
     <>
       <AdminPageHeader
         title="Hotels"
         description="Hotels that guests can join with a hotel code."
-        action={<AdminHeaderAction to="AdminHotelForm">New hotel</AdminHeaderAction>}
+        action={<AdminHeaderAction href="/admin/hotels/new">New hotel</AdminHeaderAction>}
       />
-      <AdminTable
-        caption="Hotels"
-        columns={[
-          { label: "Name", width: 260 },
-          { label: "City", width: 160 },
-          { label: "Facilities", width: 120 },
-          { label: "Active partners", width: 160 },
-          { label: "Status", width: 120 },
-          { label: "Actions", hidden: true },
-        ]}
-        rows={ADMIN_HOTELS.map((hotel) => ({
-          key: hotel.name,
-          cells: [
-            hotel.name,
-            hotel.city,
-            hotel.facilities,
-            hotel.activePartners,
-            <StatusPill key="status" status={hotel.status} />,
-            <RowAction key="edit" to="AdminHotelForm" label={`Edit ${hotel.name}`}>
-              Edit
-            </RowAction>,
-          ],
-        }))}
-      />
-      <SampleDataNote />
+      {hotels.length === 0 ? (
+        <AdminNote>No hotels yet. Create one to start adding facilities, partners and a hotel code.</AdminNote>
+      ) : (
+        <AdminTable
+          caption="Hotels"
+          columns={[
+            { label: "Name", width: 260 },
+            { label: "Address", width: 200 },
+            { label: "Facilities", width: 110 },
+            { label: "Active partners", width: 150 },
+            { label: "Status", width: 110 },
+            { label: "Actions", hidden: true },
+          ]}
+          rows={hotels.map((hotel) => ({
+            key: hotel.id,
+            cells: [
+              hotel.name,
+              hotel.address ?? <MutedCell>Not set</MutedCell>,
+              hotel.facilities,
+              hotel.activePartners,
+              <StatusPill key="status" status={hotelStatus(hotel)} />,
+              <RowAction key="edit" href={`/admin/hotels/${hotel.id}`} label={`Edit ${hotel.name}`}>
+                Edit
+              </RowAction>,
+            ],
+          }))}
+        />
+      )}
+      <AdminNote>Active partners counts partnerships that are active today. A partner also has to be published and verified before a guest sees it.</AdminNote>
     </>
   );
 }

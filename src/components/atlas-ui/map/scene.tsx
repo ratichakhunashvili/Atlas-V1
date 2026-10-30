@@ -10,11 +10,17 @@ import type { MarkerImage } from "./markers";
  * creating a new one.
  */
 
-export type ScenePlace = { id: PlaceId; marker: MarkerImage };
+/**
+ * A marker. Design screens use the fixture ids, placed where the Figma frame draws them; screens
+ * on real data pass the Place's own id and coordinates in `at` ([lng, lat]).
+ */
+export type ScenePlace = { id: PlaceId | (string & {}); marker: MarkerImage; at?: [number, number] };
 
 export type MapScene = {
   places: ScenePlace[];
   hotel: boolean;
+  /** The guest's real hotel ([lng, lat]); without it the design's Hotel A position is used. */
+  hotelAt?: [number, number];
   you: boolean;
   /** Draws the walking route from Hotel A to this destination. */
   route?: RouteId;
@@ -41,7 +47,7 @@ export const INITIAL_DIMENSION: MapDimension = "3D";
 type SceneContextValue = {
   scene: MapScene | null;
   setScene: (scene: MapScene) => void;
-  placeClickRef: React.RefObject<((id: PlaceId) => void) | null>;
+  placeClickRef: React.RefObject<((id: string) => void) | null>;
   camera: { target: CameraTarget; seq: number };
   moveCamera: (target: CameraTarget) => void;
   dimension: MapDimension;
@@ -54,7 +60,7 @@ export function MapSceneProvider({ children }: { children: ReactNode }) {
   const [scene, setScene] = useState<MapScene | null>(null);
   const [camera, setCamera] = useState<{ target: CameraTarget; seq: number }>({ target: "design", seq: 0 });
   const [dimension, setDimension] = useState<MapDimension>(INITIAL_DIMENSION);
-  const placeClickRef = useRef<((id: PlaceId) => void) | null>(null);
+  const placeClickRef = useRef<((id: string) => void) | null>(null);
 
   const moveCamera = useCallback((target: CameraTarget) => {
     setCamera((current) => ({ target, seq: current.seq + 1 }));
@@ -75,7 +81,7 @@ export function useSceneContext(): SceneContextValue {
 }
 
 /** Called by a map screen to describe what the map should show, and what tapping a marker does. */
-export function useMapScene(scene: MapScene, onPlaceClick?: (id: PlaceId) => void): void {
+export function useMapScene(scene: MapScene, onPlaceClick?: (id: string) => void): void {
   const { setScene, placeClickRef } = useSceneContext();
   const key = JSON.stringify(scene);
 

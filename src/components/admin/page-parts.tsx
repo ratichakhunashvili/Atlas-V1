@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { AtlasIcon } from "@/components/atlas-ui/asset";
 import { AtlasLink } from "@/components/atlas-ui/ui";
@@ -34,14 +35,40 @@ export function AdminPageHeader({
 }
 
 /** Button · New hotel, Create code, Done… — the 44px action beside a page title. */
-export function AdminHeaderAction({ to, children }: { to: ScreenKey; children: ReactNode }) {
+const HEADER_ACTION =
+  "flex h-[44px] shrink-0 items-center justify-center whitespace-nowrap rounded-[12px] bg-atlas-teal px-[18px] font-manrope text-[14px] font-semibold leading-[19px] text-atlas-paper";
+
+export function AdminHeaderAction({
+  to,
+  href,
+  children,
+}: { children: ReactNode } & ({ to: ScreenKey; href?: never } | { href: string; to?: never })) {
+  if (href) {
+    return (
+      <Link href={href} className={HEADER_ACTION}>
+        {children}
+      </Link>
+    );
+  }
   return (
-    <AtlasLink
-      to={to}
-      className="flex h-[44px] shrink-0 items-center justify-center whitespace-nowrap rounded-[12px] bg-atlas-teal px-[18px] font-manrope text-[14px] font-semibold leading-[19px] text-atlas-paper"
-    >
+    <AtlasLink to={to!} className={HEADER_ACTION}>
       {children}
     </AtlasLink>
+  );
+}
+
+/** Success or problem message after a real admin action (the actions redirect back with ?ok= / ?error=). */
+export function AdminFlash({ ok, error }: { ok?: string; error?: string }) {
+  if (!ok && !error) return null;
+  return (
+    <p
+      role={error ? "alert" : "status"}
+      className={`w-full rounded-[12px] border px-[14px] py-[10px] font-manrope text-[14px] leading-[1.45] ${
+        error ? "border-atlas-danger bg-atlas-danger-soft text-atlas-danger" : "border-atlas-teal bg-atlas-sand text-atlas-teal"
+      }`}
+    >
+      {error ?? ok}
+    </p>
   );
 }
 
