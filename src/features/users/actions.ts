@@ -39,6 +39,7 @@ export async function updatePreferencesAction(formData: FormData) {
     categories: formData.getAll("categories"),
     budget: formData.get("budget") || null,
     activityLevel: formData.get("activityLevel") || null,
+    maxDistanceMeters: formData.get("maxDistanceMeters") || null,
   });
 
   if (!parsed.success) {
@@ -48,5 +49,8 @@ export async function updatePreferencesAction(formData: FormData) {
   await upsertPreferences(user.id, parsed.data);
 
   revalidatePath("/profile");
-  redirect("/profile");
+  // The Advisor plans from these, so the pages that use them must not serve a stale copy.
+  revalidatePath("/");
+  revalidatePath("/experiences");
+  redirect("/profile?saved=1");
 }

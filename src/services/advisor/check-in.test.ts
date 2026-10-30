@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ItineraryDay, ItineraryStop } from "@/db/schema";
 import { checkInStopWithGps, isValidCoordinate, CHECK_IN_RADIUS_METERS, type CheckInDependencies } from "./check-in";
-import { loadAllAvailable } from "./test-utils";
+import { fakeRecordVerifiedVisit, loadAllAvailable } from "./test-utils";
 
 let idCounter = 0;
 function makeStop(overrides: Partial<ItineraryStop> = {}): ItineraryStop {
@@ -18,6 +18,7 @@ function makeStop(overrides: Partial<ItineraryStop> = {}): ItineraryStop {
     latitude: 41.7151,
     longitude: 44.8271,
     imageUrl: null,
+    visitDurationMinutes: null,
     position: idCounter,
     visitedAt: null,
     supersededAt: null,
@@ -30,6 +31,7 @@ function makeDay(overrides: Partial<ItineraryDay> = {}): ItineraryDay {
   return {
     id: "day-1",
     userId: "user-1",
+    principalId: null,
     hotelId: "hotel-1",
     hotelStayId: "stay-1",
     dayNumber: 1,
@@ -37,6 +39,7 @@ function makeDay(overrides: Partial<ItineraryDay> = {}): ItineraryDay {
     routeGeoJson: null,
     totalDurationSeconds: null,
     originalDurationSeconds: null,
+    availableMinutes: null,
     generatedAt: new Date("2026-03-10T08:00:00Z"),
     completedAt: null,
     ...overrides,
@@ -57,10 +60,10 @@ function createFakeStore(day: ItineraryDay, initialStops: ItineraryStop[]) {
   const listItineraryStops: CheckInDependencies["listItineraryStops"] = async () =>
     [...stops].sort((a, b) => a.position - b.position);
 
-  const markStopVisited: CheckInDependencies["markStopVisited"] = async (stopId, _dayId, checkInMethod) => {
+  const markStopVisited: CheckInDependencies["markStopVisited"] = async (stopId, _dayId) => {
     const target = stops.find((s) => s.id === stopId);
     if (!target || target.visitedAt !== null) return null; // already visited — the conditional-update guard
-    const visited: ItineraryStop = { ...target, visitedAt: new Date(), checkInMethod };
+    const visited: ItineraryStop = { ...target, visitedAt: new Date() };
     stops = stops.map((s) => (s.id === stopId ? visited : s));
     const dayCompleted = stops.every((s) => s.visitedAt !== null);
     if (dayCompleted) completedAt = new Date();
@@ -68,14 +71,24 @@ function createFakeStore(day: ItineraryDay, initialStops: ItineraryStop[]) {
   };
 
   return {
-    deps: { findItineraryStopWithDay, listItineraryStops, markStopVisited, loadAvailabilityContext: loadAllAvailable },
+    deps: {
+      findItineraryStopWithDay,
+      listItineraryStops,
+      markStopVisited,
+      recordVerifiedVisit: fakeRecordVerifiedVisit,
+      loadAvailabilityContext: loadAllAvailable,
+    },
     getStops: () => stops,
     getCompletedAt: () => completedAt,
   };
 }
 
-const NEAR = { latitude: 41.7151, longitude: 44.8271 }; // same as makeStop's default coordinates
-const FAR = { latitude: 41.9, longitude: 45.1 }; // many km away
+// These tests let the service use its own default clock, so the fixtures are
+// stamped at module load — a fresh reading, which is what they are not testing.
+const CLOCK = new Date();
+// Fresh, precise readings: these tests are about ownership, order and distance.
+const NEAR = { latitude: 41.7151, longitude: 44.8271, accuracyMeters: 10, capturedAtMs: CLOCK.getTime() }; // same as makeStop's default coordinates
+const FAR = { latitude: 41.9, longitude: 45.1, accuracyMeters: 10, capturedAtMs: CLOCK.getTime() }; // many km away
 
 test("isValidCoordinate", async (t) => {
   await t.test("accepts a valid coordinate", () => {
@@ -160,7 +173,7 @@ test("an already-visited stop returns an idempotent success, without a second wr
 test("invalid coordinates are rejected before any distance check", async () => {
   const stop1 = makeStop({ position: 0 });
   const store = createFakeStore(makeDay(), [stop1]);
-  const result = await checkInStopWithGps({ userId: "user-1", stopId: stop1.id, latitude: NaN, longitude: 44.8 }, store.deps);
+  const result = await checkInStopWithGps({ userId: "user-1", stopId: stop1.id, latitude: NaN, longitude: 44.8, accuracyMeters: 10, capturedAtMs: Date.now() }, store.deps);
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.reason, "invalid_coordinates");
 });
@@ -171,7 +184,7 @@ test("exactly 150m is accepted (boundary is inclusive)", async () => {
   const store = createFakeStore(makeDay(), [stop1]);
   const offsetLat = 41.7151 + 150 / 111320;
   const result = await checkInStopWithGps(
-    { userId: "user-1", stopId: stop1.id, latitude: offsetLat, longitude: 44.8271 },
+    { userId: "user-1", stopId: stop1.id, latitude: offsetLat, longitude: 44.8271, accuracyMeters: 10, capturedAtMs: Date.now() },
     store.deps
   );
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -182,7 +195,7 @@ test("just over 150m is rejected", async () => {
   const store = createFakeStore(makeDay(), [stop1]);
   const offsetLat = 41.7151 + 200 / 111320;
   const result = await checkInStopWithGps(
-    { userId: "user-1", stopId: stop1.id, latitude: offsetLat, longitude: 44.8271 },
+    { userId: "user-1", stopId: stop1.id, latitude: offsetLat, longitude: 44.8271, accuracyMeters: 10, capturedAtMs: Date.now() },
     store.deps
   );
   assert.equal(result.ok, false);
@@ -198,7 +211,7 @@ test("well within 150m is accepted", async () => {
   const stop1 = makeStop({ position: 0, latitude: 41.7151, longitude: 44.8271 });
   const store = createFakeStore(makeDay(), [stop1]);
   const result = await checkInStopWithGps(
-    { userId: "user-1", stopId: stop1.id, latitude: 41.7152, longitude: 44.8271 },
+    { userId: "user-1", stopId: stop1.id, latitude: 41.7152, longitude: 44.8271, accuracyMeters: 10, capturedAtMs: Date.now() },
     store.deps
   );
   assert.equal(result.ok, true);

@@ -82,7 +82,10 @@ describe("formatting", () => {
 
 describe("the preview page: development-only, routed along roads, never faked", () => {
   test("it returns 404 in production and is never prerendered", () => {
-    assert.match(page, /process\.env\.NODE_ENV === "production"\) notFound\(\)/);
+    assert.match(
+      page,
+      /shouldBlockDevelopmentOnlyPath\("\/map-preview", process\.env\.NODE_ENV, process\.env\.ATLAS_DEPLOYMENT_ENV\)\) notFound\(\)/
+    );
     assert.match(page, /export const dynamic = "force-dynamic"/);
   });
 

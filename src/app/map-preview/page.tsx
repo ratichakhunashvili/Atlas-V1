@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { shouldBlockDevelopmentOnlyPath } from "@/lib/development-route-policy";
 import { Alert } from "@/components/shared/alert";
 import { AtlasMap } from "@/components/map/atlas-map";
 import type { AdvisorStopView } from "@/services/advisor/current-itinerary";
@@ -82,7 +83,10 @@ const demoStopViews: AdvisorStopView[] = DEMO_STOPS.map((stop, index) => ({
   longitude: stop.longitude,
   imageUrl: null,
   isHotelStop: false,
+  visitDurationMinutes: null,
+  walkMinutesFromPrevious: 0,
   checkInMethod: "gps",
+      canCheckInWithCamera: false,
   visitedAt: null,
   status: "current",
   unavailableReason: null,
@@ -94,7 +98,7 @@ const demoStopViews: AdvisorStopView[] = DEMO_STOPS.map((stop, index) => ({
  * no database, no authentication and none of Atlas's eligibility or recommendation logic. Returns 404 in production.
  */
 export default async function MapPreviewPage() {
-  if (process.env.NODE_ENV === "production") notFound();
+  if (shouldBlockDevelopmentOnlyPath("/map-preview", process.env.NODE_ENV, process.env.ATLAS_DEPLOYMENT_ENV)) notFound();
 
   const outcome = await loadDemoRoute();
 

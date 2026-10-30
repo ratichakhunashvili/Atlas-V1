@@ -67,7 +67,7 @@ export default async function AdvisorTestScenarioPage({ params }: { params: Prom
             category: p.category,
             latitude: p.latitude,
             longitude: p.longitude,
-            qrToken: p.qrToken,
+            hasQrToken: Boolean(p.qrToken),
             isPartner: scenario.partnerPlaceIds.has(p.id),
             partnerPriority: scenario.partnerPlaceIds.get(p.id) ?? null,
           })),
@@ -85,8 +85,9 @@ export default async function AdvisorTestScenarioPage({ params }: { params: Prom
               }
             : null
         }
-        stops={inspectorStops.map(({ stop, isPartner, qrToken }) => ({
+        stops={inspectorStops.map(({ stop, isPartner, hasQrToken }) => ({
           id: stop.id,
+          placeId: stop.placeId,
           position: stop.position,
           name: stop.name,
           category: stop.category,
@@ -96,7 +97,7 @@ export default async function AdvisorTestScenarioPage({ params }: { params: Prom
           checkInMethod: stop.checkInMethod,
           visitedAt: stop.visitedAt ? stop.visitedAt.toISOString() : null,
           isPartner,
-          qrToken,
+          hasQrToken,
         }))}
         cooldownActive={cooldownActive}
       />

@@ -49,6 +49,10 @@ Hotel QR → identify hotel and stay → choose interests and free time
 
 Atlas may eventually cover attractions, landmarks, scenic places, restaurants, tours, boat rides, activities, hotel facilities, hotel events, and partner experiences. Start with Georgia and add features only when their phase is approved.
 
+## Brand identity source
+
+For visual design and brand-facing copy, follow [docs/atlas-brand-book.md](docs/atlas-brand-book.md) for the logo, palette, typography, Path System, photography, and voice. The brand book does not override this file's product and security rules or approve unimplemented features, bookings, payments, rewards, commissions, partner relationships, or claims. Verify product capability and status before presenting an example from the brand book as live UI.
+
 ## Critical product rule: hotel-specific partners only
 
 This is a core eligibility rule, not a ranking preference. **Only an active external business or experience explicitly partnered with the guest’s specific hotel may be recommended as an external destination, itinerary stop, mission, task, offer, or booking option.**

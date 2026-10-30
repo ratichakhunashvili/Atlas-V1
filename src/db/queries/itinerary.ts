@@ -59,25 +59,29 @@ export async function findItineraryStopWithDay(stopId: string): Promise<{ stop: 
 }
 
 /**
- * Conditionally marks one stop visited (via whichever method the caller
- * verified — GPS or QR), then marks its day completed if every stop is now
- * visited — both inside one transaction. Returns null if the stop was
+ * Conditionally marks one stop visited, then marks its day completed if every
+ * stop is now visited — both inside one transaction. Returns null if the stop was
  * already visited: the `WHERE visited_at IS NULL` guard on the UPDATE is
  * what makes two simultaneous requests for the SAME stop resolve to exactly
  * one real transition (Postgres row-locks the UPDATE; the loser's WHERE
  * clause simply no longer matches once the winner commits) — no second
  * table, no explicit advisory lock needed. Shared by GPS and QR check-in so
  * the transaction/concurrency/completion logic exists exactly once.
+ *
+ * `check_in_method` is deliberately NOT written here. It is the stop's
+ * REQUIREMENT, decided once at generation time, and the caller has already
+ * verified the attempt against it (services/advisor/check-in-method.ts).
+ * Overwriting it with whichever method happened to succeed would erase the
+ * requirement and let the saved plan drift into agreeing with every attempt.
  */
 export async function markStopVisited(
   stopId: string,
-  dayId: string,
-  checkInMethod: CheckInMethod
+  dayId: string
 ): Promise<{ stop: ItineraryStop; dayCompleted: boolean } | null> {
   return db.transaction(async (tx) => {
     const [updatedStop] = await tx
       .update(itineraryStops)
-      .set({ visitedAt: new Date(), checkInMethod })
+      .set({ visitedAt: new Date() })
       .where(and(eq(itineraryStops.id, stopId), isNull(itineraryStops.visitedAt), isNull(itineraryStops.supersededAt)))
       .returning();
 
@@ -146,6 +150,8 @@ export type PersistStopInput = {
   latitude: number;
   longitude: number;
   imageUrl: string | null;
+  /** Snapshot of how long this stop was expected to take. Null only for paths that predate the time budget. */
+  visitDurationMinutes: number | null;
   /** Always null for newly generated stops (every stop starts unvisited). Only itineraries generated before the hotel filler was removed contain an auto-visited hotel stop. */
   visitedAt: Date | null;
 };
@@ -164,6 +170,8 @@ export type PersistItineraryInput = {
   existingDayId: string | null;
   routeGeoJson: unknown;
   totalDurationSeconds: number;
+  /** The free time the guest chose, which this plan was fitted to. Recorded so the saved day can explain its own shape. */
+  availableMinutes: number;
   generatedAt: Date;
   /** New-day path only (always null: a generated day is never already complete). An in-place rebuild derives completion from the active stops. */
   completedAt: Date | null;
@@ -200,7 +208,7 @@ async function nextPositionTx(tx: Tx, dayId: string): Promise<number> {
 async function refreshDayTx(
   tx: Tx,
   dayId: string,
-  patch: { routeGeoJson?: unknown; totalDurationSeconds?: number | null; originalDurationSeconds?: number; generatedAt?: Date },
+  patch: { routeGeoJson?: unknown; totalDurationSeconds?: number | null; originalDurationSeconds?: number; availableMinutes?: number; generatedAt?: Date },
   now: Date
 ) {
   const [current] = await tx.select().from(itineraryDays).where(eq(itineraryDays.id, dayId)).limit(1);
@@ -250,6 +258,7 @@ export async function persistItinerary(input: PersistItineraryInput): Promise<Pe
             totalDurationSeconds: input.totalDurationSeconds,
             // A full rebuild is a NEW plan, so its estimate is the new original estimate.
             originalDurationSeconds: input.totalDurationSeconds,
+            availableMinutes: input.availableMinutes,
             generatedAt: input.generatedAt,
           },
           input.generatedAt
@@ -269,6 +278,7 @@ export async function persistItinerary(input: PersistItineraryInput): Promise<Pe
           totalDurationSeconds: input.totalDurationSeconds,
           // The generated estimate, kept separately from the active route estimate (which a repair updates).
           originalDurationSeconds: input.totalDurationSeconds,
+          availableMinutes: input.availableMinutes,
           generatedAt: input.generatedAt,
           completedAt: input.completedAt,
         })
@@ -390,4 +400,18 @@ export async function persistStopRemoval(input: PersistStopRemovalInput): Promis
     if (error instanceof ConcurrentChange) return { status: "conflict" };
     throw error;
   }
+}
+
+/**
+ * Stores ONLY a day's route line. The user id in the WHERE is the ownership check: a day id alone is never enough
+ * to write to someone else's plan. Stops, order, durations and completion are untouched, so this can repair a
+ * missing line without being able to change what the guest is asked to do. Returns false when no owned row matched.
+ */
+export async function saveRouteGeometry(input: { dayId: string; userId: string; routeGeoJson: unknown }): Promise<boolean> {
+  const updated = await db
+    .update(itineraryDays)
+    .set({ routeGeoJson: input.routeGeoJson })
+    .where(and(eq(itineraryDays.id, input.dayId), eq(itineraryDays.userId, input.userId)))
+    .returning({ id: itineraryDays.id });
+  return updated.length > 0;
 }

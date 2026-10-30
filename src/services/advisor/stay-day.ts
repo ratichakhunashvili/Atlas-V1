@@ -31,3 +31,12 @@ export function calculateDayNumber(checkIn: Date, checkOut: Date | null, now: Da
 
   return { ok: true, dayNumber: diffDays + 1 };
 }
+
+/**
+ * The date a stay's days are counted up to: its actual check-out when it has ended, otherwise the departure the
+ * guest declared (inclusive), otherwise open-ended. A declared departure never ENDS a stay by itself — the stay
+ * stays active (check_out NULL) — it only stops Atlas planning days past it.
+ */
+export function stayEndFor(stay: { checkOut: Date | null; expectedCheckOut?: Date | null }): Date | null {
+  return stay.checkOut ?? stay.expectedCheckOut ?? null;
+}

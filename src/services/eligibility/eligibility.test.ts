@@ -227,13 +227,15 @@ function advisorDeps(stay: GuestStay, eligibility: EligibilityDependencies): Gen
   return {
     findUserById: async () => user,
     findActiveStayForUser: async () => stay,
-    findPreferencesForUser: async () => ({ userId: "guest", categories: ["restaurant", "spa"], budget: null, activityLevel: null, updatedAt: NOW }),
+    findPreferencesForUser: async () => ({ userId: "guest", principalId: null, categories: ["restaurant", "spa"], budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: NOW }),
     // The REAL eligibility service, backed by the in-memory rows above, scoped to the stay's hotel.
     listEligiblePlacesForStay: (stay, now) => listEligiblePlacesForStay(stay, now, eligibility),
     findItineraryDay: async () => null,
     findLatestItineraryDayBefore: async () => null,
     listItineraryStops: async () => [],
     getStopUsageHistory: async () => new Map(),
+    getWalkingRouteInOrder: async () => ({ ok: true as const, route: { geometry: { type: "Feature" as const, properties: {}, geometry: { type: "LineString" as const, coordinates: [] } }, durationSeconds: 600, distanceMeters: 500 } }),
+    listUpcomingHotelEvents: async () => [],
     optimizeWalkingRoute: async (input) => ({
       ok: true,
       route: {
@@ -248,6 +250,7 @@ function advisorDeps(stay: GuestStay, eligibility: EligibilityDependencies): Gen
       const day: ItineraryDay = {
         id: "day-1",
         userId: input.userId,
+        principalId: null,
         hotelId: input.hotelId,
         hotelStayId: input.hotelStayId,
         dayNumber: input.dayNumber,
@@ -255,6 +258,7 @@ function advisorDeps(stay: GuestStay, eligibility: EligibilityDependencies): Gen
         routeGeoJson: input.routeGeoJson as ItineraryDay["routeGeoJson"],
         totalDurationSeconds: input.totalDurationSeconds,
         originalDurationSeconds: input.totalDurationSeconds,
+        availableMinutes: null,
         generatedAt: input.generatedAt,
         completedAt: input.completedAt,
       };
@@ -266,7 +270,7 @@ function advisorDeps(stay: GuestStay, eligibility: EligibilityDependencies): Gen
 
 describe("Advisor itinerary generation uses only eligible Places", () => {
   test("3. nearby non-partners in the database never become itinerary stops", async () => {
-    const result = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), DEPS));
+    const result = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), DEPS), { availableMinutes: 240 });
     assert.equal(result.ok, true);
     if (!result.ok) return;
     const stopPlaceIds = result.itinerary.stops.map((s) => s.placeId);
@@ -279,7 +283,7 @@ describe("Advisor itinerary generation uses only eligible Places", () => {
   });
 
   test("Hotel B's guest never gets Hotel A's partner in an itinerary", async () => {
-    const result = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_B, hotelBPlace), DEPS));
+    const result = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_B, hotelBPlace), DEPS), { availableMinutes: 240 });
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.itinerary.stops.some((s) => s.placeId === "partner-a"), false);
@@ -287,7 +291,7 @@ describe("Advisor itinerary generation uses only eligible Places", () => {
 
   test("8. with no eligible partners or facilities the Advisor returns no_eligible_experiences — no substitutes, no hotel stop", async () => {
     const bare: EligibilityDependencies = { ...DEPS, listPartnershipsForHotel: async () => [], listFacilitiesForHotel: async () => [] };
-    const result = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), bare));
+    const result = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), bare), { availableMinutes: 240 });
     assert.equal(result.ok, false);
     if (result.ok) return;
     assert.equal(result.reason, "no_eligible_experiences");
@@ -296,7 +300,7 @@ describe("Advisor itinerary generation uses only eligible Places", () => {
 
 
   test("an itinerary already generated keeps its stop snapshot when the partnership is later revoked", async () => {
-    const before = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), DEPS));
+    const before = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), DEPS), { availableMinutes: 240 });
     assert.equal(before.ok, true);
     if (!before.ok) return;
     const partnerStop = before.itinerary.stops.find((s) => s.placeId === "partner-a");
@@ -314,13 +318,13 @@ describe("Advisor itinerary generation uses only eligible Places", () => {
       listPartnershipsForHotel: async (id) =>
         ALL_PARTNERSHIPS.filter((row) => row.hotelId === id).map((row) => (row.placeId === "partner-a" ? { ...row, status: "revoked" as const } : row)),
     };
-    const after = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), revoked));
+    const after = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), revoked), { availableMinutes: 240 });
     assert.equal(after.ok, true);
     if (after.ok) assert.equal(after.itinerary.stops.some((s) => s.placeId === "partner-a"), false);
   });
 
   test("the hotel itself is never a stop; it is only the route origin and return point", async () => {
-    const result = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), DEPS));
+    const result = await generateItineraryForUser("guest", NOW, advisorDeps(makeStay(HOTEL_A, hotelAPlace), DEPS), { availableMinutes: 240 });
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.itinerary.stops.some((s) => s.placeId === hotelAPlace.id || s.isHotelStop), false);

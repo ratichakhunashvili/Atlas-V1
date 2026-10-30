@@ -45,6 +45,8 @@ Auth.js · Mapbox GL JS.
    | `NEXT_PUBLIC_MAPBOX_TOKEN` | Public Mapbox token for the browser map. Restrict it to your domains in the Mapbox dashboard. |
    | `MAPBOX_SERVER_TOKEN` | Server-side Mapbox token for routing. Keep it secret; it must never reach the browser. |
    | `ADMIN_EMAIL` | Only used by the admin seed script below. |
+   | `ATLAS_DEPLOYMENT_ENV` | `local`, `development`, `qa`, `staging` or `production`. Read on the server for the no-QR test entry and for the development-only routes (`/dev`, `/demo`, `/map-preview`). Missing or unknown values **fail closed**: no test entry, and development routes are hidden whenever a non-local value is declared. `NODE_ENV` alone cannot tell staging from production, so it is not used for this. |
+   | `ATLAS_TEST_ENTRY_ACCOUNTS` | Comma-separated emails allowed to open a seeded test stay without scanning a hotel QR (for example `guest@atlas.test` after `npm run db:seed:dev`). Only honoured when `ATLAS_DEPLOYMENT_ENV` is `local`/`development`/`qa`/`staging`, and only for accounts mapped to a fictional fixture hotel in code. Production always requires the hotel QR. |
 
 4. Apply the database migrations to your **development** database:
 
@@ -68,6 +70,62 @@ Auth.js · Mapbox GL JS.
    npm run db:seed:admin -- you@example.com
    ```
 
+   Or skip both steps and seed ready-made development accounts — see below.
+
+## Development fixtures
+
+```bash
+npm run db:seed:dev
+```
+
+Creates two accounts and a small, obviously fictional catalog so the guest flow can be
+used immediately. **These passwords are published here on purpose** — they belong to
+throwaway local accounts, so there is never a reason to invent a secret or paste one
+anywhere.
+
+That is also why the script **refuses to run unless `DATABASE_URL` points at a database
+on your own machine** (`localhost`, `127.0.0.1`, `::1`, or a `*.localhost` name), and
+refuses outright when `NODE_ENV=production`. An unparseable URL counts as not local.
+Seeding a hosted database would put an admin account with a public password into it, so
+overriding the check needs `npm run db:seed:dev -- --allow-remote` and is your call.
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@atlas.test` | `atlas-dev-admin` |
+| Guest | `guest@atlas.test` | `atlas-dev-guest` |
+
+The guest starts with an **active stay at Atlas Test Hotel A**, so no QR scan is needed
+to reach the map, the experiences list or the Advisor.
+
+The catalog is shaped to demonstrate the hotel-specific eligibility rule by hand:
+
+| Place | Relationship | Visible to |
+| --- | --- | --- |
+| `[Test] Riverside Sauna` | Hotel A's own facility | Hotel A guests |
+| `[Test] Partner Cafe` | Active partner of Hotel A | Hotel A guests |
+| `[Test] Old Town Walking Tour` | Active partner of **both** hotels (two separate rows) | Both |
+| `[Test] Unaffiliated Gallery` | None — published and verified, but partnered with nobody | **Nobody** |
+| `[Test] Suspended Wine Bar` | Suspended partnership with Hotel A | **Nobody** |
+
+If the gallery or the wine bar ever appears for either hotel, eligibility is broken.
+
+To check the cross-hotel rule by hand, move the guest to Hotel B. That needs a hotel-entry
+code, and no QR credential is seeded (see below), so issue one first:
+
+1. Sign in as the admin, open `/admin/hotels`, and pick **Atlas Test Hotel B**.
+2. Issue the hotel-entry QR. **The raw code is shown once** — copy it now.
+3. Sign in as the guest and open `/checkin/<code>`.
+4. Confirm the switch on the page that follows.
+
+Hotel B's guest should then see only `[Test] Old Town Walking Tour` — not Hotel A's sauna,
+and not Hotel A's cafe.
+
+Re-running the seed is safe: every row is keyed on a stable fixture id and conflicts are
+ignored, so nothing is overwritten — including the password of any real account.
+
+No QR credentials are seeded. Raw codes are revealed exactly once, when an admin issues
+them under `/admin`, and a seed script has no business printing one.
+
 ## Scripts
 
 | Command | What it does |
@@ -77,11 +135,12 @@ Auth.js · Mapbox GL JS.
 | `npm start` | Serve the production build. |
 | `npm run lint` | Run ESLint. |
 | `npm run typecheck` | Run the TypeScript compiler without emitting files. |
-| `npm test` | Run the unit tests (no database or network needed). |
+| `npm test` | Run the unit tests. No network and no database server: the `*.pglite.test.ts` files start an in-memory Postgres (PGlite) and apply the checked-in migrations to it. |
 | `npm run db:generate` | Generate a new migration from schema changes (offline). |
 | `npm run db:migrate` | Apply migrations to the database in `DATABASE_URL`. |
 | `npm run db:studio` | Open Drizzle Studio against `DATABASE_URL`. |
 | `npm run db:seed:admin -- <email>` | Grant the admin role to an existing user. |
+| `npm run db:seed:dev` | Seed local development fixtures (test accounts, hotels, partners). Refuses to run in production. |
 
 Before opening a pull request, run all of these and make sure they pass:
 

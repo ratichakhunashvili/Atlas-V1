@@ -4,7 +4,7 @@ import type { ItineraryDay, ItineraryStop, Place } from "@/db/schema";
 import { checkInStopWithGps, type CheckInDependencies } from "./check-in";
 import { checkInStopWithQr, type QrCheckInDependencies } from "./check-in-qr";
 import { contextFromEligible, type AvailabilityContext } from "./stop-availability";
-import { makeTestPlace } from "./test-utils";
+import { fakeRecordVerifiedVisit, makeTestPlace } from "./test-utils";
 
 // Fixed ids and times: nothing depends on counters, randomness or test order.
 const NOW = new Date("2026-06-15T12:00:00Z");
@@ -19,11 +19,14 @@ const P3 = "00000000-0000-4000-8000-0000000000d3";
 const S1 = "00000000-0000-4000-8000-0000000000e1";
 const S2 = "00000000-0000-4000-8000-0000000000e2";
 const S3 = "00000000-0000-4000-8000-0000000000e3";
-const HERE = { latitude: 41.7151, longitude: 44.8271 };
+// A fresh, precise reading taken at the test clock: these tests are about ownership,
+// day and eligibility, not about the quality of the GPS evidence.
+const HERE = { latitude: 41.7151, longitude: 44.8271, accuracyMeters: 10, capturedAtMs: NOW.getTime() };
 
 const day = (overrides: Partial<ItineraryDay> = {}): ItineraryDay => ({
   id: DAY,
   userId: USER,
+  principalId: null,
   hotelId: HOTEL,
   hotelStayId: STAY,
   dayNumber: 1,
@@ -31,6 +34,7 @@ const day = (overrides: Partial<ItineraryDay> = {}): ItineraryDay => ({
   routeGeoJson: null,
   totalDurationSeconds: 3600,
   originalDurationSeconds: 3600,
+  availableMinutes: null,
   generatedAt: new Date("2026-06-15T08:00:00Z"),
   completedAt: null,
   ...overrides,
@@ -47,6 +51,7 @@ const stop = (id: string, placeId: string | null, position: number, overrides: P
   latitude: HERE.latitude,
   longitude: HERE.longitude,
   imageUrl: null,
+  visitDurationMinutes: null,
   position,
   visitedAt: null,
   supersededAt: null,
@@ -79,17 +84,18 @@ function makeWorld(initialEligible: string[], initialStops: ItineraryStop[], day
   const active = () => state.stops.filter((s) => s.supersededAt === null).sort((a, b) => a.position - b.position);
 
   const gpsDeps: CheckInDependencies = {
+    recordVerifiedVisit: fakeRecordVerifiedVisit,
     // Like the real query: a superseded stop is NOT found.
     findItineraryStopWithDay: async (id) => {
       const found = state.stops.find((s) => s.id === id && s.supersededAt === null);
       return found ? { stop: found, day: state.day } : null;
     },
     listItineraryStops: async () => active(),
-    markStopVisited: async (id, _dayId, method) => {
+    markStopVisited: async (id, _dayId) => {
       const target = state.stops.find((s) => s.id === id);
       if (!target || target.visitedAt !== null || target.supersededAt !== null) return null;
       state.writes.push(id);
-      const visited = { ...target, visitedAt: NOW, checkInMethod: method };
+      const visited = { ...target, visitedAt: NOW };
       state.stops = state.stops.map((s) => (s.id === id ? visited : s));
       return { stop: visited, dayCompleted: active().every((s) => s.visitedAt !== null) };
     },
@@ -100,7 +106,8 @@ function makeWorld(initialEligible: string[], initialStops: ItineraryStop[], day
     [P1, P2, P3].map((id, i) => [id, makeTestPlace({ id, category: "restaurant", qrToken: `qr-${i + 1}` })])
   );
   const qrDeps: QrCheckInDependencies = {
-    findPlaceByQrToken: async (token) => [...places.values()].find((p) => p.qrToken === token) ?? null,
+    recordVerifiedVisit: fakeRecordVerifiedVisit,
+    findPlaceByCheckInCredential: async (token) => [...places.values()].find((p) => p.qrToken === token) ?? null,
     findActiveStayForUser: async (userId) =>
       userId === USER
         ? {
@@ -193,7 +200,7 @@ describe("GPS check-in revalidates eligibility server-side", () => {
 
   test("a stop that is out of range is refused for distance, not availability (existing rules still apply to available stops)", async () => {
     const w = makeWorld([P1, P2, P3], threeStops());
-    const result = await checkInStopWithGps({ userId: USER, stopId: S1, latitude: 41.9, longitude: 45.1 }, w.gpsDeps, NOW);
+    const result = await checkInStopWithGps({ userId: USER, stopId: S1, latitude: 41.9, longitude: 45.1, accuracyMeters: 10, capturedAtMs: NOW.getTime() }, w.gpsDeps, NOW);
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.reason, "out_of_range");
   });

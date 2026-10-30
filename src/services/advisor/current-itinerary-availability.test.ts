@@ -16,6 +16,7 @@ const [S1, S2, S3, S4] = [1, 2, 3, 4].map((n) => `00000000-0000-4000-8000-000000
 const day: ItineraryDay = {
   id: DAY,
   userId: USER,
+  principalId: null,
   hotelId: HOTEL,
   hotelStayId: STAY,
   dayNumber: 1,
@@ -23,6 +24,7 @@ const day: ItineraryDay = {
   routeGeoJson: null,
   totalDurationSeconds: 3600,
   originalDurationSeconds: 3600,
+  availableMinutes: null,
   generatedAt: new Date("2026-06-15T08:00:00Z"),
   completedAt: null,
 };
@@ -38,6 +40,7 @@ const stop = (id: string, placeId: string, position: number, overrides: Partial<
   latitude: 41.7,
   longitude: 44.8,
   imageUrl: null,
+  visitDurationMinutes: null,
   position,
   visitedAt: null,
   supersededAt: null,
@@ -61,6 +64,7 @@ function deps(stops: ItineraryStop[], eligible: string[], counters = { reads: 0,
     },
     // The real query returns the ACTIVE plan only; the fake mirrors that.
     listItineraryStops: async () => stops.filter((s) => s.supersededAt === null),
+    findPlaceIdsWithArTargets: async () => new Set<string>(),
     loadAvailabilityContext: async () => {
       counters.loads += 1;
       return contextFromEligible({ id: STAY, hotel: { id: HOTEL }, checkIn: new Date("2026-06-15T08:00:00Z"), checkOut: null }, eligible.map((id) => ({ place: { id } as never })), NOW);
@@ -92,13 +96,15 @@ describe("read model: unavailable pending stops", () => {
     assert.equal(result.currentStop, null);
     assert.equal(result.hasUnavailableStops, true);
     assert.deepEqual(result.blockedByUnavailableStop, { id: S1, name: "Stop 1" });
-    // The later (available) stop is just upcoming/on hold — never promoted to current.
+    // The later (available) stop is shown, but never promoted to current: only the server's first
+    // pending stop can be checked in, and an unavailable one blocks it.
     assert.equal(result.stops.find((s) => s.id === S2)?.status, "upcoming");
   });
 
   test("an EARLIER available stop remains current while a LATER stop is unavailable", async () => {
     const result = await ready([stop(S1, P1, 0), stop(S2, P2, 1), stop(S3, P3, 2)], [P1, P3]); // P2 unavailable
     assert.equal(result.currentStop?.id, S1);
+    // S2 comes after the current stop and is shown as unavailable, so the guest can see why Repair is offered.
     assert.equal(result.stops.find((s) => s.id === S2)?.status, "unavailable");
     assert.equal(result.hasUnavailableStops, true);
     assert.equal(result.blockedByUnavailableStop, null, "S1 is still checkable, so nothing is blocking yet");
@@ -116,7 +122,7 @@ describe("read model: unavailable pending stops", () => {
   test("superseded (history) stops are not part of the plan, and numbering stays contiguous", async () => {
     const superseded = stop(S2, P2, 1, { supersededAt: NOW, supersededReason: "removed_unavailable" });
     const result = await ready([stop(S1, P1, 0), superseded, stop(S3, P3, 2), stop(S4, P4, 3)], [P1, P3, P4]);
-    assert.deepEqual(result.stops.map((s) => s.id), [S1, S3, S4]);
+    assert.deepEqual(result.stops.map((s) => s.id), [S1, S3, S4], "the superseded row is history, not part of the plan");
     assert.deepEqual(result.stops.map((s) => s.position), [0, 1, 2], "positions are the index in the active plan");
   });
 

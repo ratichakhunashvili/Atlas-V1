@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  integer,
   doublePrecision,
   index,
   pgTable,
@@ -56,13 +57,36 @@ export const places = pgTable(
     imageUrl: text("image_url"),
     website: text("website"),
     phone: text("phone"),
-    // Nullable + unique: most Places never need one. Reserved for future
-    // Place-level QR flows (partner check-in, AR/achievement unlocking) —
-    // not used by hotel check-in, which reuses hotels.qrToken (unaffected).
+    /**
+     * LEGACY, no longer read or written. Place check-in credentials live in
+     * `qr_credentials` (purpose "place_check_in"), hashed. Kept, not dropped,
+     * so no existing row is destroyed; removable in a later migration.
+     */
     qrToken: text("qr_token").unique(),
     // Soft-archive instead of hard delete: an archived Place is never
     // eligible for recommendations, but its partnership/itinerary history
     // stays intact (hotel_partnerships.place_id is ON DELETE RESTRICT).
+    /**
+     * How long a guest should expect to spend here, in minutes, set by an admin.
+     * Null means "not configured": the Advisor then falls back to an explicit,
+     * deterministic per-category estimate (services/advisor/visit-duration.ts) and
+     * labels it as an estimate. Null never means zero — a stop that takes no time
+     * would let the Advisor promise a day that cannot be walked.
+     */
+    visitDurationMinutes: integer("visit_duration_minutes"),
+    /**
+     * A simple relative price tier: 1 = budget, 2 = moderate, 3 = luxury (matches
+     * user_preferences.budget). Set by an admin; null means UNKNOWN and is never
+     * read as cheap, affordable or free. It only ranks Places for a guest with a
+     * spending preference — it never makes a Place eligible or ineligible.
+     */
+    priceLevel: integer("price_level"),
+    /**
+     * Where the price tier came from, and when an admin last confirmed it. A price level only exists WITH its evidence
+     * (the CHECK below), so an unsourced guess can never reach a guest's ranking or screen.
+     */
+    priceLevelSource: text("price_level_source"),
+    priceLevelVerifiedAt: timestamp("price_level_verified_at", { withTimezone: true }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     // New and migrated Places start as draft / unverified so nothing becomes
     // recommendable by accident; an admin publishes and verifies explicitly.
@@ -83,6 +107,14 @@ export const places = pgTable(
     // views, but radius/bounding-box queries in the Map phase will need
     // PostGIS or a proper geo index instead.
     index("places_coordinates_idx").on(table.latitude, table.longitude),
+    // A visit takes a positive amount of time, and a stop lasting more than a day is
+    // a data-entry mistake rather than an experience.
+    check("places_visit_duration_check", sql`${table.visitDurationMinutes} is null or (${table.visitDurationMinutes} > 0 and ${table.visitDurationMinutes} <= 1440)`),
+    check("places_price_level_check", sql`${table.priceLevel} is null or ${table.priceLevel} between 1 and 3`),
+    check(
+      "places_price_level_evidence_check",
+      sql`${table.priceLevel} is null or (${table.priceLevelSource} is not null and ${table.priceLevelVerifiedAt} is not null)`
+    ),
     check("places_category_check", enumCheck(table.category, PLACE_CATEGORIES)),
     check("places_publication_status_check", enumCheck(table.publicationStatus, PUBLICATION_STATUSES)),
     check("places_verification_status_check", enumCheck(table.verificationStatus, VERIFICATION_STATUSES)),

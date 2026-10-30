@@ -1,8 +1,11 @@
 import { Alert } from "@/components/shared/alert";
 import { Card } from "@/components/shared/card";
-import { requireUser } from "@/lib/authorization";
-import { generateItineraryForUser } from "@/services/advisor/generate-itinerary";
+import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/authorization";
+import { getCurrentItineraryForUser } from "@/services/advisor/current-itinerary";
+import { shouldBlockDevelopmentOnlyPath } from "@/lib/development-route-policy";
 import { CheckInTestForm } from "./check-in-test-form";
+import { GenerateDevItineraryButton } from "../generate-itinerary-button";
 
 /**
  * DEV/TEST ONLY — exercises the real GPS check-in server action
@@ -13,9 +16,9 @@ import { CheckInTestForm } from "./check-in-test-form";
  * is exercisable from the browser, not just from a script.
  */
 export default async function AdvisorCheckInDevPage() {
-  const user = await requireUser();
-
-  const result = await generateItineraryForUser(user.id);
+  if (shouldBlockDevelopmentOnlyPath("/dev/advisor-check-in", process.env.NODE_ENV, process.env.ATLAS_DEPLOYMENT_ENV)) notFound();
+  const user = await requireAdmin();
+  const itinerary = await getCurrentItineraryForUser(user.id);
 
   return (
     <div className="space-y-6">
@@ -24,16 +27,33 @@ export default async function AdvisorCheckInDevPage() {
       </Alert>
 
       <h1 className="text-2xl font-semibold">Advisor GPS check-in (dev)</h1>
+      <GenerateDevItineraryButton />
 
-      {!result.ok ? (
+      {itinerary.status !== "ready" ? (
         <Card>
           <p className="text-sm text-slate-700">
-            Could not load/generate an itinerary: <span className="font-medium">{result.reason}</span> —{" "}
-            {result.message}
+            {itinerary.status === "no_active_stay"
+              ? "There is no active hotel stay for this account."
+              : `There is no itinerary yet for ${itinerary.hotelName}.`}
+            {" "}Opening this page never creates or changes an itinerary; use the button above to request one explicitly.
           </p>
         </Card>
       ) : (
-        <CheckInTestForm day={result.itinerary.day} stops={result.itinerary.stops} regenerated={result.regenerated} />
+        <CheckInTestForm
+          day={{
+            dayNumber: itinerary.dayNumber,
+            generatedAt: itinerary.generatedAt,
+            completedAt: itinerary.completedAt,
+          }}
+          stops={itinerary.stops.map(({ id, position, name, isHotelStop, checkInMethod, visitedAt }) => ({
+            id,
+            position,
+            name,
+            isHotelStop,
+            checkInMethod,
+            visitedAt,
+          }))}
+        />
       )}
     </div>
   );

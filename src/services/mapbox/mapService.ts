@@ -23,9 +23,11 @@ import { addMaskLayer } from "./layers/maskLayer";
 import { addBuildingsLayer, setBuildingsMinZoom } from "./layers/buildingsLayer";
 import { addPlacesLayer, setPlacesData } from "./layers/placesLayer";
 import { UserLocationLayer } from "./layers/userLocationLayer";
-import { addRouteLayer, setRouteData } from "./layers/routeLayer";
+import { addRouteLayer, setLegData, setRouteData } from "./layers/routeLayer";
 import { addItineraryStopsLayer, setItineraryStopsData, type ItineraryStopFeatureCollection } from "./layers/itineraryStopsLayer";
 import type { RouteGeometry } from "@/services/routing";
+import type { GuestPlaceModel } from "@/services/map3d/guest-models";
+import type { PlaceModelsLayer } from "@/components/map3d/models-layer";
 
 const EMPTY_PLACES: PlaceFeatureCollection = { type: "FeatureCollection", features: [] };
 const EMPTY_ITINERARY_STOPS: ItineraryStopFeatureCollection = { type: "FeatureCollection", features: [] };
@@ -63,6 +65,11 @@ export class MapService {
   private lastPlacesCollection: PlaceFeatureCollection = EMPTY_PLACES;
   /** Same re-apply-after-style-change need as Places, for the Advisor's persisted route line and itinerary-stop markers. */
   private lastRouteGeometry: RouteGeometry | null = null;
+  private lastLegGeometry: RouteGeometry | null = null;
+  /** The eligible 3D models and the one layer drawing them. The layer is re-created after a style change (setStyle() removes it). */
+  private lastModels: GuestPlaceModel[] = [];
+  private modelsLayer: PlaceModelsLayer | null = null;
+  private modelsAttachToken = 0;
   private lastItineraryStops: ItineraryStopFeatureCollection = EMPTY_ITINERARY_STOPS;
 
   private framing: FramingTarget;
@@ -258,9 +265,11 @@ export class MapService {
     setPlacesData(map, this.lastPlacesCollection);
     addRouteLayer(map, this.currentTheme);
     setRouteData(map, this.lastRouteGeometry);
+    setLegData(map, this.lastLegGeometry);
     addItineraryStopsLayer(map);
     setItineraryStopsData(map, this.lastItineraryStops);
     this.userLocationLayer?.reapplyAfterStyleChange(this.currentTheme);
+    this.attachModelsLayer();
   }
 
   /** "3d" when the map is meaningfully tilted, otherwise flat "2d". */
@@ -321,6 +330,98 @@ export class MapService {
     if (this.map) setRouteData(this.map, geometry);
   }
 
+  /**
+   * Puts the camera on a point immediately, and marks it as deliberate so a later resize does not re-fit Georgia over it.
+   * Used by the admin placement editor, which has to open on the Place it is editing.
+   */
+  frameOn(center: Coordinates, zoom: number, pitch = 0): void {
+    const map = this.getMap();
+    this.userMoved = true;
+    map.jumpTo({ center: [center.lng, center.lat], zoom, pitch, bearing: 0 });
+  }
+
+  /** The guest's walking leg to their current stop (null clears it). Same store-then-push pattern, for the same reason. */
+  updateLeg(geometry: RouteGeometry | null): void {
+    this.lastLegGeometry = geometry;
+    if (this.map) setLegData(this.map, geometry);
+  }
+
+  /**
+   * Frames a generated route once. Called when a NEW plan arrives, never on every re-render, so the map never fights
+   * a guest who has panned. The extra bottom padding keeps the route clear of the itinerary sheet. A no-op until the
+   * container has a real size; reduced-motion guests get a jump instead of an animation.
+   */
+  fitToRoute(geometry: RouteGeometry, extraPoints: ReadonlyArray<[number, number]> = []): boolean {
+    const map = this.map;
+    if (!map) return false;
+    const { clientWidth, clientHeight } = map.getContainer();
+    if (clientWidth < 80 || clientHeight < 80) return false;
+
+    const points = [...geometry.geometry.coordinates, ...extraPoints] as Array<[number, number]>;
+    if (points.length < 2) return false;
+    const bounds = points.reduce(
+      (box, [lng, lat]) => box.extend([lng, lat]),
+      new mapboxgl.LngLatBounds(points[0], points[0])
+    );
+
+    const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const bottom = Math.min(Math.round(clientHeight * 0.45), 360);
+    this.userMoved = true; // a plan framing is a deliberate camera, so a later resize must not re-fit Georgia over it
+    map.fitBounds(bounds, {
+      padding: { top: 72, left: 36, right: 36, bottom },
+      maxZoom: 16.5,
+      duration: reduceMotion ? 0 : 800,
+      essential: true,
+    });
+    return true;
+  }
+
+  /**
+   * Sets the eligible 3D models (already filtered and lock-resolved by the server). Three.js is imported only when there is
+   * at least one model to draw, so a hotel with none never downloads it. Re-applied after every style change.
+   */
+  updateModels(models: GuestPlaceModel[]): void {
+    this.lastModels = models;
+    if (!this.map) return;
+    // The layer diffs what it already has, so a re-render with the same models costs nothing and reloads nothing.
+    if (this.modelsLayer && models.length > 0) {
+      void this.modelsLayer.setModels(models);
+      return;
+    }
+    this.attachModelsLayer();
+  }
+
+  private attachModelsLayer(): void {
+    const map = this.map;
+    if (!map) return;
+
+    // A style change has already removed the old layer from the map; drop our reference so it is never reused (it is disposed).
+    if (this.modelsLayer && map.getLayer(this.modelsLayer.id)) map.removeLayer(this.modelsLayer.id);
+    this.modelsLayer = null;
+
+    if (this.lastModels.length === 0) return;
+
+    const token = ++this.modelsAttachToken;
+    const enabled = this.performance.profile !== "low";
+    void import("@/components/map3d/models-layer").then(({ PlaceModelsLayer }) => {
+      // Superseded by a newer call, or the map was torn down while the chunk loaded.
+      if (token !== this.modelsAttachToken || !this.map) return;
+      const layer = new PlaceModelsLayer({ enabled });
+      this.map.addLayer(layer);
+      this.modelsLayer = layer;
+      void layer.setModels(this.lastModels);
+    });
+  }
+
+  /** The linked Place of the 3D model under a screen point, resolved by ray intersection — or null. Never "the nearest marker". */
+  pickModel(point: { x: number; y: number }): string | null {
+    const map = this.map;
+    if (!map || !this.modelsLayer) return null;
+    const canvas = map.getCanvas();
+    const ratio = canvas.clientWidth > 0 ? canvas.width / canvas.clientWidth : 1;
+    return this.modelsLayer.pick({ x: point.x * ratio, y: point.y * ratio }, { width: canvas.width, height: canvas.height });
+  }
+
   /** The itinerary's own stop markers (completed/current/upcoming), a separate layer from the general Places circles — see itineraryStopsLayer.ts. */
   updateItineraryStops(collection: ItineraryStopFeatureCollection): void {
     this.lastItineraryStops = collection;
@@ -343,6 +444,7 @@ export class MapService {
   }
 
   destroy(): void {
+    this.modelsAttachToken += 1;
     this.anchorMarker?.remove();
     this.anchorMarker = null;
     this.userLocationLayer?.remove();

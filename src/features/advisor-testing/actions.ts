@@ -13,6 +13,8 @@ import {
 import { generateItineraryForUser, type GenerateItineraryResult } from "@/services/advisor/generate-itinerary";
 import { checkInStopWithGps, type CheckInResult } from "@/services/advisor/check-in";
 import { checkInStopWithQr, type QrCheckInResult } from "@/services/advisor/check-in-qr";
+import { findActiveQrCredentialForPlace, issueQrCredential } from "@/db/queries/qr-credentials";
+import { generateRawQrToken, hashQrToken } from "@/services/qr";
 import { setUserRole } from "@/db/queries/users";
 import { scenarioTypeSchema, testUserRoleSchema, historyOutcomeSchema } from "./schema";
 
@@ -84,7 +86,17 @@ export async function testGpsCheckInAction(
   const scenario = await findAdvisorTestScenario(tag);
   if (!scenario) return SCENARIO_NOT_FOUND;
 
-  return checkInStopWithGps({ userId: scenario.user.id, stopId, latitude, longitude });
+  // The scenario tool supplies evidence that passes the server's limits (a precise
+  // fix, taken now) so that it exercises the ordinary path. It does not bypass the
+  // rules: the same validation runs, against the same server clock.
+  return checkInStopWithGps({
+    userId: scenario.user.id,
+    stopId,
+    latitude,
+    longitude,
+    accuracyMeters: 10,
+    capturedAtMs: Date.now(),
+  });
 }
 
 export async function testQrCheckInAction(tag: string, qrToken: string): Promise<QrCheckInResult | ScenarioNotFound> {
@@ -93,6 +105,52 @@ export async function testQrCheckInAction(tag: string, qrToken: string): Promise
   if (!scenario) return SCENARIO_NOT_FOUND;
 
   return checkInStopWithQr({ userId: scenario.user.id, qrToken });
+}
+
+/**
+ * Runs the scenario's real Place QR check-in without any secret reaching the browser.
+ *
+ * Stored credentials are hashes, so no raw token can be recovered to replay here.
+ * Instead this ROTATES the Place's credential — issuing a fresh one, which revokes
+ * the previous — and uses that value in-process for exactly one scan. The raw token
+ * never leaves this function, and the path exercised is the real one: hash, lookup,
+ * purpose, revocation and expiry checks included.
+ */
+export async function testScenarioQrCheckInAction(
+  tag: string,
+  placeId: string
+): Promise<QrCheckInResult | ScenarioNotFound> {
+  const admin = await requireAdmin();
+  const scenario = await findAdvisorTestScenario(tag);
+  if (!scenario) return SCENARIO_NOT_FOUND;
+
+  const place = scenario.places.find((candidate) => candidate.id === placeId);
+  if (!place) {
+    return {
+      ok: false,
+      reason: "invalid_qr",
+      message: "That Place is not part of this test scenario.",
+    };
+  }
+
+  const existing = await findActiveQrCredentialForPlace(place.id);
+  if (!existing) {
+    return {
+      ok: false,
+      reason: "invalid_qr",
+      message: "That Place does not have a QR code in this test scenario.",
+    };
+  }
+
+  const rawToken = generateRawQrToken();
+  await issueQrCredential({
+    purpose: "place_check_in",
+    placeId: place.id,
+    tokenHash: hashQrToken(rawToken),
+    createdByUserId: admin.id,
+  });
+
+  return checkInStopWithQr({ userId: scenario.user.id, qrToken: rawToken });
 }
 
 export async function seedPreviousDayHistoryAction(tag: string, outcome: string): Promise<void> {

@@ -11,6 +11,7 @@ import { locationService, type LocationState } from "@/services/location";
 import type { PlaceMapPoint } from "@/db/queries/places";
 import type { RouteGeometry } from "@/services/routing";
 import type { AdvisorStopView } from "@/services/advisor/current-itinerary";
+import type { GuestPlaceModel } from "@/services/map3d/guest-models";
 import { addFramingControl, addLocateControl, addThemeToggleControl, addViewModeControl } from "./controls";
 import { PlaceDetailsPanel } from "./place-details-panel";
 import "./atlas-map.css";
@@ -51,6 +52,9 @@ export function AtlasMap({
   route,
   itineraryStops,
   onItineraryStopSelect,
+  directionsLeg,
+  routeFitKey,
+  models,
   focusBounds,
   focusLabel = "Trip",
   anchorMarker,
@@ -70,6 +74,12 @@ export function AtlasMap({
   isolatedPreview?: boolean;
   /** The Advisor's persisted itinerary route — undefined/null both mean "nothing to show," never a second routing implementation; this is purely the already-computed geometry being rendered. */
   route?: RouteGeometry | null;
+  /** The 3D models this guest may see (eligible for their hotel, lock state resolved by the server). Display only. */
+  models?: GuestPlaceModel[];
+  /** The walking leg to the current stop, drawn over the full route. Null/undefined clears it. */
+  directionsLeg?: RouteGeometry | null;
+  /** Changes when a NEW plan is shown (e.g. the day id + generation time). The camera frames the route once per key, never on an ordinary re-render. */
+  routeFitKey?: string | null;
   /** The Advisor's own itinerary stops — rendered on a layer separate from `places`, with status-based styling (current-itinerary.ts decides status; this component only draws it). */
   itineraryStops?: AdvisorStopView[];
   /** Tapping a stop marker only focuses it in the Advisor sheet (point 15) — it can never make that stop check-in eligible, since completion stays entirely server-derived. */
@@ -80,12 +90,15 @@ export function AtlasMap({
   const placesRef = useRef(places);
   const routeRef = useRef(route ?? null);
   const itineraryStopsRef = useRef(itineraryStops ?? []);
+  const modelsRef = useRef<GuestPlaceModel[]>(models ?? []);
   const onItineraryStopSelectRef = useRef(onItineraryStopSelect);
   const selectedIdRef = useRef<string | null>(null);
   const hasFetchedNearbyRef = useRef(false);
   const focusBoundsRef = useRef(focusBounds ?? null);
   const anchorMarkerRef = useRef(anchorMarker ?? null);
   const isolatedPreviewRef = useRef(isolatedPreview);
+  // Bridges the mount-once effect below to tryFitRoute, which is declared after it.
+  const tryFitRouteRef = useRef<() => void>(() => {});
 
   const [selectedPlace, setSelectedPlace] = useState<PlaceMapPoint | null>(null);
   const [locationState, setLocationState] = useState<LocationState>(locationService.getState());
@@ -121,8 +134,17 @@ export function AtlasMap({
         service.setAnchorMarker(anchorMarkerRef.current);
         service.updateRoute(routeRef.current);
         service.updateItineraryStops(toItineraryStopFeatureCollection(itineraryStopsRef.current));
+        tryFitRouteRef.current();
+        service.updateModels(modelsRef.current);
 
         cleanups.push(attachPlaceSelection(map, selectPlace));
+        // Registered AFTER place selection so a model tap is handled last and wins: it opens the model's LINKED Place.
+        const handleModelClick = (event: { point: { x: number; y: number } }) => {
+          const placeId = service.pickModel(event.point);
+          if (placeId) selectPlace(placeId);
+        };
+        map.on("click", handleModelClick);
+        cleanups.push(() => map.off("click", handleModelClick));
         cleanups.push(attachItineraryStopSelection(map, (stopId) => onItineraryStopSelectRef.current?.(stopId)));
         cleanups.push(
           mapThemeService.onChange((theme) => {
@@ -236,6 +258,40 @@ export function AtlasMap({
   }, [route]);
 
   useEffect(() => {
+    modelsRef.current = models ?? [];
+    mapServiceRef.current?.updateModels(models ?? []);
+  }, [models]);
+
+  useEffect(() => {
+    mapServiceRef.current?.updateLeg(directionsLeg ?? null);
+  }, [directionsLeg]);
+
+  // Frame a newly shown route exactly once per key. Held in refs so a re-render with the same plan never moves the camera.
+  const fittedKeyRef = useRef<string | null>(null);
+  const routeFitKeyRef = useRef(routeFitKey ?? null);
+  const tryFitRoute = useCallback(() => {
+    const service = mapServiceRef.current;
+    const key = routeFitKeyRef.current;
+    const geometry = routeRef.current;
+    if (!service || !geometry || !key || fittedKeyRef.current === key) return;
+    const stopPoints = itineraryStopsRef.current.map((stop): [number, number] => [stop.longitude, stop.latitude]);
+    // Only remembered once the camera actually moved: before the map has loaded this is a no-op and is retried.
+    if (service.fitToRoute(geometry, stopPoints)) fittedKeyRef.current = key;
+  }, []);
+  useEffect(() => {
+    tryFitRouteRef.current = tryFitRoute;
+  }, [tryFitRoute]);
+  useEffect(() => {
+    routeFitKeyRef.current = routeFitKey ?? null;
+    tryFitRoute();
+  }, [route, routeFitKey, tryFitRoute]);
+
+  useEffect(() => {
+    anchorMarkerRef.current = anchorMarker ?? null;
+    mapServiceRef.current?.setAnchorMarker(anchorMarker ?? null);
+  }, [anchorMarker]);
+
+  useEffect(() => {
     itineraryStopsRef.current = itineraryStops ?? [];
     mapServiceRef.current?.updateItineraryStops(toItineraryStopFeatureCollection(itineraryStops ?? []));
   }, [itineraryStops]);
@@ -255,7 +311,14 @@ export function AtlasMap({
           {loadError}
         </div>
       )}
-      <PlaceDetailsPanel place={selectedPlace} userCoords={locationState.coords} onClose={() => selectPlace(null)} />
+      <PlaceDetailsPanel
+        place={selectedPlace}
+        userCoords={locationState.coords}
+        modelDisplacementMeters={
+          selectedPlace ? (models ?? []).find((model) => model.placeId === selectedPlace.id)?.displacementMeters ?? 0 : 0
+        }
+        onClose={() => selectPlace(null)}
+      />
     </div>
   );
 }

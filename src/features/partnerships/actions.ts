@@ -3,11 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/authorization";
+import { recordAdminAudit } from "@/db/queries/admin-audit";
 import { createPendingPartnership, findPartnershipById, transitionPartnership } from "@/db/queries/hotel-partnerships";
 import { findFacilityByPlaceId } from "@/db/queries/hotel-facilities";
 import { findHotelById } from "@/db/queries/hotels";
 import { findPlaceById } from "@/db/queries/places";
-import type { PartnershipStatus } from "@/db/schema";
+import type { AdminAuditAction, PartnershipStatus } from "@/db/schema";
 import { addPartnershipSchema, confirmPartnershipSchema, partnershipIdSchema } from "./schema";
 import { statusesThatCanTransitionTo, validateConfirmationWindow, validatePartnerCandidate } from "./rules";
 
@@ -30,7 +31,7 @@ function finish(hotelId: string, outcome: { error: string } | { ok: string }): n
 
 /** Propose a partner. It always starts `pending_review` — it is NOT eligible until an admin confirms it. */
 export async function addPartnershipAction(hotelId: string, formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const hotelIdParsed = partnershipIdSchema.safeParse(hotelId);
   if (!hotelIdParsed.success) redirect("/admin/hotels");
@@ -53,6 +54,15 @@ export async function addPartnershipAction(hotelId: string, formData: FormData) 
 
   const created = await createPendingPartnership({ hotelId: hotel.id, placeId: place.id });
   if (!created) finish(hotel.id, { error: "This place already has a partnership record with this hotel." });
+
+  await recordAdminAudit({
+    actorUserId: admin.id,
+    action: "partnership.proposed",
+    targetType: "hotel_partnership",
+    targetId: created.id,
+    hotelId: hotel.id,
+    after: { status: "pending_review", placeId: place.id },
+  });
 
   finish(hotel.id, { ok: "Partner added as pending review. It is not visible to guests until you confirm it." });
 }
@@ -95,8 +105,31 @@ export async function confirmPartnershipAction(partnershipId: string, formData: 
   });
   if (!updated) finish(existing.hotelId, { error: "This partnership can't be confirmed from its current status." });
 
+  await recordAdminAudit({
+    actorUserId: admin.id,
+    action: "partnership.confirmed",
+    targetType: "hotel_partnership",
+    targetId: existing.id,
+    hotelId: existing.hotelId,
+    before: { status: existing.status },
+    after: {
+      status: "active",
+      startsAt: parsed.data.startsAt?.toISOString() ?? null,
+      endsAt: parsed.data.endsAt?.toISOString() ?? null,
+      priority: parsed.data.priority ?? null,
+    },
+  });
+
   finish(existing.hotelId, { ok: "Partnership confirmed. It is now eligible for this hotel's guests." });
 }
+
+/** Which audited action each transition target maps to. "active" is only ever reached through confirm, which audits itself. */
+const AUDIT_FOR_TARGET = {
+  suspended: "partnership.suspended",
+  revoked: "partnership.revoked",
+  pending_review: "partnership.reopened",
+  active: "partnership.confirmed",
+} as const satisfies Record<PartnershipStatus, AdminAuditAction>;
 
 async function simpleTransition(
   partnershipId: string,
@@ -104,7 +137,7 @@ async function simpleTransition(
   patch: Parameters<typeof transitionPartnership>[2],
   okMessage: string
 ) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const id = partnershipIdSchema.safeParse(partnershipId);
   if (!id.success) redirect("/admin/hotels");
@@ -113,6 +146,16 @@ async function simpleTransition(
 
   const updated = await transitionPartnership(existing.id, statusesThatCanTransitionTo(to), { status: to, ...patch });
   if (!updated) finish(existing.hotelId, { error: `This partnership can't move to "${to}" from its current status.` });
+
+  await recordAdminAudit({
+    actorUserId: admin.id,
+    action: AUDIT_FOR_TARGET[to],
+    targetType: "hotel_partnership",
+    targetId: existing.id,
+    hotelId: existing.hotelId,
+    before: { status: existing.status },
+    after: { status: to },
+  });
 
   finish(existing.hotelId, { ok: okMessage });
 }

@@ -14,7 +14,11 @@ import { itineraryDays } from "./itinerary-days";
 import { PLACE_CATEGORIES, places, type PlaceCategory } from "./places";
 import { enumCheck } from "./sql-helpers";
 
-export const CHECK_IN_METHODS = ["gps", "qr", "auto"] as const;
+/*
+ * How a stop may be completed. "ar" joined in 0012: a camera match PLUS the same
+ * GPS proximity every other method needs. "auto" is legacy and no writer produces it.
+ */
+export const CHECK_IN_METHODS = ["gps", "qr", "ar", "auto"] as const;
 export type CheckInMethod = (typeof CHECK_IN_METHODS)[number];
 
 // Why a PENDING stop was taken out of the active plan. Superseded rows are kept
@@ -51,6 +55,12 @@ export const itineraryStops = pgTable(
     latitude: doublePrecision("latitude").notNull(),
     longitude: doublePrecision("longitude").notNull(),
     imageUrl: text("image_url"),
+    /**
+     * How long this stop was expected to take, snapshotted like name and category so the saved
+     * plan stays readable after the Place is edited. Null only on stops generated before the
+     * Advisor budgeted time — never treated as zero (see services/advisor/visit-duration.ts).
+     */
+    visitDurationMinutes: integer("visit_duration_minutes"),
     position: integer("position").notNull(),
     visitedAt: timestamp("visited_at", { withTimezone: true }),
     // Set when a PENDING stop leaves the active plan. The row is never deleted. A visited

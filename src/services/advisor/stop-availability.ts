@@ -1,6 +1,6 @@
 import type { ItineraryDay, ItineraryStop } from "@/db/schema";
 import type { EligiblePlace } from "@/services/eligibility/rules";
-import { calculateDayNumber } from "./stay-day";
+import { calculateDayNumber, stayEndFor } from "./stay-day";
 
 /**
  * THE one place that decides whether a PENDING itinerary stop is still
@@ -38,6 +38,8 @@ export type AvailabilityContext = {
   stay: { id: string; hotelId: string; dayNumber: number } | null;
   /** Ids of the Places eligible for that stay's hotel right now. Empty when there is no valid stay. */
   eligiblePlaceIds: ReadonlySet<string>;
+  /** Of those, the ids that are the hotel's OWN facilities (not external partners). Used only to classify missions; may be absent in older contexts. */
+  facilityPlaceIds?: ReadonlySet<string>;
 };
 
 /** Loads the guest's current availability context FRESH. Called again immediately before a check-in write. */
@@ -47,18 +49,19 @@ type StayLike = { id: string; hotel: { id: string }; checkIn: Date; checkOut: Da
 
 export function contextFromEligible(
   stay: StayLike | null,
-  eligible: readonly Pick<EligiblePlace, "place">[],
+  eligible: readonly (Pick<EligiblePlace, "place"> & Partial<Pick<EligiblePlace, "source">>)[],
   now: Date
 ): AvailabilityContext {
   const none: AvailabilityContext = { stay: null, eligiblePlaceIds: new Set() };
   if (!stay) return none;
   // The current day comes from the stay's own dates and the SERVER clock. A stay that has not started or has
   // already ended has no current day, so it is not a valid stay for acting on a route.
-  const current = calculateDayNumber(stay.checkIn, stay.checkOut, now);
+  const current = calculateDayNumber(stay.checkIn, stayEndFor(stay), now);
   if (!current.ok) return none;
   return {
     stay: { id: stay.id, hotelId: stay.hotel.id, dayNumber: current.dayNumber },
     eligiblePlaceIds: new Set(eligible.map((entry) => entry.place.id)),
+    facilityPlaceIds: new Set(eligible.filter((entry) => entry.source === "facility").map((entry) => entry.place.id)),
   };
 }
 

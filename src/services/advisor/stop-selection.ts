@@ -1,5 +1,6 @@
 import { PLACE_CATEGORIES, type PlaceCategory, type UserPreferences } from "@/db/schema";
 import type { AdvisorCandidate } from "./candidates";
+import type { RankingPreferences } from "./preference-ranking";
 import { rankCandidates, type UsageHistory } from "./scoring";
 
 /**
@@ -33,14 +34,16 @@ export function chooseStops(input: {
   usageHistory: UsageHistory;
   targetCount: number;
   excludePlaceIds?: ReadonlySet<string>;
+  preferences?: RankingPreferences;
 }): AdvisorCandidate[] {
   const exclude = input.excludePlaceIds ?? new Set<string>();
   const pool = input.candidates.filter((candidate) => !exclude.has(candidate.place.id));
 
-  const rankedAll = rankCandidates(pool, input.usageHistory);
+  const rankedAll = rankCandidates(pool, input.usageHistory, input.preferences);
   const rankedPartners = rankCandidates(
     pool.filter((candidate) => candidate.isPartner),
-    input.usageHistory
+    input.usageHistory,
+    input.preferences
   );
 
   const chosen: AdvisorCandidate[] = [];

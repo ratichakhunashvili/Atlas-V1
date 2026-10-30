@@ -6,8 +6,10 @@ import { getWalkingRouteInOrder } from "@/services/routing";
 import { buildCandidates, type AdvisorCandidate } from "./candidates";
 import type { ActiveHotelStay } from "./generate-itinerary";
 import type { UsageHistory } from "./scoring";
-import { calculateDayNumber } from "./stay-day";
+import { calculateDayNumber, stayEndFor } from "./stay-day";
 import { contextFromEligible, evaluatePendingStops, type StopAvailability } from "./stop-availability";
+import { resolveVisitDuration, savedStopVisitMinutes } from "./visit-duration";
+import { fitsInBudget, remainingBudgetMinutes } from "./time-budget";
 import { chooseStops, resolveCandidateCategories } from "./stop-selection";
 
 /**
@@ -95,7 +97,7 @@ async function resolvePlan(
   const stay = await d.findActiveStayForUser(userId);
   if (!stay) return { ok: false, reason: "no_active_stay", message: "You need an active hotel stay." };
 
-  const dayNumber = calculateDayNumber(stay.checkIn, stay.checkOut, now);
+  const dayNumber = calculateDayNumber(stay.checkIn, stayEndFor(stay), now);
   if (!dayNumber.ok) return { ok: false, reason: "outside_stay_period", message: dayNumber.message };
 
   const day = await d.findItineraryDay(userId, stay.hotel.id, dayNumber.dayNumber);
@@ -131,13 +133,13 @@ export async function replaceUnavailableStopsForUser(
 
   const hotelLocation: LatLng = { lat: stay.place.latitude, lng: stay.place.longitude };
   const candidates: AdvisorCandidate[] = categories
-    ? buildCandidates({ hotelLocation, hotelPlaceId: stay.place.id, eligiblePlaces: eligible, selectedCategories: categories })
+    ? buildCandidates({ hotelLocation, hotelPlaceId: stay.place.id, eligiblePlaces: eligible, selectedCategories: categories, preferredMaxDistanceMeters: preferences?.maxDistanceMeters ?? null })
     : [];
 
   // Never re-pick a place already in today's plan (completed or pending), nor one of the unavailable stops.
   const exclude = new Set(stops.flatMap((stop) => (stop.placeId ? [stop.placeId] : [])));
   const usageHistory: UsageHistory = await d.getStopUsageHistory(userId, stay.hotel.id);
-  const chosen = chooseStops({ candidates, usageHistory, targetCount: unavailable.length, excludePlaceIds: exclude });
+  const chosen = chooseStops({ candidates, usageHistory, targetCount: unavailable.length, excludePlaceIds: exclude, preferences: { budget: preferences?.budget ?? null } });
 
   if (chosen.length === 0) {
     // Nothing is changed. The guest is offered an explicit removal of the unavailable stop instead.
@@ -151,7 +153,7 @@ export async function replaceUnavailableStopsForUser(
 
   // A replacement takes the vacated slot of the stop it replaces, so stop order is preserved. Fewer
   // replacements than unavailable stops means the plan simply gets shorter (never a repeat or substitute).
-  const replacements = chosen.map((candidate, index) => ({
+  const allReplacements = chosen.map((candidate, index) => ({
     position: unavailable[index].position,
     stop: {
       placeId: candidate.place.id,
@@ -162,24 +164,94 @@ export async function replaceUnavailableStopsForUser(
       latitude: candidate.place.latitude,
       longitude: candidate.place.longitude,
       imageUrl: candidate.place.imageUrl,
+      // A replacement is budgeted like any other stop (services/advisor/visit-duration.ts).
+      visitDurationMinutes: resolveVisitDuration(candidate.place).minutes,
       visitedAt: null,
     },
   }));
 
   const unavailableIds = new Set(unavailable.map((stop) => stop.id));
-  const pendingAfter = [
-    ...stops.filter((stop) => stop.visitedAt === null && !unavailableIds.has(stop.id)).map((stop) => ({ position: stop.position, lat: stop.latitude, lng: stop.longitude })),
-    ...replacements.map((r) => ({ position: r.position, lat: r.stop.latitude, lng: r.stop.longitude })),
-  ].sort((a, b) => a.position - b.position);
+  const retained = stops.filter((stop) => stop.visitedAt === null && !unavailableIds.has(stop.id));
 
-  // Fixed-order route (NOT the optimizer, which could reorder the retained stops).
-  const route = await d.getWalkingRouteInOrder({
-    origin: hotelLocation,
-    stops: pendingAfter.map(({ lat, lng }) => ({ lat, lng })),
-    returnToOrigin: true,
+  /*
+   * A repair must not quietly hand the guest a longer day than the one they asked
+   * for. The plan was fitted to `day.availableMinutes` when it was generated, so the
+   * repaired remainder is held to that same window: real routed walking time plus
+   * the time at every pending stop.
+   *
+   * If the best replacements overrun it, fewer are offered — dropping the
+   * lowest-ranked first — until the day fits again. Dropping to none means there is
+   * no replacement this guest has time for, which is reported exactly like having no
+   * eligible replacement at all: the explicit removal action remains open.
+   *
+   * The budget is what is LEFT of that window, measured from when the plan was
+   * generated: a guest ninety minutes into a two-hour afternoon has thirty minutes
+   * to spend, not two hours. `day.availableMinutes` keeps recording the original
+   * window — a repair does not get to revise what the guest asked for.
+   *
+   * A plan generated before windows existed (`availableMinutes === null`) is left
+   * alone rather than retro-fitted to a budget it was never built for.
+   */
+  const budgetMinutes = remainingBudgetMinutes({
+    availableMinutes: day.availableMinutes,
+    generatedAt: day.generatedAt,
+    now,
   });
-  if (!route.ok) {
-    return { ok: false, reason: "routing_failed", message: "We couldn't calculate walking directions right now, so your plan was not changed. Please try again." };
+
+  let replacements = allReplacements;
+  let route: Awaited<ReturnType<typeof d.getWalkingRouteInOrder>> | null = null;
+
+  while (true) {
+    const pendingAfter = [
+      ...retained.map((stop) => ({
+        position: stop.position,
+        lat: stop.latitude,
+        lng: stop.longitude,
+        visitMinutes: savedStopVisitMinutes(stop).minutes,
+      })),
+      ...replacements.map((r) => ({
+        position: r.position,
+        lat: r.stop.latitude,
+        lng: r.stop.longitude,
+        visitMinutes: r.stop.visitDurationMinutes,
+      })),
+    ].sort((a, b) => a.position - b.position);
+
+    // Fixed-order route (NOT the optimizer, which could reorder the retained stops).
+    const attempt = await d.getWalkingRouteInOrder({
+      origin: hotelLocation,
+      stops: pendingAfter.map(({ lat, lng }) => ({ lat, lng })),
+      returnToOrigin: true,
+    });
+    if (!attempt.ok) {
+      return { ok: false, reason: "routing_failed", message: "We couldn't calculate walking directions right now, so your plan was not changed. Please try again." };
+    }
+
+    const withinWindow =
+      budgetMinutes === null ||
+      fitsInBudget({
+        routeSeconds: attempt.route.durationSeconds,
+        visitMinutes: pendingAfter.reduce((total, stop) => total + stop.visitMinutes, 0),
+        budgetMinutes,
+      });
+
+    if (withinWindow) {
+      route = attempt;
+      break;
+    }
+
+    if (replacements.length === 0) {
+      // Even the stops the guest is keeping no longer fit the window. Changing nothing
+      // is the honest outcome: the plan is untouched and removal is still offered.
+      return {
+        ok: false,
+        reason: "no_replacement_available",
+        message: "No other approved experience fits the time you have left. You can remove the unavailable stop to continue.",
+        unavailableStops,
+      };
+    }
+
+    replacements = replacements.slice(0, -1);
   }
 
   const persisted = await d.persistStopReplacement({
@@ -206,7 +278,14 @@ export async function replaceUnavailableStopsForUser(
 }
 
 export type RemoveUnavailableStopResult =
-  | { ok: true; day: ItineraryDay; stops: ItineraryStop[]; dayCompleted: boolean }
+  | {
+      ok: true;
+      day: ItineraryDay;
+      stops: ItineraryStop[];
+      dayCompleted: boolean;
+      /** What is LEFT of the guest's window, from generatedAt. Null when the plan never had one. */
+      remainingBudgetMinutes: number | null;
+    }
   | { ok: false; reason: PlanRepairFailureReason | "not_found" | "not_pending" | "stop_still_available" | "not_removable"; message: string };
 
 export async function removeUnavailableStopForUser(
@@ -252,9 +331,34 @@ export async function removeUnavailableStopForUser(
     totalDurationSeconds = route.ok ? Math.round(route.route.durationSeconds) : null;
   }
 
+  /*
+   * The same budget the replace path enforces — what is LEFT of the guest's window,
+   * measured from when the plan was generated — is computed here too, so both paths
+   * agree on what "the budget" means.
+   *
+   * It does not gate the removal, and deliberately so. Removal is the guest's way
+   * out of a stop they cannot complete; refusing it because their afternoon has run
+   * short would strand them on exactly the plan they are trying to escape, which the
+   * approved rule against trapping a guest forbids. What the budget guarantees here
+   * is one-directional: removal only ever takes a stop away, so the day can only get
+   * shorter, never longer. The remaining time is reported so the caller can say how
+   * much is left rather than implying the original window still stands.
+   */
+  const remainingBudget = remainingBudgetMinutes({
+    availableMinutes: day.availableMinutes,
+    generatedAt: day.generatedAt,
+    now,
+  });
+
   const persisted = await d.persistStopRemoval({ dayId: day.id, stopId: stop.id, routeGeoJson, totalDurationSeconds, now });
   if (persisted.status === "conflict") {
     return { ok: false, reason: "conflict", message: "Your plan changed while we were updating it. Nothing was changed — please try again." };
   }
-  return { ok: true, day: persisted.day, stops: persisted.stops, dayCompleted: persisted.day.completedAt !== null };
+  return {
+    ok: true,
+    day: persisted.day,
+    stops: persisted.stops,
+    dayCompleted: persisted.day.completedAt !== null,
+    remainingBudgetMinutes: remainingBudget,
+  };
 }

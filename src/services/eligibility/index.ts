@@ -1,6 +1,6 @@
 import type { Hotel, Place, PlaceCategory } from "@/db/schema";
 import type { LatLng } from "@/lib/geo";
-import { calculateDayNumber } from "@/services/advisor/stay-day";
+import { calculateDayNumber, stayEndFor } from "@/services/advisor/stay-day";
 import { buildEligiblePlaces, filterEligibleByRadius, type EligiblePlace, type FacilityRow, type PartnershipRow } from "./rules";
 
 export type { EligiblePlace, EligibilitySource } from "./rules";
@@ -81,7 +81,7 @@ export async function resolveGuestHotelContext(
   const stay = await d.findActiveStayForUser(userId);
   if (!stay) return { ok: false, reason: "no_active_stay" };
 
-  const day = calculateDayNumber(stay.checkIn, stay.checkOut, now);
+  const day = calculateDayNumber(stay.checkIn, stayEndFor(stay), now);
   if (!day.ok) return { ok: false, reason: "outside_stay_period" };
 
   return { ok: true, stay };
@@ -114,8 +114,9 @@ export async function authorizeGuestHotel(
  * validated stay (e.g. the Advisor) use this; everyone else uses
  * listEligibleExperiencesForGuest.
  */
+/** Takes only what it uses — the hotel id and the hotel Place id — so an admin screen with a narrower hotel row can call it too. */
 export async function listEligiblePlacesForStay(
-  stay: Pick<GuestStay, "hotel" | "place">,
+  stay: { hotel: Pick<Hotel, "id">; place: Pick<Place, "id"> },
   now: Date = new Date(),
   deps?: Pick<EligibilityDependencies, "listPartnershipsForHotel" | "listFacilitiesForHotel">
 ): Promise<EligiblePlace[]> {
@@ -204,6 +205,7 @@ export type EligibleMapPoint = {
   latitude: number;
   longitude: number;
   address: string | null;
+  priceLevel: number | null;
 };
 
 export type GuestMapPlacesResult =
@@ -241,6 +243,7 @@ export async function getEligibleMapPlacesForGuest(
       latitude: place.latitude,
       longitude: place.longitude,
       address: place.address,
+      priceLevel: place.priceLevel,
     })),
   };
 }

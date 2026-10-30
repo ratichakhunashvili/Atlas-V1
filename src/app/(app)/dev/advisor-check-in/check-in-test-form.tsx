@@ -13,11 +13,9 @@ import type { CheckInResult } from "@/services/advisor/check-in";
 export function CheckInTestForm({
   day,
   stops,
-  regenerated,
 }: {
-  day: ItineraryDay;
-  stops: ItineraryStop[];
-  regenerated: boolean;
+  day: Pick<ItineraryDay, "dayNumber" | "generatedAt" | "completedAt">;
+  stops: Array<Pick<ItineraryStop, "id" | "position" | "name" | "isHotelStop" | "checkInMethod" | "visitedAt">>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -42,7 +40,10 @@ export function CheckInTestForm({
     const lat = Number(latitude);
     const lng = Number(longitude);
     startTransition(async () => {
-      const outcome = await checkInGpsAction(stopId, lat, lng);
+      // Dev tool: types a position by hand, so it supplies evidence that passes
+      // the server's limits — a precise fix taken right now. The limits themselves
+      // are exercised by the unit tests, not by this form.
+      const outcome = await checkInGpsAction(stopId, lat, lng, 10, Date.now());
       setResult(outcome);
       if (outcome.ok) router.refresh();
     });
@@ -53,7 +54,7 @@ export function CheckInTestForm({
       <Card className="space-y-1 text-sm">
         <p>
           <span className="font-medium">Day:</span> #{day.dayNumber} — generated {day.generatedAt.toISOString()}
-          {regenerated ? " (just generated/regenerated)" : " (existing, returned as-is)"}
+          {" "}(read-only; opening this page never generates or changes the itinerary)
         </p>
         <p>
           <span className="font-medium">Day completedAt:</span> {day.completedAt ? day.completedAt.toISOString() : "null"}

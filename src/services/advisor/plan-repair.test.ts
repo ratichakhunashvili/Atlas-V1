@@ -35,6 +35,7 @@ const eligibleEntry = (place: ReturnType<typeof makeTestPlace>): EligiblePlace =
 const baseDay: ItineraryDay = {
   id: DAY,
   userId: USER,
+  principalId: null,
   hotelId: HOTEL,
   hotelStayId: STAY,
   dayNumber: 1,
@@ -42,6 +43,7 @@ const baseDay: ItineraryDay = {
   routeGeoJson: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[44.8, 41.7]] } },
   totalDurationSeconds: 7200,
   originalDurationSeconds: 7200,
+  availableMinutes: null,
   generatedAt: new Date("2026-06-15T08:00:00Z"),
   completedAt: null,
 };
@@ -57,6 +59,7 @@ const stop = (stopId: string, placeId: string, position: number, overrides: Part
   latitude: 41.7 + (position + 1) * 0.001,
   longitude: 44.8,
   imageUrl: null,
+  visitDurationMinutes: null,
   position,
   visitedAt: null,
   supersededAt: null,
@@ -80,13 +83,17 @@ type WorldOptions = {
   validStay?: boolean;
   route?: typeof okRoute | { ok: false; reason: "no_route"; message: string };
   persistResult?: "real" | "conflict";
+  /** The window the day was generated for. Null (the default) is a plan made before windows existed. */
+  availableMinutes?: number | null;
+  /** Walking seconds the fake router reports, so a test can make a repaired route overrun the window. */
+  routeSeconds?: number;
 };
 
 /** An in-memory stand-in for the repair dependencies that mirrors the real persistence contract (supersede, never delete). */
 function makeWorld(options: WorldOptions) {
   const state = {
     stops: options.stops.map((s) => ({ ...s })),
-    day: { ...baseDay },
+    day: { ...baseDay, availableMinutes: options.availableMinutes ?? null },
     routeCalls: [] as Array<{ origin: { lat: number; lng: number }; stops: Array<{ lat: number; lng: number }>; returnToOrigin?: boolean }>,
     replacementPersists: 0,
     removalPersists: 0,
@@ -111,7 +118,7 @@ function makeWorld(options: WorldOptions) {
       userId === USER && options.validStay !== false
         ? { id: STAY, checkIn: new Date("2026-06-15T08:00:00Z"), checkOut: null, hotel: { id: HOTEL, placeId: HOTEL_PLACE, qrToken: "x", createdAt: NOW, updatedAt: NOW }, place: hotelPlace }
         : null,
-    findPreferencesForUser: async () => ({ userId: USER, categories: ["restaurant"], budget: null, activityLevel: null, updatedAt: NOW }),
+    findPreferencesForUser: async () => ({ userId: USER, principalId: null, categories: ["restaurant"], budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: NOW }),
     findItineraryDay: async (userId, hotelId, dayNumber) => (userId === USER && hotelId === HOTEL && dayNumber === 1 ? state.day : null),
     listItineraryStops: async () => active(),
     findItineraryStopWithDay: async (stopId) => {
@@ -122,7 +129,9 @@ function makeWorld(options: WorldOptions) {
     getStopUsageHistory: async () => new Map(),
     getWalkingRouteInOrder: async (input) => {
       state.routeCalls.push(input);
-      return options.route ?? okRoute;
+      if (options.route) return options.route;
+      if (options.routeSeconds === undefined || !okRoute.ok) return okRoute;
+      return { ok: true as const, route: { ...okRoute.route, durationSeconds: options.routeSeconds } };
     },
     persistStopReplacement: async (input) => {
       state.replacementPersists += 1;
@@ -203,6 +212,15 @@ describe("replaceUnavailableStopsForUser — explicit, server-enforced, replaces
     assert.equal(call.returnToOrigin, true);
     // Pending stops only (the completed stop is done), in slot order: S2, replacement R1, S4.
     assert.deepEqual(call.stops.map((s) => s.lat), [stopPlaces[1].latitude, placeAt(R1, 5, "R1").latitude, stopPlaces[3].latitude]);
+  });
+
+  test("the saved route line is REPLACED with the repaired route, so the map can never draw a line through a superseded stop", async () => {
+    const w = makeWorld({ stops: plan(), eligible: [stopPlaces[0], stopPlaces[1], stopPlaces[3], placeAt(R1, 5, "R1")] });
+    const staleLine = w.state.day.routeGeoJson;
+    const result = await replaceUnavailableStopsForUser(USER, NOW, w.deps);
+    assert.equal(result.ok, true);
+    assert.notDeepEqual(w.state.day.routeGeoJson, staleLine, "the old line is gone");
+    assert.deepEqual(w.state.day.routeGeoJson, okRoute.ok ? okRoute.route.geometry : null, "the line now follows the repaired plan");
   });
 
   test("replacements come ONLY from the hotel's eligible Places: a nearby non-partner is never chosen, and neither is a Place already in today's plan", async () => {

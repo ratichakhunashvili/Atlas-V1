@@ -141,7 +141,8 @@ describe("which day can be checked in: server-computed, never client-supplied", 
 
   test("the current day number is derived from the stay dates and the SERVER clock only", () => {
     const text = read("services/advisor/stop-availability.ts");
-    assert.match(text, /calculateDayNumber\(stay\.checkIn, stay\.checkOut, now\)/);
+    // The end is the actual check-out, else the departure the guest declared — both server-held (stayEndFor).
+    assert.match(text, /calculateDayNumber\(stay\.checkIn, stayEndFor\(stay\), now\)/);
     assert.match(text, /day\.dayNumber !== context\.stay\.dayNumber/);
   });
 
@@ -151,9 +152,43 @@ describe("which day can be checked in: server-computed, never client-supplied", 
     for (const forbidden of [/\bdate\b/i, /dayNumber/, /\bnow\b/, /dayId/, /hotelStayId/, /stayId/, /hotelId/]) {
       assert.doesNotMatch(schema, forbidden, `schema must not accept ${forbidden}`);
     }
-    // The action signatures take only the stop id / QR text / the guest's own coordinates.
-    assert.match(actions, /export async function checkInGpsAction\(stopId: string, latitude: number, longitude: number\)/);
+    /*
+     * The action signatures take only the stop id / QR text / the guest's own
+     * reading. Layer 5 added `capturedAtMs`, which IS a client-supplied time —
+     * deliberately, and it does not weaken this rule:
+     *
+     *   - it describes the READING ("my device fixed this position at T"), not the
+     *     server's idea of now;
+     *   - the server only ever compares it against its own clock, and only ever to
+     *     REFUSE a reading that is stale or from the future;
+     *   - nothing derives the current day, stay or eligibility from it.
+     *
+     * A client sending a flattering timestamp can at most get its own check-in
+     * refused, or pass a freshness test it would have passed anyway. The assertions
+     * below pin that down, so the distinction cannot quietly erode.
+     */
+    assert.match(
+      actions,
+      /export async function checkInGpsAction\(\s*stopId: string,\s*latitude: number,\s*longitude: number,\s*accuracyMeters: number,\s*capturedAtMs: number\s*\)/
+    );
     assert.match(actions, /export async function checkInQrAction\(qrToken: string\)/);
+    // AR carries the same evidence as GPS — a camera match never replaces it.
+    assert.match(
+      actions,
+      /export async function checkInArAction\(\s*stopId: string,\s*captureHash: string,\s*latitude: number,\s*longitude: number,\s*accuracyMeters: number,\s*capturedAtMs: number\s*\)/
+    );
+
+    // The capture time is never adopted as the server's clock.
+    const checkIn = read("services/advisor/check-in.ts");
+    const checkInAr = read("services/advisor/check-in-ar.ts");
+    assert.doesNotMatch(checkInAr, /now\s*=\s*[^;]*capturedAtMs/, "the client's timestamp must never become 'now'");
+    assert.doesNotMatch(checkInAr, /new Date\(\s*input\.capturedAtMs/, "nor be turned into the server's date");
+    assert.doesNotMatch(checkIn, /now\s*=\s*[^;]*capturedAtMs/, "the client's timestamp must never become 'now'");
+    assert.doesNotMatch(checkIn, /new Date\(\s*input\.capturedAtMs/, "nor be turned into the server's date");
+
+    // It is only ever measured against the server clock, to reject a reading.
+    const evidence = read("services/advisor/gps-evidence.ts");
+    assert.match(evidence, /now\.getTime\(\) - capturedAtMs/, "freshness is measured from the SERVER's now");
     assert.match(actions, /export async function getDirectionsToStopAction\(\s*stopId: string,\s*latitude: number,\s*longitude: number\s*\)/);
     assert.match(actions, /export async function replaceUnavailableStopsAction\(\)/);
     assert.doesNotMatch(actions, /new Date\(\s*[a-zA-Z]/, "actions never build a date from client input");

@@ -30,6 +30,7 @@ function day(overrides: Partial<ItineraryDay> = {}): ItineraryDay {
   return {
     id: IDS.day,
     userId: "00000000-0000-4000-8000-0000000000f1",
+    principalId: null,
     hotelId: IDS.hotel,
     hotelStayId: IDS.stay,
     dayNumber: 1,
@@ -37,6 +38,7 @@ function day(overrides: Partial<ItineraryDay> = {}): ItineraryDay {
     routeGeoJson: null,
     totalDurationSeconds: 3600,
     originalDurationSeconds: 3600,
+    availableMinutes: null,
     generatedAt: new Date("2026-06-15T08:00:00Z"),
     completedAt: null,
     ...overrides,
@@ -55,6 +57,7 @@ function stop(id: string, placeId: string | null, position: number, overrides: P
     latitude: 41.7,
     longitude: 44.8,
     imageUrl: null,
+    visitDurationMinutes: null,
     position,
     visitedAt: null,
     supersededAt: null,

@@ -11,6 +11,7 @@ import {
   promoteTestUserToAdminAction,
   seedPreviousDayHistoryAction,
   testGpsCheckInAction,
+  testScenarioQrCheckInAction,
   testQrCheckInAction,
 } from "@/features/advisor-testing/actions";
 
@@ -24,7 +25,7 @@ type ScenarioPlaceView = {
   category: string;
   latitude: number;
   longitude: number;
-  qrToken: string | null;
+  hasQrToken: boolean;
   isPartner: boolean;
   partnerPriority: number | null;
 };
@@ -50,6 +51,7 @@ type DayView = {
 
 type StopView = {
   id: string;
+  placeId: string | null;
   position: number;
   name: string;
   category: string | null;
@@ -59,7 +61,7 @@ type StopView = {
   checkInMethod: string;
   visitedAt: string | null;
   isPartner: boolean;
-  qrToken: string | null;
+  hasQrToken: boolean;
 };
 
 type LogEntry = { label: string; pass: boolean | null; detail: string; timestamp: string };
@@ -134,10 +136,11 @@ export function ScenarioTestPanel({
     });
   }
 
-  function runQr(stop: StopView, token: string, label: string) {
+  function runQr(stop: StopView, label: string) {
+    if (!stop.placeId) return;
     const isFirst = firstUnvisited?.id === stop.id;
     startTransition(async () => {
-      const result = await testQrCheckInAction(tag, token);
+      const result = await testScenarioQrCheckInAction(tag, stop.placeId!);
       const expectation = isFirst
         ? result.ok === true
         : result.ok === false && "reason" in result && result.reason === "place_not_next";
@@ -152,11 +155,29 @@ export function ScenarioTestPanel({
     });
   }
 
+  function runScannedQr(stop: StopView, token: string) {
+    const isFirst = firstUnvisited?.id === stop.id;
+    startTransition(async () => {
+      const result = await testQrCheckInAction(tag, token);
+      const expectation = isFirst
+        ? result.ok === true
+        : result.ok === false && "reason" in result && result.reason === "place_not_next";
+      pushLog({
+        label: `Scanned QR — ${stop.name}`,
+        pass: expectation,
+        detail: result.ok
+          ? `ok — checkInMethod=${result.stop.checkInMethod}, alreadyVisited=${result.alreadyVisited}, dayCompleted=${result.dayCompleted}`
+          : `reason=${"reason" in result ? result.reason : "?"} — ${result.message}`,
+      });
+      if (result.ok) router.refresh();
+    });
+  }
+
   function runRepeat(stop: StopView) {
     startTransition(async () => {
       const result =
-        stop.checkInMethod === "qr" && stop.qrToken
-          ? await testQrCheckInAction(tag, stop.qrToken)
+        stop.checkInMethod === "qr" && stop.hasQrToken && stop.placeId
+          ? await testScenarioQrCheckInAction(tag, stop.placeId)
           : await testGpsCheckInAction(tag, stop.id, stop.latitude, stop.longitude);
       pushLog({
         label: `Repeat check-in — ${stop.name}`,
@@ -180,10 +201,10 @@ export function ScenarioTestPanel({
   }
 
   function runWrongQr(stop: StopView) {
-    const otherToken = scenario.places.find((p) => p.qrToken && p.qrToken !== stop.qrToken)?.qrToken;
-    if (!otherToken) return;
+    const otherPlace = scenario.places.find((place) => place.hasQrToken && place.id !== stop.placeId);
+    if (!otherPlace) return;
     startTransition(async () => {
-      const result = await testQrCheckInAction(tag, otherToken);
+      const result = await testScenarioQrCheckInAction(tag, otherPlace.id);
       pushLog({
         label: `Submit another Place's QR against current state`,
         pass: result.ok === false || (result.ok === true && result.alreadyVisited === true),
@@ -221,7 +242,7 @@ export function ScenarioTestPanel({
           {scenario.places.map((p) => (
             <li key={p.id} className="rounded border border-slate-200 px-2 py-1">
               <code>{p.id}</code> — {p.name} — {p.category} — ({p.latitude.toFixed(5)}, {p.longitude.toFixed(5)}){" "}
-              {p.isPartner && `— partner (priority ${p.partnerPriority ?? "none"})`} {p.qrToken && `— qrToken: ${p.qrToken}`}
+              {p.isPartner && `— partner (priority ${p.partnerPriority ?? "none"})`} {p.hasQrToken && "— QR enabled (secret hidden)"}
             </li>
           ))}
         </ul>
@@ -262,7 +283,7 @@ export function ScenarioTestPanel({
                       #{stop.position} <code>{stop.id}</code> {stop.name}{" "}
                       {stop.isHotelStop && <span className="text-slate-500">(hotel filler)</span>}{" "}
                       {stop.isPartner && <span className="text-slate-500">(partner)</span>}{" "}
-                      {stop.qrToken && <span className="text-slate-500">(QR enabled)</span>}
+                      {stop.hasQrToken && <span className="text-slate-500">(QR enabled; secret hidden)</span>}
                     </span>
                     <span className={stop.visitedAt ? "text-green-600" : isFirst ? "font-medium text-slate-900" : "text-slate-400"}>
                       {stop.visitedAt ? `visited (${stop.checkInMethod}) ${stop.visitedAt}` : isFirst ? "→ next up" : "unvisited"}
@@ -284,13 +305,13 @@ export function ScenarioTestPanel({
                       <Button type="button" variant="secondary" disabled={pending} onClick={() => runGps(stop, "invalid")}>
                         GPS Invalid Coordinates
                       </Button>
-                      {stop.qrToken && (
+                      {stop.hasQrToken && (
                         <>
                           <Button
                             type="button"
                             variant="secondary"
                             disabled={pending}
-                            onClick={() => runQr(stop, stop.qrToken!, "Submit QR")}
+                            onClick={() => runQr(stop, "Submit scenario QR")}
                           >
                             Submit QR
                           </Button>
@@ -314,7 +335,7 @@ export function ScenarioTestPanel({
                       onClose={() => setScannerOpenFor(null)}
                       onScan={(decoded) => {
                         setScannerOpenFor(null);
-                        runQr(stop, decoded, "Scanned QR");
+                        runScannedQr(stop, decoded);
                       }}
                     />
                   )}

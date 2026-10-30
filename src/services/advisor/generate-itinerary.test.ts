@@ -21,6 +21,10 @@ function makePlace(overrides: Partial<Place> = {}): Place {
     website: null,
     phone: null,
     qrToken: null,
+    visitDurationMinutes: 10,
+    priceLevel: null,
+    priceLevelSource: null,
+    priceLevelVerifiedAt: null,
     archivedAt: null,
     publicationStatus: "published",
     publishedAt: new Date("2026-01-01T00:00:00Z"),
@@ -138,6 +142,7 @@ function createFakeItineraryStore() {
         routeGeoJson: input.routeGeoJson as ItineraryDay["routeGeoJson"],
         totalDurationSeconds: input.totalDurationSeconds,
         originalDurationSeconds: input.totalDurationSeconds,
+        availableMinutes: null,
         generatedAt: input.generatedAt,
         completedAt: computeDayCompletedAt(active, days[index].completedAt, input.generatedAt),
       };
@@ -148,6 +153,7 @@ function createFakeItineraryStore() {
       day = {
         id: `day-${dayIdCounter}`,
         userId: input.userId,
+        principalId: null,
         hotelId: input.hotelId,
         hotelStayId: input.hotelStayId,
         dayNumber: input.dayNumber,
@@ -155,6 +161,7 @@ function createFakeItineraryStore() {
         routeGeoJson: input.routeGeoJson as ItineraryDay["routeGeoJson"],
         totalDurationSeconds: input.totalDurationSeconds,
         originalDurationSeconds: input.totalDurationSeconds,
+        availableMinutes: null,
         generatedAt: input.generatedAt,
         completedAt: input.completedAt,
       };
@@ -226,10 +233,10 @@ function buildDeps(options: BuildDepsOptions = {}) {
         : null,
     findPreferencesForUser: async () =>
       options.preferences === undefined
-        ? { userId: user.id, categories: ["restaurant", "landmark"], budget: null, activityLevel: null, updatedAt: new Date() }
+        ? { userId: user.id, principalId: null, categories: ["restaurant", "landmark"], budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: new Date() }
         : options.preferences === null
           ? null
-          : { userId: user.id, categories: options.preferences.categories, budget: null, activityLevel: null, updatedAt: new Date() },
+          : { userId: user.id, principalId: null, categories: options.preferences.categories, budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: new Date() },
     // The (fake) eligibility service: returns ONLY what a hotel is eligible for. `eligiblePlaces` are the hotel's
     // eligible Places; any that also appear in `partnerRelations` are external partners (with that priority),
     // the rest are hotel-owned facilities. Real eligibility rules are covered in services/eligibility/*.test.ts.
@@ -252,6 +259,8 @@ function buildDeps(options: BuildDepsOptions = {}) {
     listItineraryStops: store.listItineraryStops,
     getStopUsageHistory: store.getStopUsageHistory,
     persistItinerary: store.persistItinerary,
+    getWalkingRouteInOrder: async () => ({ ok: true as const, route: { geometry: emptyGeometry(), durationSeconds: 600, distanceMeters: 500 } }),
+    listUpcomingHotelEvents: async () => [],
     optimizeWalkingRoute,
   };
 
@@ -486,6 +495,7 @@ test("difficulty ratchet: a fully-visited, easily-completed previous day raises 
     {
       id: "day-prev",
       userId: "user-1",
+      principalId: null,
       hotelId: "hotel-1",
       hotelStayId: "stay-1",
       dayNumber: 1,
@@ -493,6 +503,7 @@ test("difficulty ratchet: a fully-visited, easily-completed previous day raises 
       routeGeoJson: null,
       totalDurationSeconds: 7200,
       originalDurationSeconds: 7200,
+      availableMinutes: null,
       generatedAt: new Date("2026-03-10T08:00:00Z"),
       completedAt: new Date("2026-03-10T08:30:00Z"),
     },
@@ -508,6 +519,7 @@ test("difficulty ratchet: a fully-visited, easily-completed previous day raises 
         latitude: 41.7,
         longitude: 44.8,
         imageUrl: null,
+        visitDurationMinutes: null,
         position: 0,
         visitedAt: new Date("2026-03-10T08:15:00Z"),
         supersededAt: null,
@@ -568,6 +580,7 @@ test("cooldown expired (existing day generated long ago) rebuilds the same day i
     {
       id: "day-stale",
       userId: "user-1",
+      principalId: null,
       hotelId: "hotel-1",
       dayNumber: 1,
       hotelStayId: "stay-1",
@@ -575,6 +588,7 @@ test("cooldown expired (existing day generated long ago) rebuilds the same day i
       routeGeoJson: null,
       totalDurationSeconds: 1800,
       originalDurationSeconds: 1800,
+      availableMinutes: null,
       generatedAt: new Date("2026-03-09T00:00:00Z"), // > 24h before NOW
       completedAt: null,
     },
@@ -590,6 +604,7 @@ test("cooldown expired (existing day generated long ago) rebuilds the same day i
         latitude: 41.7,
         longitude: 44.8,
         imageUrl: null,
+        visitDurationMinutes: null,
         position: 0,
         visitedAt: null,
         supersededAt: null,
@@ -629,6 +644,7 @@ test("losing the create race for a brand-new day returns the winner's itinerary 
         store.seedDay({
           id: "day-winner",
           userId: input.userId,
+          principalId: null,
           hotelId: input.hotelId,
           hotelStayId: input.hotelStayId,
           dayNumber: input.dayNumber,
@@ -636,6 +652,7 @@ test("losing the create race for a brand-new day returns the winner's itinerary 
           routeGeoJson: null,
           totalDurationSeconds: 1800,
           originalDurationSeconds: 1800,
+          availableMinutes: null,
           generatedAt: NOW,
           completedAt: null,
         });
@@ -675,6 +692,7 @@ function historyDay(generatedAt: Date, overrides: Partial<ItineraryDay> = {}): I
   return {
     id: H.day,
     userId: "user-1",
+    principalId: null,
     hotelId: "hotel-1",
     hotelStayId: "stay-1",
     dayNumber: 1,
@@ -682,6 +700,7 @@ function historyDay(generatedAt: Date, overrides: Partial<ItineraryDay> = {}): I
     routeGeoJson: null,
     totalDurationSeconds: 3600,
     originalDurationSeconds: 3600,
+    availableMinutes: null,
     generatedAt,
     completedAt: null,
     ...overrides,
@@ -700,6 +719,7 @@ function historyStop(id: string, placeId: string, position: number, overrides: P
     latitude: 41.7 + position * 0.001,
     longitude: 44.8,
     imageUrl: null,
+    visitDurationMinutes: null,
     position,
     visitedAt: null,
     supersededAt: null,
@@ -874,6 +894,7 @@ function previousDayWithDurations(totalDurationSeconds: number | null, originalD
     {
       id: "00000000-0000-4000-8000-0000000000c9",
       userId: "user-1",
+      principalId: null,
       hotelId: "hotel-1",
       hotelStayId: "stay-1",
       dayNumber: 1,
@@ -881,6 +902,7 @@ function previousDayWithDurations(totalDurationSeconds: number | null, originalD
       routeGeoJson: null,
       totalDurationSeconds,
       originalDurationSeconds,
+      availableMinutes: null,
       generatedAt: new Date("2026-03-10T08:00:00Z"),
       // Finished in 1800s, every stop visited.
       completedAt: new Date("2026-03-10T08:30:00Z"),
@@ -897,6 +919,7 @@ function previousDayWithDurations(totalDurationSeconds: number | null, originalD
         latitude: 41.7,
         longitude: 44.8,
         imageUrl: null,
+        visitDurationMinutes: null,
         position: 0,
         visitedAt: new Date("2026-03-10T08:15:00Z"),
         supersededAt: null,

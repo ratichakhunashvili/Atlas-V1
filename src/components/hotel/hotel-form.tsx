@@ -10,7 +10,7 @@ export function HotelForm({
   error,
 }: {
   action: (formData: FormData) => void | Promise<void>;
-  places: Place[];
+  places: Array<Pick<Place, "id" | "name">>;
   currentPlaceId?: string;
   error?: string;
 }) {

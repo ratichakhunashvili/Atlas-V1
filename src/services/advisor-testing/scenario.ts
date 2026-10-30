@@ -205,7 +205,7 @@ export async function createAdvisorTestScenario(
   assertScenarioToolEnabled(options.nodeEnv ?? process.env.NODE_ENV);
   const now = options.now ?? new Date();
 
-  const [usersQ, placesQ, hotelsQ, partnershipsQ, facilitiesQ, hotelStaysQ, preferencesQ, bcryptModule] = await Promise.all([
+  const [usersQ, placesQ, hotelsQ, partnershipsQ, facilitiesQ, hotelStaysQ, preferencesQ, credentialsQ, qrService, bcryptModule] = await Promise.all([
     import("@/db/queries/users"),
     import("@/db/queries/places"),
     import("@/db/queries/hotels"),
@@ -213,6 +213,8 @@ export async function createAdvisorTestScenario(
     import("@/db/queries/hotel-facilities"),
     import("@/db/queries/hotel-stays"),
     import("@/db/queries/preferences"),
+    import("@/db/queries/qr-credentials"),
+    import("@/services/qr"),
     import("bcryptjs"),
   ]);
   const crypto = await import("node:crypto");
@@ -235,7 +237,7 @@ export async function createAdvisorTestScenario(
     publicationStatus: "published",
     verificationStatus: "verified",
   });
-  const hotel = await hotelsQ.createHotel({ placeId: hotelPlace.id, qrToken: `${tag}-hotel-qr` });
+  const hotel = await hotelsQ.createHotel({ placeId: hotelPlace.id });
 
   const placeIds: string[] = [];
   const categories = new Set<PlaceCategory>();
@@ -247,7 +249,6 @@ export async function createAdvisorTestScenario(
       latitude: origin.lat + spec.offset.dLat,
       longitude: origin.lng + spec.offset.dLng,
       category: spec.category,
-      qrToken: spec.hasQrToken ? `${tag}-place-${index + 1}-qr` : null,
       // Test data only. Published + verified so eligibility is decided purely by the facility/partnership row
       // (the "none" decoy is still excluded: it has no relationship with the hotel).
       publicationStatus: "published",
@@ -255,6 +256,20 @@ export async function createAdvisorTestScenario(
     });
     placeIds.push(place.id);
     categories.add(spec.category);
+
+    if (spec.hasQrToken) {
+      // A real purpose-bound credential, hashed like any other. The raw token is
+      // generated and discarded here on purpose: the scenario never needs to hold a
+      // secret, because testScenarioQrCheckInAction rotates the credential and uses
+      // the fresh value in-process when an operator asks to test a scan.
+      await credentialsQ.issueQrCredential({
+        purpose: "place_check_in",
+        placeId: place.id,
+        tokenHash: qrService.hashQrToken(qrService.generateRawQrToken()),
+        createdByUserId: user.id,
+      });
+    }
+
     if (spec.eligibility === "partner") {
       // Created as an explicit admin confirmation: attributed to the admin running the tool (taken from the
       // authenticated session by the caller, never from a form value).
@@ -275,7 +290,7 @@ export async function createAdvisorTestScenario(
     }
   }
 
-  await preferencesQ.upsertPreferences(user.id, { categories: [...categories], budget: null, activityLevel: null });
+  await preferencesQ.upsertPreferences(user.id, { categories: [...categories], budget: null, activityLevel: null, maxDistanceMeters: null });
 
   const checkIn = new Date(now);
   if (preset.checkInDaysAgo) checkIn.setUTCDate(checkIn.getUTCDate() - preset.checkInDaysAgo);
@@ -412,6 +427,7 @@ export async function seedPreviousDayHistory(
     latitude: samplePlace.latitude,
     longitude: samplePlace.longitude,
     imageUrl: samplePlace.imageUrl,
+    visitDurationMinutes: null,
     position: index,
     visitedAt: outcome === "incomplete" && index === stopCount - 1 ? null : generatedAt,
   }));
@@ -482,28 +498,28 @@ export async function deleteAdvisorTestScenario(
 export type ItineraryInspectorStop = {
   stop: ItineraryStop;
   isPartner: boolean;
-  qrToken: string | null;
+  hasQrToken: boolean;
 };
 
 /**
  * Enriches persisted stops with facts the snapshot alone can't show — partner
- * status and the live Place's qrToken (both deliberately NOT snapshotted
- * onto itinerary_stops, since they're facts about the current Place, not
- * historical facts about the day). Pure presentation assembly for the
- * inspector; no business logic.
+ * status and whether the live Place has a QR credential (neither fact is
+ * snapshotted onto itinerary_stops). The raw credential stays server-side.
+ * Pure presentation assembly for the inspector; no business logic.
  */
 export async function inspectItineraryStops(
   stops: readonly ItineraryStop[],
   partnerPlaceIds: ReadonlyMap<string, number | null>
 ): Promise<ItineraryInspectorStop[]> {
-  const { findPlaceById } = await import("@/db/queries/places");
+  const { findActiveQrCredentialForPlace } = await import("@/db/queries/qr-credentials");
   return Promise.all(
     stops.map(async (stop) => {
-      const place = stop.placeId ? await findPlaceById(stop.placeId) : null;
+      // Presence of a live check-in credential, never its value.
+      const credential = stop.placeId ? await findActiveQrCredentialForPlace(stop.placeId) : null;
       return {
         stop,
         isPartner: stop.placeId ? partnerPlaceIds.has(stop.placeId) : false,
-        qrToken: place?.qrToken ?? null,
+        hasQrToken: credential !== null,
       };
     })
   );

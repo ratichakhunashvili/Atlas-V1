@@ -17,6 +17,7 @@ const ORIGIN = { lat: 41.71, lng: 44.81 };
 const day: ItineraryDay = {
   id: DAY,
   userId: USER,
+  principalId: null,
   hotelId: HOTEL,
   hotelStayId: STAY,
   dayNumber: 1,
@@ -24,6 +25,7 @@ const day: ItineraryDay = {
   routeGeoJson: null,
   totalDurationSeconds: null,
   originalDurationSeconds: null,
+  availableMinutes: null,
   generatedAt: new Date("2026-06-15T08:00:00Z"),
   completedAt: null,
 };
@@ -39,6 +41,7 @@ const stop = (overrides: Partial<ItineraryStop> = {}): ItineraryStop => ({
   latitude: 41.7,
   longitude: 44.8,
   imageUrl: null,
+  visitDurationMinutes: null,
   position: 0,
   visitedAt: null,
   supersededAt: null,

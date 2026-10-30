@@ -22,6 +22,10 @@ export function makeTestPlace(overrides: Partial<Place> & { category: PlaceCateg
     website: overrides.website ?? null,
     phone: overrides.phone ?? null,
     qrToken: overrides.qrToken ?? null,
+    visitDurationMinutes: overrides.visitDurationMinutes ?? null,
+    priceLevel: overrides.priceLevel ?? null,
+    priceLevelSource: overrides.priceLevelSource ?? (overrides.priceLevel ? "test fixture" : null),
+    priceLevelVerifiedAt: overrides.priceLevelVerifiedAt ?? (overrides.priceLevel ? new Date("2026-01-01T00:00:00Z") : null),
     archivedAt: overrides.archivedAt ?? null,
     publicationStatus: overrides.publicationStatus ?? "published",
     publishedAt: overrides.publishedAt ?? new Date("2026-01-01T00:00:00Z"),
@@ -42,3 +46,41 @@ export const ALL_AVAILABLE_CONTEXT: AvailabilityContext = {
 };
 
 export const loadAllAvailable: AvailabilityContextLoader = async () => ALL_AVAILABLE_CONTEXT;
+
+// ---- Permanent-visit recording, for check-in tests ----
+import type { CheckInDependencies } from "./check-in";
+
+/**
+ * A stand-in for the real recording operation.
+ *
+ * Tests that care assert on the calls it received: a refused check-in must leave
+ * this untouched, which is how "a failed check-in creates no visit and no unlock"
+ * is proved without a database.
+ */
+export function createVisitRecorder() {
+  const calls: Array<{ userId: string; placeId: string; method: string }> = [];
+
+  const record: CheckInDependencies["recordVerifiedVisit"] = async (input) => {
+    calls.push({ userId: input.userId, placeId: input.placeId, method: input.method });
+    return {
+      visit: {
+        id: "visit-1",
+        userId: input.userId,
+        principalId: null,
+        placeId: input.placeId,
+        firstVisitedAt: input.now,
+        lastVisitedAt: input.now,
+        visitCount: 1,
+        firstVerificationMethod: input.method,
+      },
+      unlockedAchievement: null,
+      firstVisit: true,
+    };
+  };
+
+  return { record, calls };
+}
+
+/** The same recorder for tests that only need the dependency satisfied. */
+export const fakeRecordVerifiedVisit: CheckInDependencies["recordVerifiedVisit"] =
+  createVisitRecorder().record;

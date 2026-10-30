@@ -4,7 +4,7 @@ import type { ItineraryDay, ItineraryStop } from "@/db/schema";
 import { checkInStopWithGps, type CheckInDependencies } from "./check-in";
 import { checkInStopWithQr, type QrCheckInDependencies } from "./check-in-qr";
 import { contextFromEligible, type AvailabilityContextLoader } from "./stop-availability";
-import { makeTestPlace } from "./test-utils";
+import { fakeRecordVerifiedVisit, makeTestPlace } from "./test-utils";
 
 /**
  * WHICH DAY CAN BE CHECKED IN: only the guest's CURRENT day of their own current stay, computed on the server
@@ -28,11 +28,12 @@ const PLACE = "00000000-0000-4000-8000-0000000000d1";
 const STOP_OLD = "00000000-0000-4000-8000-0000000000e1";
 const STOP_TODAY = "00000000-0000-4000-8000-0000000000e3";
 const STOP_FUTURE = "00000000-0000-4000-8000-0000000000e4";
-const HERE = { latitude: 41.7151, longitude: 44.8271 };
+const HERE = { latitude: 41.7151, longitude: 44.8271, accuracyMeters: 10, capturedAtMs: DAY_3_NOON.getTime() };
 
 const day = (id: string, dayNumber: number, overrides: Partial<ItineraryDay> = {}): ItineraryDay => ({
   id,
   userId: USER,
+  principalId: null,
   hotelId: HOTEL,
   hotelStayId: STAY,
   dayNumber,
@@ -40,6 +41,7 @@ const day = (id: string, dayNumber: number, overrides: Partial<ItineraryDay> = {
   routeGeoJson: null,
   totalDurationSeconds: 1800,
   originalDurationSeconds: 1800,
+  availableMinutes: null,
   generatedAt: new Date(`2026-06-${12 + dayNumber}T08:00:00Z`),
   completedAt: null,
   ...overrides,
@@ -56,6 +58,7 @@ const stop = (id: string, dayId: string, overrides: Partial<ItineraryStop> = {})
   latitude: HERE.latitude,
   longitude: HERE.longitude,
   imageUrl: null,
+  visitDurationMinutes: null,
   position: 0,
   visitedAt: null,
   supersededAt: null,
@@ -99,15 +102,16 @@ function build(overrides: Partial<World> = {}) {
   };
 
   const activeStops = (dayId: string) => w.stops.filter((s) => s.dayId === dayId && s.supersededAt === null).sort((a, b) => a.position - b.position);
-  const markStopVisited: CheckInDependencies["markStopVisited"] = async (id, dayId, method) => {
+  const markStopVisited: CheckInDependencies["markStopVisited"] = async (id, dayId) => {
     w.writes.push(id);
     const target = w.stops.find((s) => s.id === id)!;
-    const visited = { ...target, visitedAt: w.clock, checkInMethod: method };
+    const visited = { ...target, visitedAt: w.clock };
     w.stops = w.stops.map((s) => (s.id === id ? visited : s));
     return { stop: visited, dayCompleted: activeStops(dayId).every((s) => s.visitedAt !== null) };
   };
 
   const gpsDeps: CheckInDependencies = {
+    recordVerifiedVisit: fakeRecordVerifiedVisit,
     findItineraryStopWithDay: async (id) => {
       const found = w.stops.find((s) => s.id === id && s.supersededAt === null);
       const d = found ? w.days.find((x) => x.id === found.dayId) : undefined;
@@ -119,7 +123,8 @@ function build(overrides: Partial<World> = {}) {
   };
 
   const qrDeps: QrCheckInDependencies = {
-    findPlaceByQrToken: async (token) => (token === "qr-place" ? makeTestPlace({ id: PLACE, category: "restaurant", qrToken: "qr-place" }) : null),
+    recordVerifiedVisit: fakeRecordVerifiedVisit,
+    findPlaceByCheckInCredential: async (token) => (token === "qr-place" ? makeTestPlace({ id: PLACE, category: "restaurant", qrToken: "qr-place" }) : null),
     findActiveStayForUser: async () =>
       w.stay
         ? {

@@ -1,7 +1,8 @@
 import "server-only";
-import { and, eq, gte, ilike, lte, sql } from "drizzle-orm";
+import { and, eq, gte, ilike, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { places, type Place, type PlaceCategory, type PublicationStatus, type VerificationStatus } from "@/db/schema";
+import { hotelFacilities, hotelPartnerships, places, type Place, type PlaceCategory, type PublicationStatus, type VerificationStatus } from "@/db/schema";
+import type { DuplicateCandidate } from "@/services/catalog/duplicates";
 import { boundingBoxForRadius, distanceMeters, type LatLng } from "@/lib/geo";
 
 export type PlaceInput = {
@@ -14,6 +15,13 @@ export type PlaceInput = {
   imageUrl?: string | null;
   website?: string | null;
   phone?: string | null;
+  /** Minutes; null = not configured (the Advisor then uses its labelled category estimate). */
+  visitDurationMinutes?: number | null;
+  /** 1 budget, 2 moderate, 3 luxury; null = unknown. */
+  priceLevel?: number | null;
+  /** Evidence for the price level: where it came from and when an admin last confirmed it. Both null when there is no level. */
+  priceLevelSource?: string | null;
+  priceLevelVerifiedAt?: Date | null;
   // Not exposed on the admin Place form yet (reserved for future QR
   // provisioning UI) — the Advisor test-scenario tool is the first caller
   // that needs to set this at creation time.
@@ -32,6 +40,8 @@ export type PlaceMapPoint = {
   latitude: number;
   longitude: number;
   address: string | null;
+  /** 1 budget, 2 moderate, 3 luxury; null = unknown (never shown as affordable). */
+  priceLevel: number | null;
 };
 
 const MAP_POINT_COLUMNS = {
@@ -42,6 +52,7 @@ const MAP_POINT_COLUMNS = {
   latitude: places.latitude,
   longitude: places.longitude,
   address: places.address,
+  priceLevel: places.priceLevel,
 } as const;
 
 /**
@@ -139,11 +150,12 @@ export async function findPlaceById(id: string) {
   return place ?? null;
 }
 
-/** Resolves a scanned QR token to its canonical Place — exact match only, same pattern as findHotelByQrToken (db/queries/hotels.ts) but for Place/partner QR check-in, a separate concern from hotel onboarding. */
-export async function findPlaceByQrToken(qrToken: string): Promise<Place | null> {
-  const [place] = await db.select().from(places).where(eq(places.qrToken, qrToken)).limit(1);
-  return place ?? null;
-}
+/*
+ * findPlaceByQrToken is deliberately gone: a scan is no longer resolved by
+ * comparing a raw column value. Place check-in resolves a hashed, purpose-bound
+ * credential (services/qr + db/queries/qr-credentials) and then loads the Place
+ * by the id stored on that credential, so a hotel-entry code can never resolve here.
+ */
 
 /**
  * Exact prefix match (never substring — callers pass a marker that must not
@@ -215,4 +227,96 @@ export async function setPlaceArchived(id: string, archived: boolean) {
     .where(eq(places.id, id))
     .returning();
   return place ?? null;
+}
+
+/**
+ * The experiences catalog: every Place that is not a hotel, with how many hotels
+ * have approved it and how many own it as a facility.
+ *
+ * A VIEW over the canonical Place model. "Attraction" is not a separate entity —
+ * it is a Place that guests might visit, so this is the Places table filtered and
+ * annotated, never a second table that could drift from it.
+ *
+ * The counts say whether a Place can reach any guest at all: a published, verified
+ * Place with no relationship to any hotel is invisible to everyone, which is easy
+ * to create by accident and impossible to see from the Place alone.
+ */
+export async function listExperiencePlacesForAdmin() {
+  const partnershipCount = db
+    .select({
+      placeId: hotelPartnerships.placeId,
+      total: sql<number>`count(*)::int`.as("partnership_total"),
+    })
+    .from(hotelPartnerships)
+    .groupBy(hotelPartnerships.placeId)
+    .as("partnership_counts");
+
+  const facilityCount = db
+    .select({
+      placeId: hotelFacilities.placeId,
+      total: sql<number>`count(*)::int`.as("facility_total"),
+    })
+    .from(hotelFacilities)
+    .groupBy(hotelFacilities.placeId)
+    .as("facility_counts");
+
+  return db
+    .select({
+      place: places,
+      partnerships: sql<number>`coalesce(${partnershipCount.total}, 0)`,
+      facilities: sql<number>`coalesce(${facilityCount.total}, 0)`,
+    })
+    .from(places)
+    .leftJoin(partnershipCount, eq(partnershipCount.placeId, places.id))
+    .leftJoin(facilityCount, eq(facilityCount.placeId, places.id))
+    // Hotels are administered in their own section; this is the catalog of things to visit.
+    .where(ne(places.category, "hotel"))
+    .orderBy(places.name);
+}
+
+export type AdminExperiencePlace = Awaited<ReturnType<typeof listExperiencePlacesForAdmin>>[number];
+
+/**
+ * ADMIN ONLY: the pool a new Place is checked against for likely duplicates — everything within 300 m, plus any
+ * Place sharing the candidate's first word (>= 3 letters). Archived Places are included on purpose: an admin may
+ * prefer to restore one over creating a second record. Suggestion only; nothing here merges or blocks.
+ */
+export async function adminListDuplicateCandidates(candidate: {
+  name: string;
+  latitude: number;
+  longitude: number;
+}): Promise<DuplicateCandidate[]> {
+  const box = boundingBoxForRadius({ lat: candidate.latitude, lng: candidate.longitude }, 300);
+  const firstWord = candidate.name.trim().split(/\s+/)[0] ?? "";
+  const escaped = firstWord.replace(/[\\%_]/g, (char) => `\\${char}`);
+
+  const nearby = and(
+    gte(places.latitude, box.minLat),
+    lte(places.latitude, box.maxLat),
+    gte(places.longitude, box.minLng),
+    lte(places.longitude, box.maxLng)
+  );
+  const condition = firstWord.length >= 3 ? or(nearby, ilike(places.name, `%${escaped}%`)) : nearby;
+
+  const rows = await db
+    .select({
+      id: places.id,
+      name: places.name,
+      latitude: places.latitude,
+      longitude: places.longitude,
+      category: places.category,
+      archivedAt: places.archivedAt,
+    })
+    .from(places)
+    .where(condition)
+    .limit(200);
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    category: row.category,
+    archived: row.archivedAt !== null,
+  }));
 }

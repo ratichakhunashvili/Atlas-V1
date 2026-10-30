@@ -1,11 +1,25 @@
 import { distanceMeters, type LatLng } from "@/lib/geo";
-import type { CheckInMethod, ItineraryDay, ItineraryStop } from "@/db/schema";
+import type { Achievement, CheckInMethod, ItineraryDay, ItineraryStop } from "@/db/schema";
+import type { RecordVisitResult } from "@/db/operations/place-visits";
+import { isCheckInMethodAllowed, wrongCheckInMethodMessage } from "./check-in-method";
+import { gpsEvidenceMessage, validateGpsEvidence } from "./gps-evidence";
 import { evaluateDayCheckIn, evaluatePendingStops, isAvailable, loadDefaultAvailabilityContext, type AvailabilityContextLoader } from "./stop-availability";
 
 /** Exact radius as Map Advisor Functional's CHECKIN_RADIUS_METERS — never increase this, never make it client-configurable. */
 export const CHECK_IN_RADIUS_METERS = 150;
 
-export type CheckInFailureReason = "not_found" | "invalid_coordinates" | "stop_not_next" | "stop_unavailable" | "wrong_day" | "out_of_range";
+export type CheckInFailureReason =
+  | "not_found"
+  | "invalid_coordinates"
+  | "stop_not_next"
+  | "stop_unavailable"
+  | "wrong_day"
+  | "wrong_check_in_method"
+  /** The reading was missing, malformed, too imprecise, stale, or stamped in the future. */
+  | "unreliable_position"
+  /** Too many failed attempts in the window. Never says which attempt failed or why. */
+  | "rate_limited"
+  | "out_of_range";
 
 export type CheckInResult =
   | {
@@ -15,6 +29,8 @@ export type CheckInResult =
       dayCompleted: boolean;
       /** True when the stop was already visited before this call — no DB write happened, reported idempotently rather than as an error. */
       alreadyVisited: boolean;
+      /** Set only on the arrival that EARNED a badge, so the celebration cannot repeat. Null otherwise. */
+      unlockedAchievement?: Achievement | null;
     }
   | {
       ok: false;
@@ -30,7 +46,15 @@ export type CheckInResult =
 export type CheckInDependencies = {
   findItineraryStopWithDay: (stopId: string) => Promise<{ stop: ItineraryStop; day: ItineraryDay } | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
-  markStopVisited: (stopId: string, dayId: string, checkInMethod: CheckInMethod) => Promise<{ stop: ItineraryStop; dayCompleted: boolean } | null>;
+  /** Records the visit only. The stop's saved checkInMethod is the requirement and is never rewritten by a check-in. */
+  markStopVisited: (stopId: string, dayId: string) => Promise<{ stop: ItineraryStop; dayCompleted: boolean } | null>;
+  /** Turns an accepted check-in into permanent history. Called only AFTER the stop write has succeeded. */
+  recordVerifiedVisit: (input: {
+    userId: string;
+    placeId: string;
+    method: CheckInMethod;
+    now: Date;
+  }) => Promise<RecordVisitResult>;
   /** Re-evaluates eligibility server-side from the authenticated guest's own stay. Called twice per check-in: early (to decide) and again immediately before the write. */
   loadAvailabilityContext: AvailabilityContextLoader;
 };
@@ -43,11 +67,15 @@ export type CheckInDependencies = {
 // services/advisor/generate-itinerary.ts's loadDefaultDependencies for the
 // same pattern.
 async function loadDefaultDependencies(): Promise<CheckInDependencies> {
-  const itineraryQ = await import("@/db/queries/itinerary");
+  const [itineraryQ, visitsQ] = await Promise.all([
+    import("@/db/queries/itinerary"),
+    import("@/db/queries/place-visits"),
+  ]);
   return {
     findItineraryStopWithDay: itineraryQ.findItineraryStopWithDay,
     listItineraryStops: itineraryQ.listItineraryStops,
     markStopVisited: itineraryQ.markStopVisited,
+    recordVerifiedVisit: visitsQ.recordVerifiedVisit,
     loadAvailabilityContext: loadDefaultAvailabilityContext,
   };
 }
@@ -77,7 +105,16 @@ export function firstUnvisitedStop(stops: readonly ItineraryStop[]): ItinerarySt
  * browser supplies coordinates only — every decision happens here.
  */
 export async function checkInStopWithGps(
-  input: { userId: string; stopId: string; latitude: number; longitude: number },
+  input: {
+    userId: string;
+    stopId: string;
+    latitude: number;
+    longitude: number;
+    /** The browser's own accuracy radius in metres. Self-declared — see gps-evidence.ts. */
+    accuracyMeters: number;
+    /** When the device took the reading, epoch milliseconds. */
+    capturedAtMs: number;
+  },
   deps?: CheckInDependencies,
   now: Date = new Date()
 ): Promise<CheckInResult> {
@@ -143,8 +180,31 @@ export async function checkInStopWithGps(
     };
   }
 
-  if (!isValidCoordinate({ lat: input.latitude, lng: input.longitude })) {
-    return { ok: false, reason: "invalid_coordinates", message: "Invalid GPS coordinates." };
+  // The stop's SAVED method decides how it may be completed — a client cannot downgrade a partner's
+  // QR requirement to "I am nearby" by calling this action instead of the QR one.
+  if (!isCheckInMethodAllowed(stop.checkInMethod, "gps")) {
+    return { ok: false, reason: "wrong_check_in_method", message: wrongCheckInMethodMessage(stop.checkInMethod) };
+  }
+
+  // The reading itself: coordinates in range, a usable accuracy radius, and a fix
+  // taken recently enough to still describe where the guest is. One shared message
+  // for every cause — naming the failing rule would tell a prober which number to
+  // forge next (services/advisor/gps-evidence.ts).
+  const evidence = validateGpsEvidence(
+    {
+      latitude: input.latitude,
+      longitude: input.longitude,
+      accuracyMeters: input.accuracyMeters,
+      capturedAtMs: input.capturedAtMs,
+    },
+    now
+  );
+  if (!evidence.ok) {
+    return {
+      ok: false,
+      reason: evidence.reason === "invalid_coordinates" ? "invalid_coordinates" : "unreliable_position",
+      message: evidence.reason === "invalid_coordinates" ? "Invalid GPS coordinates." : gpsEvidenceMessage(),
+    };
   }
 
   const distance = distanceMeters({ lat: input.latitude, lng: input.longitude }, { lat: stop.latitude, lng: stop.longitude });
@@ -170,7 +230,7 @@ export async function checkInStopWithGps(
     };
   }
 
-  const updated = await d.markStopVisited(stop.id, day.id, "gps");
+  const updated = await d.markStopVisited(stop.id, day.id);
   if (!updated) {
     // Lost a concurrent race — another simultaneous request for this exact
     // stop already committed the visit. Report it the same idempotent way,
@@ -186,6 +246,21 @@ export async function checkInStopWithGps(
     };
   }
 
+
+  /*
+   * The check-in is now a fact: the stop row has been written, which means every
+   * ownership, stay, day, order, method, evidence and eligibility rule passed.
+   * Only here does it become permanent history — so a refused check-in cannot
+   * create a visit or a badge, by construction rather than by a flag.
+   *
+   * A stop whose Place has since been deleted has nothing to record against; the
+   * stop snapshot keeps the plan readable, but there is no canonical Place to say
+   * the guest has been to.
+   */
+  const visitOutcome = stop.placeId
+    ? await d.recordVerifiedVisit({ userId: input.userId, placeId: stop.placeId, method: "gps", now })
+    : null;
+
   const freshStops = await d.listItineraryStops(day.id);
   return {
     ok: true,
@@ -193,5 +268,6 @@ export async function checkInStopWithGps(
     nextStop: firstUnvisitedStop(freshStops),
     dayCompleted: updated.dayCompleted,
     alreadyVisited: false,
+    unlockedAchievement: visitOutcome?.unlockedAchievement ?? null,
   };
 }

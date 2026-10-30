@@ -1,4 +1,5 @@
 import { distanceMeters, type LatLng } from "@/lib/geo";
+import { effectiveMaxDistanceMeters } from "./preference-ranking";
 import type { Place, PlaceCategory } from "@/db/schema";
 import type { EligiblePlace } from "@/services/eligibility/rules";
 
@@ -27,6 +28,11 @@ export type BuildCandidatesInput = {
   eligiblePlaces: readonly EligiblePlace[];
   /** The user's selected categories (user_preferences.categories). Empty means no eligible candidates — never a silently-invented fallback. */
   selectedCategories: readonly PlaceCategory[];
+  /**
+   * The guest's own distance preference. It can only narrow the 5,000 m cap: a value above it
+   * (or none) leaves the cap as is.
+   */
+  preferredMaxDistanceMeters?: number | null;
 };
 
 /**
@@ -38,6 +44,7 @@ export type BuildCandidatesInput = {
  */
 export function buildCandidates(input: BuildCandidatesInput): AdvisorCandidate[] {
   const { hotelLocation, hotelPlaceId, eligiblePlaces, selectedCategories } = input;
+  const maxDistance = effectiveMaxDistanceMeters(input.preferredMaxDistanceMeters ?? null, MAX_CANDIDATE_DISTANCE_METERS);
 
   // A Set of zero categories correctly yields zero candidates below — no
   // special-casing "empty preferences" is needed.
@@ -50,7 +57,7 @@ export function buildCandidates(input: BuildCandidatesInput): AdvisorCandidate[]
     if (!selected.has(place.category)) continue;
 
     const distance = distanceMeters(hotelLocation, { lat: place.latitude, lng: place.longitude });
-    if (distance > MAX_CANDIDATE_DISTANCE_METERS) continue;
+    if (distance > maxDistance) continue;
 
     candidates.push({
       place,

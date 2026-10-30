@@ -1,9 +1,19 @@
-import type { CheckInMethod, Hotel, ItineraryDay, ItineraryStop, Place } from "@/db/schema";
-import { calculateDayNumber } from "./stay-day";
+import type { Achievement, CheckInMethod, Hotel, ItineraryDay, ItineraryStop, Place } from "@/db/schema";
+import type { RecordVisitResult } from "@/db/operations/place-visits";
+import { calculateDayNumber, stayEndFor } from "./stay-day";
 import { firstUnvisitedStop } from "./check-in";
+import { isCheckInMethodAllowed, wrongCheckInMethodMessage } from "./check-in-method";
 import { evaluateDayCheckIn, evaluatePendingStops, isAvailable, loadDefaultAvailabilityContext, type AvailabilityContextLoader } from "./stop-availability";
 
-export type QrCheckInFailureReason = "invalid_qr" | "no_active_itinerary" | "place_not_next" | "stop_unavailable" | "wrong_day";
+export type QrCheckInFailureReason =
+  | "invalid_qr"
+  | "no_active_itinerary"
+  | "place_not_next"
+  | "stop_unavailable"
+  | "wrong_day"
+  | "wrong_check_in_method"
+  /** Too many failed attempts in the window. Deliberately indistinguishable from any other refusal. */
+  | "rate_limited";
 
 export type QrCheckInResult =
   | {
@@ -13,6 +23,8 @@ export type QrCheckInResult =
       dayCompleted: boolean;
       /** True when the stop was already visited before this scan — no DB write happened, reported idempotently rather than as an error. */
       alreadyVisited: boolean;
+      /** Set only on the arrival that EARNED a badge, so the celebration cannot repeat. Null otherwise. */
+      unlockedAchievement?: Achievement | null;
     }
   | {
       ok: false;
@@ -32,11 +44,25 @@ type ActiveHotelStay = {
 };
 
 export type QrCheckInDependencies = {
-  findPlaceByQrToken: (qrToken: string) => Promise<Place | null>;
+  /**
+   * Scanned text -> the Place that credential was issued for, or null. Resolution
+   * happens entirely server-side through services/qr: the token is hashed, looked
+   * up, and checked for purpose, revocation and expiry. A hotel-entry credential
+   * never resolves here, and a Place id supplied by the client is not proof of a scan.
+   */
+  findPlaceByCheckInCredential: (scanned: string, now: Date) => Promise<Place | null>;
   findActiveStayForUser: (userId: string) => Promise<ActiveHotelStay | null>;
   findItineraryDay: (userId: string, hotelId: string, dayNumber: number) => Promise<ItineraryDay | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
-  markStopVisited: (stopId: string, dayId: string, checkInMethod: CheckInMethod) => Promise<{ stop: ItineraryStop; dayCompleted: boolean } | null>;
+  /** Records the visit only. The stop's saved checkInMethod is the requirement and is never rewritten by a check-in. */
+  markStopVisited: (stopId: string, dayId: string) => Promise<{ stop: ItineraryStop; dayCompleted: boolean } | null>;
+  /** Turns an accepted check-in into permanent history. Called only AFTER the stop write has succeeded. */
+  recordVerifiedVisit: (input: {
+    userId: string;
+    placeId: string;
+    method: CheckInMethod;
+    now: Date;
+  }) => Promise<RecordVisitResult>;
   /** Re-evaluates eligibility server-side from the authenticated guest's own stay. Called early (to decide) and again immediately before the write. */
   loadAvailabilityContext: AvailabilityContextLoader;
 };
@@ -45,17 +71,30 @@ export type QrCheckInDependencies = {
 // services/* boundary in Atlas (see check-in.ts / generate-itinerary.ts for
 // the full rationale): db/queries/* modules start with `import "server-only"`.
 async function loadDefaultDependencies(): Promise<QrCheckInDependencies> {
-  const [placesQ, hotelStaysQ, itineraryQ] = await Promise.all([
+  const [placesQ, hotelStaysQ, itineraryQ, credentialsQ, visitsQ, qrService] = await Promise.all([
     import("@/db/queries/places"),
     import("@/db/queries/hotel-stays"),
     import("@/db/queries/itinerary"),
+    import("@/db/queries/qr-credentials"),
+    import("@/db/queries/place-visits"),
+    import("@/services/qr"),
   ]);
   return {
-    findPlaceByQrToken: placesQ.findPlaceByQrToken,
+    findPlaceByCheckInCredential: async (scanned, now) => {
+      const resolution = await qrService.resolveScannedQrToken(
+        scanned,
+        "place_check_in",
+        credentialsQ.findQrCredentialByHash,
+        now
+      );
+      if (!resolution.ok || !resolution.credential.placeId) return null;
+      return placesQ.findPlaceById(resolution.credential.placeId);
+    },
     findActiveStayForUser: hotelStaysQ.findActiveStayForUser,
     findItineraryDay: itineraryQ.findItineraryDay,
     listItineraryStops: itineraryQ.listItineraryStops,
     markStopVisited: itineraryQ.markStopVisited,
+    recordVerifiedVisit: visitsQ.recordVerifiedVisit,
     loadAvailabilityContext: loadDefaultAvailabilityContext,
   };
 }
@@ -81,7 +120,7 @@ export async function checkInStopWithQr(
     return { ok: false, reason: "invalid_qr", message: "Invalid QR code." };
   }
 
-  const place = await d.findPlaceByQrToken(trimmedToken);
+  const place = await d.findPlaceByCheckInCredential(trimmedToken, now);
   if (!place) {
     return { ok: false, reason: "invalid_qr", message: "Invalid QR code." };
   }
@@ -91,7 +130,7 @@ export async function checkInStopWithQr(
     return { ok: false, reason: "no_active_itinerary", message: "You don't have an active itinerary to check in against." };
   }
 
-  const dayNumberResult = calculateDayNumber(stay.checkIn, stay.checkOut, now);
+  const dayNumberResult = calculateDayNumber(stay.checkIn, stayEndFor(stay), now);
   if (!dayNumberResult.ok) {
     return { ok: false, reason: "no_active_itinerary", message: "You don't have an active itinerary to check in against." };
   }
@@ -118,6 +157,16 @@ export async function checkInStopWithQr(
       nextStop: firstUnvisitedStop(stops),
       dayCompleted: stops.every((stop) => stop.visitedAt !== null),
       alreadyVisited: true,
+    };
+  }
+
+  // The stop's SAVED method decides how it may be completed. A GPS-verified stop is not
+  // completable by presenting a code, just as a QR stop is not completable by standing nearby.
+  if (!isCheckInMethodAllowed(matchingStop.checkInMethod, "qr")) {
+    return {
+      ok: false,
+      reason: "wrong_check_in_method",
+      message: wrongCheckInMethodMessage(matchingStop.checkInMethod),
     };
   }
 
@@ -171,7 +220,7 @@ export async function checkInStopWithQr(
     };
   }
 
-  const updated = await d.markStopVisited(matchingStop.id, day.id, "qr");
+  const updated = await d.markStopVisited(matchingStop.id, day.id);
   if (!updated) {
     // Lost a concurrent race — another simultaneous scan already committed the visit.
     const freshStops = await d.listItineraryStops(day.id);
@@ -185,6 +234,16 @@ export async function checkInStopWithQr(
     };
   }
 
+  /*
+   * The check-in is now a fact: the stop row has been written, which means every
+   * ownership, stay, day, order, method, credential and eligibility rule passed.
+   * Only here does it become permanent history, so a refused scan cannot create a
+   * visit or a badge.
+   */
+  const visitOutcome = matchingStop.placeId
+    ? await d.recordVerifiedVisit({ userId: input.userId, placeId: matchingStop.placeId, method: "qr", now })
+    : null;
+
   const freshStops = await d.listItineraryStops(day.id);
   return {
     ok: true,
@@ -192,5 +251,6 @@ export async function checkInStopWithQr(
     nextStop: firstUnvisitedStop(freshStops),
     dayCompleted: updated.dayCompleted,
     alreadyVisited: false,
+    unlockedAchievement: visitOutcome?.unlockedAchievement ?? null,
   };
 }

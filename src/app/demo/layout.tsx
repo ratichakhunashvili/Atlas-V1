@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { shouldBlockDevelopmentOnlyPath } from "@/lib/development-route-policy";
 
 export const metadata = {
   title: "Atlas demo",
@@ -7,6 +9,8 @@ export const metadata = {
 };
 
 export default function DemoLayout({ children }: { children: ReactNode }) {
+  if (shouldBlockDevelopmentOnlyPath("/demo", process.env.NODE_ENV, process.env.ATLAS_DEPLOYMENT_ENV)) notFound();
+
   return (
     // Explicit light palette: globals.css switches body text to near-white under prefers-color-scheme: dark,
     // which would make dark-on-white cards unreadable here. The demo is a light-only prototype for now.

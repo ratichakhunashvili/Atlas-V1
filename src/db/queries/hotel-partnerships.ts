@@ -1,8 +1,9 @@
 import "server-only";
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { PG_UNIQUE_VIOLATION, hasPgErrorCode } from "@/db/errors";
-import { hotelPartnerships, places, type HotelPartnership, type PartnershipStatus } from "@/db/schema";
+import { hotelPartnerships, hotels, places, type HotelPartnership, type PartnershipStatus } from "@/db/schema";
 import type { PartnershipRow } from "@/services/eligibility/rules";
 
 const PARTNERSHIP_ROW_COLUMNS = {
@@ -92,3 +93,32 @@ export async function placeHasPartnershipRows(placeId: string): Promise<boolean>
   const [row] = await db.select({ id: hotelPartnerships.id }).from(hotelPartnerships).where(eq(hotelPartnerships.placeId, placeId)).limit(1);
   return row !== undefined;
 }
+
+/**
+ * Every partnership across every hotel, with both sides named.
+ *
+ * The per-hotel view answers "who has this hotel approved?"; this answers the
+ * question an admin actually asks when a partner calls — "where does this place
+ * stand, everywhere?" — without them opening each hotel in turn.
+ *
+ * Read-only and admin-only. It changes no eligibility rule: a guest still only
+ * ever sees their own hotel's active, confirmed, in-window rows.
+ */
+export async function listAllPartnershipsForAdmin() {
+  const hotelAnchorPlace = alias(places, "hotel_anchor_place");
+
+  return db
+    .select({
+      partnership: hotelPartnerships,
+      place: places,
+      hotelId: hotels.id,
+      hotelName: hotelAnchorPlace.name,
+    })
+    .from(hotelPartnerships)
+    .innerJoin(places, eq(hotelPartnerships.placeId, places.id))
+    .innerJoin(hotels, eq(hotelPartnerships.hotelId, hotels.id))
+    .innerJoin(hotelAnchorPlace, eq(hotels.placeId, hotelAnchorPlace.id))
+    .orderBy(places.name, hotelAnchorPlace.name);
+}
+
+export type AdminPartnershipAcrossHotels = Awaited<ReturnType<typeof listAllPartnershipsForAdmin>>[number];

@@ -61,6 +61,44 @@ describe("no guest-facing code can read Places without eligibility", () => {
       "db/queries/hotel-stays.ts",
       "db/queries/hotel-partnerships.ts",
       "db/queries/hotel-facilities.ts",
+      // Reads a hotel event's venue Place for its NAME in the admin list. Events are
+      // hotel-scoped and their venue must pass ordinary eligibility before the
+      // Advisor will use one (services/advisor/hotel-events.ts).
+      "db/queries/hotel-events.ts",
+      // Reads one hotel's Place for its NAME, to ask "switch to <hotel>?". It
+      // resolves no recommendations and returns no Place to a guest-facing list.
+      "db/operations/pending-hotel-switches.ts",
+      /*
+       * Joins places for a model's ANCHOR COORDINATES. It cannot widen eligibility:
+       * listModelsForPlaces takes an explicit list of already-eligible Place ids and
+       * returns nothing for an empty list, so it can only ever narrow what the caller
+       * had already resolved. Pinned by the assertions below.
+       */
+      "db/queries/place-models.ts",
+      // Reads a Place NAME for the admin badge listing. Admin-only, hands no Place to
+      // a guest, and decides no eligibility.
+      "db/operations/achievements.ts",
+      /*
+       * Joins places for a Place NAME in the ADMIN listing of AR targets only. It
+       * resolves no recommendations, returns no Place to a guest, and decides no
+       * eligibility: an AR check-in looks its target up by the placeId of a stop the
+       * guest's own itinerary already contains, which eligibility has already
+       * decided. Pinned by services/ar/target-exposure.test.ts, which additionally
+       * proves the reference hash never leaves the server.
+       */
+      "db/queries/place-ar-targets.ts",
+      /*
+       * ADMIN dashboard review queue: joins places for the NAME of a pending partnership's Place so an admin can
+       * open the right hotel. Admin-only (the page sits under the admin layout), returns no Place to a guest and
+       * decides no eligibility.
+       */
+      "db/queries/admin-metrics.ts",
+      /*
+       * ADMIN guest-support lookup: joins places for the NAME of the hotel a guest is staying at. Behind
+       * requireAdmin(), audited, exact-email only, and it returns no Place list, coordinates or stop names.
+       * Pinned by db/guest-support.pglite.test.ts.
+       */
+      "db/operations/guest-support.ts",
     ]);
     const users = files.filter((f) => /\.(from|innerJoin|leftJoin)\(places\b/.test(f.text) && !f.path.endsWith(".test.ts"));
     for (const f of users) assert.ok(allowed.has(f.path), `${f.path} reads the places table directly; route guest reads through services/eligibility`);
@@ -182,5 +220,40 @@ describe("migration 0003 (place publication / verification) is additive and cons
     assert.match(sql, /places_published_requires_date_check/);
     assert.match(sql, /places_verified_requires_date_check/);
     assert.match(sql, /places_archived_not_published_check/);
+  });
+});
+
+describe("3D models stay behind the eligibility boundary", () => {
+  const read = (path: string) => readFileSync(join(SRC, path), "utf8");
+
+  test("the guest model service resolves eligibility BEFORE asking for any model", () => {
+    const service = read("services/map3d/index.ts");
+
+    // Eligible ids first, and an empty set short-circuits without touching models.
+    assert.match(service, /const eligiblePlaceIds = await d\.listEligiblePlaceIds\(userId, now\)/);
+    assert.match(service, /if \(eligiblePlaceIds\.length === 0\) return \[\]/);
+    assert.match(service, /getEligibleMapPlacesForGuest/);
+  });
+
+  test("the model query can only narrow an already-eligible list, never widen it", () => {
+    const query = read("db/queries/place-models.ts");
+
+    // It takes ids; it does not go and find its own.
+    assert.match(query, /export async function listModelsForPlaces\(placeIds: readonly string\[\]\)/);
+    assert.match(query, /if \(placeIds\.length === 0\) return \[\]/);
+    assert.match(query, /inArray\(placeModels\.placeId/);
+  });
+
+  test("lock state comes from permanent visits, never from itinerary stops", () => {
+    // Comments stripped: the file explains what the unlock source is NOT, which is
+    // documentation rather than a dependency on it.
+    const guestModels = read("services/map3d/guest-models.ts")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    const service = read("services/map3d/index.ts");
+
+    assert.match(guestModels, /visitedPlaceIds\.has\(place\.id\)/);
+    assert.doesNotMatch(guestModels, /itinerary|visitedAt|completed/i, "stop completion is not the unlock source");
+    assert.match(service, /listPlaceVisitsForUser/);
   });
 });

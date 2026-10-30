@@ -14,7 +14,7 @@ export function HotelTable({ hotels }: { hotels: HotelWithPlace[] }) {
       <thead>
         <tr className="text-left text-slate-500">
           <th className="py-2">Place</th>
-          <th className="py-2">QR token</th>
+          <th className="py-2">Hotel entry QR</th>
           <th className="py-2" />
         </tr>
       </thead>
@@ -22,7 +22,9 @@ export function HotelTable({ hotels }: { hotels: HotelWithPlace[] }) {
         {hotels.map((hotel) => (
           <tr key={hotel.id}>
             <td className="py-2 font-medium text-slate-900">{hotel.place.name}</td>
-            <td className="py-2 font-mono text-xs text-slate-500">{hotel.qrToken}</td>
+            <td className="py-2 text-xs text-slate-500">
+              {hotel.entryCredentialIssuedAt ? "Issued (secret stored hashed)" : "Not issued"}
+            </td>
             <td className="space-x-2 py-2 text-right">
               <Link href={`/admin/hotels/${hotel.id}`} className="text-slate-700 underline">
                 Edit
