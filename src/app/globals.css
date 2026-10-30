@@ -246,3 +246,81 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 .atlas-app .atlas-dark :focus-visible {
   outline-color: var(--color-atlas-beige);
 }
+
+/* Navigation geometry for the guest app: the phone bottom bar, or the wide-layout rail. */
+:root {
+  --atlas-nav-h: calc(96px + env(safe-area-inset-bottom));
+  --atlas-rail-w: 0px;
+  --atlas-panel-w: max(260px, min(400px, calc(100vw - 88px - 200px)));
+}
+
+@media (min-width: 768px), (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --atlas-nav-h: 0px;
+    --atlas-rail-w: calc(88px + env(safe-area-inset-left));
+  }
+}
+
+.atlas-app:has(.atlas-rail) {
+  padding-left: var(--atlas-rail-w);
+}
+
+.atlas-app .atlas-light :focus-visible {
+  outline-color: var(--color-atlas-teal);
+}
+
+.atlas-scroll-fade {
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+.atlas-app dialog::backdrop {
+  background: rgb(29 41 41 / 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-app *,
+  .atlas-app *::before,
+  .atlas-app *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.atlas-map .mapboxgl-ctrl-bottom-left,
+.atlas-map .mapboxgl-ctrl-bottom-right {
+  bottom: var(--atlas-map-inset, 0px);
+}
+
+.atlas-map .mapboxgl-ctrl-bottom-left {
+  left: var(--atlas-map-left-inset, 0px);
+}
+
+.atlas-plan-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .atlas-plan-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-areas:
+      "head aside"
+      "list aside";
+    align-items: start;
+    column-gap: 32px;
+  }
+  .atlas-plan-grid > [data-area="head"] {
+    grid-area: head;
+  }
+  .atlas-plan-grid > [data-area="aside"] {
+    grid-area: aside;
+    position: sticky;
+    top: 20px;
+  }
+  .atlas-plan-grid > [data-area="list"] {
+    grid-area: list;
+  }
+}
