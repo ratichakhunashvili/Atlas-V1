@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { findPreferencesForUser, upsertPreferences } from "@/db/queries/preferences";
 import { requireUser } from "@/lib/authorization";
-import { finishCurrentForTesting, pickChoiceForUser, startDayForUser, type StartDayResult } from "@/services/advisor/daily-plan";
+import { simulateScanForTesting, pickChoiceForUser, startDayForUser, type StartDayResult } from "@/services/advisor/daily-plan";
 import { removeUnavailableStopForUser } from "@/services/advisor/plan-repair";
 import { INTERESTS, budgetForPriceLabel, categoriesForInterests, minutesForTimeLabel, type Interest } from "./interests";
 import { isTestFinishAllowed } from "./test-finish";
@@ -93,9 +93,10 @@ const placeIdSchema = z.string().uuid();
 export async function pickChoiceAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const placeId = placeIdSchema.safeParse(formData.get("placeId"));
-  const result = placeId.success ? await pickChoiceForUser(user.id, placeId.data) : { ok: false as const };
+  const result = placeId.success ? await pickChoiceForUser(user.id, placeId.data) : { ok: false as const, reason: "not_offered" as const };
   revalidatePath("/plan");
-  redirect(result.ok ? "/plan" : "/plan?notice=pick-failed");
+  // "busy": a pick is already in place (a double tap, or another tab) — show it, not an error.
+  redirect(result.ok || result.reason === "busy" || result.reason === "not_choosing" ? "/plan" : "/plan?notice=pick-failed");
 }
 
 /** The picked place is no longer available through the hotel: drop it (kept as history) and choose again. */
@@ -107,11 +108,11 @@ export async function chooseAgainAction(formData: FormData): Promise<void> {
   redirect("/plan");
 }
 
-/** TEMPORARY, test environments only: mark the current activity done until real check-in is connected. */
-export async function finishForTestingAction(): Promise<void> {
+/** Test environments only: a simulated scan of the current activity — the real visit + badge unlock, no QR/location. */
+export async function simulateScanAction(): Promise<void> {
   const user = await requireUser();
   if (!(await isTestFinishAllowed(user.id))) redirect("/plan");
-  await finishCurrentForTesting(user.id);
+  const result = await simulateScanForTesting(user.id);
   revalidatePath("/plan");
-  redirect("/plan");
+  redirect(result.ok ? `/plan/unlocked?stop=${result.stopId}` : "/plan");
 }

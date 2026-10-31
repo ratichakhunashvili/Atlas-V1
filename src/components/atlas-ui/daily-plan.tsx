@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { chooseAgainAction, finishForTestingAction, pickChoiceAction } from "@/features/plan/actions";
+import { chooseAgainAction, pickChoiceAction } from "@/features/plan/actions";
 import type { DailyChoice } from "@/services/advisor/daily-choices";
 import type { DailyPlanState, DailyStopView } from "@/services/advisor/daily-plan";
 import { AtlasAsset, AtlasIcon } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
+import { CheckInPanel } from "./check-in-panel";
 import { PlanSegment } from "./missions-chrome";
+import { PendingSubmit } from "./pending-submit";
 import { type } from "./ui";
 
 /*
@@ -118,31 +120,15 @@ function CurrentRow({ state, testFinish }: { state: Extract<Started, { status: "
       <div className="flex w-full flex-col items-start gap-[8px] rounded-[14px] border-2 border-atlas-teal p-[12px]">
         <div className="flex w-full items-center justify-between gap-[8px]">
           <p className="min-w-0 font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">{current.name}</p>
-          <span className="shrink-0 font-manrope text-[12px] font-semibold leading-[16px] text-atlas-teal">Now</span>
+          <span className="shrink-0 font-manrope text-[12px] font-semibold leading-[16px] text-atlas-teal">Go here now</span>
         </div>
         <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">
           {label(current.category)} · about {duration(current.visitMinutes)} there
         </p>
         <p className="font-manrope text-[13px] leading-[18px] text-atlas-ink">
-          Check in when you arrive ({current.checkInMethod === "qr" ? "scan the place's Atlas code" : "with your location"}) and
-          your next three options appear.
+          When you get there, scan the place&apos;s Atlas QR code or check in with your location to unlock its achievement.
         </p>
-        <span
-          aria-disabled="true"
-          className="flex h-[44px] w-full items-center justify-center rounded-[12px] bg-atlas-beige font-manrope text-[14px] font-semibold text-atlas-slate"
-        >
-          Check-in is coming soon
-        </span>
-        {testFinish ? (
-          <form action={finishForTestingAction} className="w-full">
-            <button
-              type="submit"
-              className="flex h-[44px] w-full items-center justify-center rounded-[12px] border border-dashed border-atlas-slate font-manrope text-[14px] font-semibold text-atlas-ink"
-            >
-              I&apos;ve finished this (test only)
-            </button>
-          </form>
-        ) : null}
+        <CheckInPanel stopId={current.id} placeName={current.name} testScan={testFinish} />
       </div>
     </Row>
   );
@@ -184,15 +170,15 @@ function ChoiceCard({ choice }: { choice: DailyChoice }) {
           </p>
         ) : null}
         <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">{meta.join(" · ")}</p>
-        <button
-          type="submit"
-          aria-label={`Choose ${choice.name}`}
+        <PendingSubmit
+          pendingLabel="Choosing…"
+          ariaLabel={`Choose ${choice.name}`}
           className={`flex w-full items-center justify-center rounded-[12px] font-manrope font-semibold ${
             big ? "h-[52px] bg-atlas-teal text-[16px] text-atlas-paper" : "h-[44px] border border-atlas-teal text-[14px] text-atlas-teal"
           }`}
         >
           Choose this
-        </button>
+        </PendingSubmit>
       </form>
     </li>
   );

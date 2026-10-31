@@ -62,3 +62,14 @@ export async function updateAchievement(
 
   return updated ?? null;
 }
+
+/**
+ * Every place in the daily plan unlocks a badge. If an admin hasn't made one yet, a plain default is created
+ * ("Visited <place>"), which the admin can rename or give an image later. Never overwrites an existing badge.
+ */
+export async function ensureDefaultAchievementForPlace(input: { placeId: string; placeName: string }): Promise<void> {
+  await db
+    .insert(achievements)
+    .values({ placeId: input.placeId, name: `Visited ${input.placeName}`, description: null, badgeImageUrl: null })
+    .onConflictDoNothing({ target: achievements.placeId });
+}

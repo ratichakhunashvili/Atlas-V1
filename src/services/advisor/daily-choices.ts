@@ -21,8 +21,6 @@ import { resolveVisitDuration } from "./visit-duration";
 export const CHOICES_PER_STEP = 3;
 export const MAX_DAILY_ACTIVITIES = 4;
 
-/** Landmark/historical places are checked in with a scan, as in the full-day planner. */
-const QR_CHECK_IN_CATEGORIES: readonly PlaceCategory[] = ["landmark", "historical"];
 
 export type DailyChoice = {
   placeId: string;
@@ -59,10 +57,8 @@ export type BuildDailyChoicesInput = {
   usageHistory: UsageHistory;
 };
 
-export function checkInMethodFor(source: EligibilitySource, category: PlaceCategory): CheckInMethod {
-  if (source === "partner") return "qr";
-  return QR_CHECK_IN_CATEGORIES.includes(category) ? "qr" : "gps";
-}
+/** Every daily-plan stop is completed by the place's QR code OR the guest's location (the guest's choice). */
+export const DAILY_CHECK_IN_METHOD: CheckInMethod = "qr_or_gps";
 
 function toChoice(candidate: AdvisorCandidate, entry: EligiblePlace, origin: LatLng, hotelLocation: LatLng): DailyChoice {
   const { place } = candidate;
@@ -79,7 +75,7 @@ function toChoice(candidate: AdvisorCandidate, entry: EligiblePlace, origin: Lat
     imageUrl: place.imageUrl,
     latitude: place.latitude,
     longitude: place.longitude,
-    checkInMethod: checkInMethodFor(entry.source, place.category),
+    checkInMethod: DAILY_CHECK_IN_METHOD,
     walkMinutes: Math.round(estimateWalkMinutes(origin, at)),
     visitMinutes: resolveVisitDuration(place).minutes,
     returnWalkMinutes: Math.round(estimateWalkMinutes(at, hotelLocation)),

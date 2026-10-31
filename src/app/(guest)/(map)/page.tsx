@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { LiveMissionsMap } from "@/components/atlas-ui/map/live-missions-map";
 import { AtlasButton, AtlasField, type } from "@/components/atlas-ui/ui";
 import { findCurrentStayForUser } from "@/db/queries/hotel-stays";
@@ -6,6 +7,7 @@ import { checkInToHotelFormAction } from "@/features/hotel-stays/actions";
 import { enterTestStayFormAction } from "@/features/test-entry/actions";
 import { isTestEntryOffered } from "@/features/test-entry/offer";
 import { requireUser } from "@/lib/authorization";
+import { getDailyPlanForUser } from "@/services/advisor/daily-plan";
 import { getEligibleMapPlacesForGuest } from "@/services/eligibility";
 
 /*
@@ -75,6 +77,9 @@ export default async function HomePage({
       </section>
     );
   }
+
+  // Preferences come first, every day: until today's time and interests are set, there is nothing to show yet.
+  if ((await getDailyPlanForUser(user.id)).status === "not_started") redirect("/preferences");
 
   return (
     <LiveMissionsMap

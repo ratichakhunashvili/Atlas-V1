@@ -81,14 +81,20 @@ export type DailyPlanDependencies = {
       visitDurationMinutes: number;
     };
   }) => Promise<{ ok: true; stop: ItineraryStop } | { ok: false; reason: "busy" | "limit" }>;
+  /** Every daily-plan place unlocks a badge: creates a default one if the admin hasn't made one. */
+  ensureDefaultAchievement: (input: { placeId: string; placeName: string }) => Promise<void>;
+  /** TEST ONLY path (simulated scan): the same visit + unlock recording a real check-in performs. */
   markStopVisited: (stopId: string, dayId: string) => Promise<unknown>;
+  recordVerifiedVisit: (input: { userId: string; placeId: string; method: CheckInMethod; now: Date }) => Promise<unknown>;
 };
 
 async function loadDefaultDependencies(): Promise<DailyPlanDependencies> {
-  const [eligibilityM, preferencesQ, itineraryQ] = await Promise.all([
+  const [eligibilityM, preferencesQ, itineraryQ, achievementsQ, visitsQ] = await Promise.all([
     import("@/services/eligibility"),
     import("@/db/queries/preferences"),
     import("@/db/queries/itinerary"),
+    import("@/db/queries/achievements"),
+    import("@/db/queries/place-visits"),
   ]);
   return {
     resolveGuestHotelContext: (userId, now) => eligibilityM.resolveGuestHotelContext(userId, now),
@@ -99,7 +105,9 @@ async function loadDefaultDependencies(): Promise<DailyPlanDependencies> {
     getStopUsageHistory: itineraryQ.getStopUsageHistory,
     createEmptyItineraryDay: itineraryQ.createEmptyItineraryDay,
     appendPickedStop: itineraryQ.appendPickedStop,
+    ensureDefaultAchievement: achievementsQ.ensureDefaultAchievementForPlace,
     markStopVisited: itineraryQ.markStopVisited,
+    recordVerifiedVisit: visitsQ.recordVerifiedVisit,
   };
 }
 
@@ -282,6 +290,8 @@ export async function pickChoiceForUser(
   const choice = state.choices.find((option) => option.placeId === placeId);
   if (!choice) return { ok: false, reason: "not_offered" };
 
+  await d.ensureDefaultAchievement({ placeId: choice.placeId, placeName: choice.name });
+
   const appended = await d.appendPickedStop({
     dayId: state.dayId,
     maxActivities: MAX_DAILY_ACTIVITIES,
@@ -300,18 +310,20 @@ export async function pickChoiceForUser(
 }
 
 /**
- * TEST ONLY: marks the current activity as done so the next options can be tried before real check-in exists.
+ * TEST ONLY: a simulated scan. Completes the current activity the way a real check-in does — the stop is marked
+ * visited, then the visit is recorded and the place's badge unlocked — without the QR code or location step.
  * The caller (a server action) must refuse this outside allowed non-production environments.
  */
-export async function finishCurrentForTesting(
+export async function simulateScanForTesting(
   userId: string,
   now: Date = new Date(),
   deps?: DailyPlanDependencies
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: true; stopId: string } | { ok: false }> {
   const d = deps ?? (await loadDefaultDependencies());
   const state = await getDailyPlanForUser(userId, now, d);
-  if (state.status !== "in_progress" || !state.currentAvailable) return { ok: false };
-  await d.markStopVisited(state.current.id, state.dayId);
-  return { ok: true };
+  if (state.status !== "in_progress" || !state.currentAvailable || !state.current.placeId) return { ok: false };
+  const marked = await d.markStopVisited(state.current.id, state.dayId);
+  if (!marked) return { ok: false };
+  await d.recordVerifiedVisit({ userId, placeId: state.current.placeId, method: "qr", now });
+  return { ok: true, stopId: state.current.id };
 }
-

@@ -155,6 +155,13 @@
       "when": 1793459357924,
       "tag": "0021_partnership_featured_offer",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793460668434,
+      "tag": "0022_check_in_qr_or_gps",
+      "breakpoints": true
     }
   ]
 }

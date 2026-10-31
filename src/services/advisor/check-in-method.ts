@@ -55,6 +55,9 @@ export function isCheckInMethodAllowed(saved: CheckInMethod, attempted: Attempte
     // The credential is the requirement. Nothing substitutes for it.
     case "qr":
       return attempted === "qr";
+    // The daily plan: the QR code OR the location, each verified in full. The camera match is GPS plus more.
+    case "qr_or_gps":
+      return attempted === "qr" || attempted === "gps" || attempted === "ar";
     // The camera match is the requirement; standing nearby is not enough.
     case "ar":
       return attempted === "ar";
@@ -73,6 +76,8 @@ export function wrongCheckInMethodMessage(saved: CheckInMethod): string {
       return "This stop is confirmed by scanning its QR code when you arrive.";
     case "ar":
       return "This stop is confirmed by pointing your camera at it when you arrive.";
+    case "qr_or_gps":
+      return "Check in by scanning the place's QR code or with your location when you arrive.";
     default:
       return "This stop is confirmed by your location when you arrive, not by a QR code.";
   }

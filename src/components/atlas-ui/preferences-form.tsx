@@ -87,13 +87,15 @@ export function PreferencesForm({
         {editing ? null : <Building hotelName={hotelName} />}
         <div className="mx-auto flex w-full max-w-[640px] flex-1 flex-col items-start gap-[22px] px-[16px] pb-[24px] pt-[calc(16px+env(safe-area-inset-top))]">
           <div className="flex w-full items-center gap-[8px]">
-            <Link
-              href={editing ? "/plan" : "/"}
-              aria-label="Back"
-              className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] border border-atlas-beige"
-            >
-              <AtlasIcon src="/atlas-ui/icon-back.svg" size={18} />
-            </Link>
+            {editing ? (
+              <Link
+                href="/plan"
+                aria-label="Back"
+                className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] border border-atlas-beige"
+              >
+                <AtlasIcon src="/atlas-ui/icon-back.svg" size={18} />
+              </Link>
+            ) : null}
             <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">{editing ? "My plan" : hotelName}</p>
           </div>
 
@@ -102,7 +104,7 @@ export function PreferencesForm({
             <p className={`w-full ${type.body} text-atlas-slate`}>
               {editing
                 ? "Changes apply to your next plan. Today's plan stays as it is."
-                : `We'll offer you three things to do at a time, from ${hotelName} and the places it has approved. Up to four a day.`}
+                : `First, tell us about today. We'll offer you three things to do at a time, from ${hotelName} and the places it has approved — up to four a day.`}
             </p>
           </div>
 
@@ -148,12 +150,14 @@ export function PreferencesForm({
         <div className="sticky bottom-0 z-10 border-t border-atlas-beige bg-atlas-paper">
           <div className="mx-auto flex w-full max-w-[640px] flex-col items-start gap-[6px] px-[16px] pb-[calc(20px+env(safe-area-inset-bottom))] pt-[12px] short:flex-row short:items-center short:pb-[calc(10px+env(safe-area-inset-bottom))] short:pt-[10px]">
             <Submit>{editing ? "Save changes" : "Plan my time"}</Submit>
-            <Link
-              href={editing ? "/plan" : "/"}
-              className="flex h-[44px] w-full shrink-0 items-center justify-center font-manrope text-[15px] font-semibold leading-[20px] text-atlas-teal short:w-auto short:px-[12px]"
-            >
-              {editing ? "Cancel" : "Just show me places"}
-            </Link>
+            {editing ? (
+              <Link
+                href="/plan"
+                className="flex h-[44px] w-full shrink-0 items-center justify-center font-manrope text-[15px] font-semibold leading-[20px] text-atlas-teal short:w-auto short:px-[12px]"
+              >
+                Cancel
+              </Link>
+            ) : null}
           </div>
         </div>
       </form>

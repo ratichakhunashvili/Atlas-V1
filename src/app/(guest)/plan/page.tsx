@@ -17,5 +17,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ n
   const user = await requireUser();
   const [{ notice }, state, testFinish] = await Promise.all([searchParams, getDailyPlanForUser(user.id), isTestFinishAllowed(user.id)]);
   if (state.status === "no_stay") redirect("/");
+  // Preferences come first, every day.
+  if (state.status === "not_started") redirect("/preferences");
   return <DailyPlanScreen state={state} testFinish={testFinish} notice={notice} />;
 }

@@ -207,7 +207,7 @@ export type PositionEvidence = Coordinates & {
 };
 
 /** One-shot position request for callers that don't want a live subscription. Independent of start()/the watch. */
-export function getCurrentPosition(): Promise<PositionEvidence> {
+export function getCurrentPosition(options: { fresh?: boolean } = {}): Promise<PositionEvidence> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
       reject(new Error("Geolocation is not supported in this browser."));
@@ -221,7 +221,8 @@ export function getCurrentPosition(): Promise<PositionEvidence> {
           capturedAtMs: position.timestamp,
         }),
       (error) => reject(new Error(error.message)),
-      FIRST_FIX_OPTIONS
+      // `fresh`: a check-in must use where the guest is NOW, not a reading cached from before they walked closer.
+      options.fresh ? { ...FIRST_FIX_OPTIONS, maximumAge: 0 } : FIRST_FIX_OPTIONS
     );
   });
 }

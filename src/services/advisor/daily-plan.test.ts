@@ -5,7 +5,7 @@ import type { GuestStay } from "@/services/eligibility";
 import type { EligiblePlace } from "@/services/eligibility/rules";
 import { MAX_DAILY_ACTIVITIES } from "./daily-choices";
 import {
-  finishCurrentForTesting,
+  simulateScanForTesting,
   getDailyPlanForUser,
   pickChoiceForUser,
   startDayForUser,
@@ -50,6 +50,8 @@ let eligibleByHotel: Record<string, EligiblePlace[]>;
 let preferences: Record<string, UserPreferences | null>;
 let days: ItineraryDay[];
 let stops: ItineraryStop[];
+let badges: Map<string, string>;
+let visits: string[];
 
 function deps(): DailyPlanDependencies {
   return {
@@ -97,10 +99,17 @@ function deps(): DailyPlanDependencies {
       stops.push(row);
       return { ok: true, stop: row };
     },
+    ensureDefaultAchievement: async ({ placeId, placeName }) => {
+      if (!badges.has(placeId)) badges.set(placeId, `Visited ${placeName}`);
+    },
     markStopVisited: async (stopId) => {
-      const stop = stops.find((s) => s.id === stopId);
-      if (stop) stop.visitedAt = NOW;
-      return null;
+      const stop = stops.find((s) => s.id === stopId && s.visitedAt === null);
+      if (!stop) return null;
+      stop.visitedAt = NOW;
+      return { stop, dayCompleted: false };
+    },
+    recordVerifiedVisit: async ({ placeId }) => {
+      visits.push(placeId);
     },
   };
 }
@@ -127,6 +136,8 @@ beforeEach(() => {
   };
   days = [];
   stops = [];
+  badges = new Map();
+  visits = [];
 });
 
 async function choicesFor(userId: string) {
@@ -211,11 +222,28 @@ describe("daily plan: the day's progress", () => {
     await startDayForUser(GUEST_A, 240, NOW, deps());
     const [first] = await choicesFor(GUEST_A);
     await pickChoiceForUser(GUEST_A, first, NOW, deps());
-    assert.deepEqual(await finishCurrentForTesting(GUEST_A, NOW, deps()), { ok: true });
+    const scanned = await simulateScanForTesting(GUEST_A, NOW, deps());
+    assert.equal(scanned.ok, true);
+    assert.deepEqual(visits, [first], "the visit is recorded like a real check-in");
 
     const next = await choicesFor(GUEST_A);
     assert.ok(next.length > 0);
     assert.ok(!next.includes(first));
+  });
+
+  it("gives every picked place a badge, creating a default when the admin hasn't made one", async () => {
+    badges.set(cafe.id, "Cafe regular");
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    const [first] = await choicesFor(GUEST_A);
+    await pickChoiceForUser(GUEST_A, first, NOW, deps());
+    assert.equal(badges.get(first), first === cafe.id ? "Cafe regular" : `Visited ${first}`);
+    assert.equal(badges.get(cafe.id), "Cafe regular", "an existing badge is never overwritten");
+  });
+
+  it("refuses a simulated scan when there is nothing to check in to", async () => {
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    assert.deepEqual(await simulateScanForTesting(GUEST_A, NOW, deps()), { ok: false });
+    assert.deepEqual(visits, []);
   });
 
   it("ends the day after four activities", async () => {
@@ -223,7 +251,7 @@ describe("daily plan: the day's progress", () => {
     for (let i = 0; i < MAX_DAILY_ACTIVITIES; i++) {
       const [choice] = await choicesFor(GUEST_A);
       await pickChoiceForUser(GUEST_A, choice, NOW, deps());
-      await finishCurrentForTesting(GUEST_A, NOW, deps());
+      await simulateScanForTesting(GUEST_A, NOW, deps());
     }
     const state = await getDailyPlanForUser(GUEST_A, NOW, deps());
     assert.equal(state.status, "finished");
@@ -247,6 +275,6 @@ describe("daily plan: the day's progress", () => {
     const state = await getDailyPlanForUser(GUEST_B, NOW, deps());
     assert.equal(state.status, "in_progress");
     assert.equal(state.status === "in_progress" && state.currentAvailable, false);
-    assert.deepEqual(await finishCurrentForTesting(GUEST_B, NOW, deps()), { ok: false });
+    assert.deepEqual(await simulateScanForTesting(GUEST_B, NOW, deps()), { ok: false });
   });
 });

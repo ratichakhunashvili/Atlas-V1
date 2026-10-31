@@ -205,3 +205,15 @@ describe("the saved requirement survives the visit", () => {
     assert.equal(seen[0].length, 2);
   });
 });
+
+describe("daily plan stops: QR or location", () => {
+  it("accept a QR scan, a location check-in, or the stronger camera match", () => {
+    assert.equal(isCheckInMethodAllowed("qr_or_gps", "qr"), true);
+    assert.equal(isCheckInMethodAllowed("qr_or_gps", "gps"), true);
+    assert.equal(isCheckInMethodAllowed("qr_or_gps", "ar"), true);
+  });
+
+  it("a QR-only stop still refuses a location check-in", () => {
+    assert.equal(isCheckInMethodAllowed("qr", "gps"), false);
+  });
+});

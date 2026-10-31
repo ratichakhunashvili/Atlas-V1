@@ -17,8 +17,10 @@ import { enumCheck } from "./sql-helpers";
 /*
  * How a stop may be completed. "ar" joined in 0012: a camera match PLUS the same
  * GPS proximity every other method needs. "auto" is legacy and no writer produces it.
+ * "qr_or_gps" (0022): the daily "choose 1 of 3" plan, where the guest may scan the place's QR code OR be there by
+ * location — either proof completes the stop. Each is still verified in full on the server.
  */
-export const CHECK_IN_METHODS = ["gps", "qr", "ar", "auto"] as const;
+export const CHECK_IN_METHODS = ["gps", "qr", "ar", "auto", "qr_or_gps"] as const;
 export type CheckInMethod = (typeof CHECK_IN_METHODS)[number];
 
 // Why a PENDING stop was taken out of the active plan. Superseded rows are kept
