@@ -25,6 +25,28 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Everything you can press shows a pointer: buttons, links, chip-style labels around radios and checkboxes,
+   menus and disclosure toggles. Something that can't be pressed right now says so instead. */
+button,
+[role="button"],
+input[type="submit"],
+input[type="button"],
+input[type="checkbox"],
+input[type="radio"],
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]),
+select,
+summary {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"],
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
 :root {
   --atlas-cream: #f7f3e2;
   --atlas-paper: #fffdf5;
