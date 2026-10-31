@@ -34,10 +34,27 @@ function alongRoute(line: LngLat[]): LngLat {
 
 /** The hotel each map was last centred on, so a live scene centres once rather than on every update. */
 const centredHotel = new WeakMap<MapboxMap, string>();
+/** The route each map last framed, so a moving "you" dot does not re-frame the camera on every update. */
+const framedLine = new WeakMap<MapboxMap, string>();
+
+/** A live route from the scene, or a design route from the fixture. */
+function lineOf(scene: MapScene): LngLat[] | undefined {
+  if (scene.routeLine && scene.routeLine.length >= 2) return scene.routeLine as LngLat[];
+  return scene.route ? ROUTE_LINES[scene.route] : undefined;
+}
 
 function markerFeatures(scene: MapScene): GeoJSON.FeatureCollection {
   const features: Feature[] = [];
-  const line = scene.route ? ROUTE_LINES[scene.route] : undefined;
+  const line = lineOf(scene);
+
+  if (line && scene.routeLine) {
+    // A live route: where it starts, the destination, and the guest's real position when known.
+    features.push(point(line[0], "route-start"));
+    const destination = scene.places[0];
+    features.push(point(line[line.length - 1], destination?.marker ?? "route-destination", destination?.id));
+    if (scene.youAt) features.push(point(scene.youAt as LngLat, "route-you"));
+    return { type: "FeatureCollection", features };
+  }
 
   if (scene.route && line) {
     // Route screens: start, destination and walker, as the route map art draws them.
@@ -60,7 +77,7 @@ function markerFeatures(scene: MapScene): GeoJSON.FeatureCollection {
 }
 
 function routeFeature(scene: MapScene): GeoJSON.FeatureCollection {
-  const line = scene.route ? ROUTE_LINES[scene.route] : undefined;
+  const line = lineOf(scene);
   if (!line) return { type: "FeatureCollection", features: [] };
   return {
     type: "FeatureCollection",
@@ -179,12 +196,15 @@ export function applyScene(
     map.jumpTo({ center: scene.hotelAt, zoom: DESIGN_ZOOM });
   }
 
-  const line = scene.route ? ROUTE_LINES[scene.route] : undefined;
+  const line = lineOf(scene);
   if (!line && framedRoute) {
     // Leaving a route screen: return to the design view.
-    map.jumpTo({ center: MAP_CENTER, zoom: DESIGN_ZOOM });
+    framedLine.delete(map);
+    map.jumpTo({ center: scene.hotelAt ?? MAP_CENTER, zoom: DESIGN_ZOOM });
   }
-  if (line) {
+  const lineKey = line ? `${line.length}:${line[0].join(",")}:${line[line.length - 1].join(",")}` : "";
+  if (line && framedLine.get(map) !== lineKey) {
+    framedLine.set(map, lineKey);
     const lngs = line.map((c) => c[0]);
     const lats = line.map((c) => c[1]);
     map.fitBounds(

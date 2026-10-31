@@ -128,6 +128,13 @@ function CurrentRow({ state, testFinish }: { state: Extract<Started, { status: "
         <p className="font-manrope text-[13px] leading-[18px] text-atlas-ink">
           When you get there, scan the place&apos;s Atlas QR code or check in with your location to unlock its achievement.
         </p>
+        <Link
+          href={`/directions?stop=${current.id}`}
+          className="flex h-[48px] w-full items-center justify-center gap-[8px] rounded-[12px] border border-atlas-teal bg-atlas-paper font-manrope text-[15px] font-semibold text-atlas-teal"
+        >
+          <AtlasIcon src="/atlas-ui/icon-map-teal.svg" size={16} />
+          Show the walking route
+        </Link>
         <CheckInPanel stopId={current.id} placeName={current.name} testScan={testFinish} />
       </div>
     </Row>

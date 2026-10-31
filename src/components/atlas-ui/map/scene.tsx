@@ -24,6 +24,10 @@ export type MapScene = {
   you: boolean;
   /** Draws the walking route from Hotel A to this destination. */
   route?: RouteId;
+  /** A live walking route ([lng, lat] points, start to destination), fetched for the guest's own stop. */
+  routeLine?: [number, number][];
+  /** The guest's live position on a live route ([lng, lat]). */
+  youAt?: [number, number];
   /**
    * Phone layout: how much of the bottom of the screen the screen's sheet (and the bar) covers,
    * so Mapbox's attribution stays visible and routes are framed above it.
