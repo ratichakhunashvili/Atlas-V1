@@ -1,4 +1,5 @@
 import type { AdvisorCandidate } from "./candidates";
+import { priceFitRank, type RankingPreferences } from "./preference-ranking";
 
 /** A candidate never used in a previous itinerary ranks ahead of any used one — matches Map Advisor Functional's `usage.get(sourceId) ?? -1`. */
 const NEVER_USED = -1;
@@ -57,12 +58,21 @@ function comparePartnerPriority(a: number | null, b: number | null): number {
  */
 export function rankCandidates(
   candidates: readonly AdvisorCandidate[],
-  usageHistory: UsageHistory
+  usageHistory: UsageHistory,
+  preferences?: RankingPreferences
 ): AdvisorCandidate[] {
   return [...candidates].sort((a, b) => {
     if (a.isPartner && b.isPartner) {
       const priorityOrder = comparePartnerPriority(a.partnerPriority, b.partnerPriority);
       if (priorityOrder !== 0) return priorityOrder;
+    }
+
+    // Spending tier: a Place that fits the guest's tier ranks ahead of one with an unknown price, which
+    // ranks ahead of one known to cost more. Only a RANKING step — eligibility already decided who is here.
+    if (preferences) {
+      const priceOrder =
+        priceFitRank(a.place.priceLevel, preferences.budget) - priceFitRank(b.place.priceLevel, preferences.budget);
+      if (priceOrder !== 0) return priceOrder;
     }
 
     const freshnessOrder = freshnessScore(a, usageHistory) - freshnessScore(b, usageHistory);

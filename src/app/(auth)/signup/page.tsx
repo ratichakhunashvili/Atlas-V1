@@ -1,22 +1,18 @@
-import Link from "next/link";
-import { SignupForm } from "@/components/auth/signup-form";
+import type { Metadata } from "next";
+import { AtlasSignUpForm } from "@/components/atlas-ui/sign-up-form";
+import { AtlasBackButton, FlowScreen } from "@/components/atlas-ui/ui";
 
-export default async function SignupPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
+/* SignUp · Create account — Figma frame 70:3586 (error states 70:3615 and 70:3654). */
 
+export const metadata: Metadata = { title: "Create account · Atlas" };
+
+export default function SignUpPage() {
   return (
-    <div className="space-y-6">
-      <SignupForm error={error} />
-      <p className="text-center text-sm text-slate-600">
-        Already have an account?{" "}
-        <Link href="/login" className="font-medium text-slate-900 underline">
-          Log in
-        </Link>
-      </p>
-    </div>
+    <main>
+      <FlowScreen>
+        <AtlasBackButton to="SignIn" />
+        <AtlasSignUpForm />
+      </FlowScreen>
+    </main>
   );
 }

@@ -287,3 +287,71 @@ export async function getWalkingDirections(
 
   return { ok: true, route: { geometry, distanceMeters: route.distance, durationSeconds: route.duration } };
 }
+
+export type WalkingRouteInOrderInput = {
+  /** The hotel's location: the loop's start and (by default) end — never itself a stop. */
+  origin: LatLng;
+  /** Visited in EXACTLY this order. Unlike optimizeWalkingRoute, nothing is reordered. */
+  stops: LatLng[];
+  /** Defaults to true: the hotel is the return point. */
+  returnToOrigin?: boolean;
+};
+
+export type OrderedWalkingRoute = {
+  geometry: RouteGeometry;
+  distanceMeters: number;
+  durationSeconds: number;
+};
+
+/**
+ * A walking route through the given stops in the GIVEN order (Mapbox Directions API, multiple waypoints).
+ * Used when a plan is repaired after a stop became unavailable: the retained stops must keep their order,
+ * so this never calls the Optimization API, which is free to reorder them. At most 25 waypoints in total
+ * (Mapbox's limit); a day has only a handful of stops.
+ */
+export async function getWalkingRouteInOrder(
+  input: WalkingRouteInOrderInput,
+  options: RoutingOptions = {}
+): Promise<RoutingResult<OrderedWalkingRoute>> {
+  const { origin, stops, returnToOrigin = true } = input;
+
+  if (!isValidCoordinate(origin) || stops.some((stop) => !isValidCoordinate(stop))) {
+    return { ok: false, reason: "invalid_input", message: "One or more coordinates are invalid." };
+  }
+  if (stops.length < 1) {
+    return { ok: false, reason: "invalid_input", message: "At least one stop is required." };
+  }
+  const points = returnToOrigin ? [origin, ...stops, origin] : [origin, ...stops];
+  if (points.length > 25) {
+    return { ok: false, reason: "invalid_input", message: "Too many waypoints for one route." };
+  }
+
+  const accessToken = await resolveAccessToken(options.accessToken);
+  if (!accessToken) {
+    return { ok: false, reason: "config", message: "MAPBOX_SERVER_TOKEN is not configured." };
+  }
+
+  const url =
+    `${MAPBOX_API_BASE}/directions/v5/mapbox/walking/${coordinatesParam(points)}` +
+    `?geometries=geojson&overview=full&access_token=${accessToken}`;
+
+  const result = await fetchMapboxJson(url);
+  if (!result.ok) return result;
+
+  const data = result.route as DirectionsApiResponse;
+  if (data.code && data.code !== "Ok") {
+    return { ok: false, reason: "no_route", message: `Mapbox could not find a route (${data.code}).` };
+  }
+
+  const route = data.routes?.[0];
+  if (!route) {
+    return { ok: false, reason: "no_route", message: "Mapbox returned no usable route." };
+  }
+
+  const geometry = toRouteGeometry(route.geometry);
+  if (!geometry || typeof route.distance !== "number" || typeof route.duration !== "number") {
+    return { ok: false, reason: "malformed_response", message: "Mapbox's route response is missing required fields." };
+  }
+
+  return { ok: true, route: { geometry, distanceMeters: route.distance, durationSeconds: route.duration } };
+}

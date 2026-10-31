@@ -15,6 +15,139 @@
       "when": 1791377961002,
       "tag": "0001_robust_blackheart",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791885895650,
+      "tag": "0002_eligibility_partnerships_facilities",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791900658739,
+      "tag": "0003_place_publication_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791908481798,
+      "tag": "0004_itinerary_supersede_and_duration",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791994023941,
+      "tag": "0005_qr_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791995305199,
+      "tag": "0006_pending_hotel_switches",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791996031447,
+      "tag": "0007_time_aware_advisor",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792078688287,
+      "tag": "0008_rate_limit_attempts",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792079695970,
+      "tag": "0009_protect_guest_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792080519834,
+      "tag": "0010_visits_and_achievements",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792132262755,
+      "tag": "0011_place_models",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792133779641,
+      "tag": "0012_ar_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792398986474,
+      "tag": "0013_guest_preferences_price",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792399517549,
+      "tag": "0014_rate_limit_scopes",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792399915703,
+      "tag": "0015_stay_dates_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792400179726,
+      "tag": "0016_admin_audit_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792400999003,
+      "tag": "0017_model_display_anchor",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792401636308,
+      "tag": "0018_price_level_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792406449375,
+      "tag": "0019_guest_principals_stage_a",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793378833300,
+      "tag": "0020_user_name",
+      "breakpoints": true
     }
   ]
 }

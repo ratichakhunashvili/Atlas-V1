@@ -8,7 +8,13 @@ const ring = GEORGIA_BOUNDARY.geometry.coordinates[0] as Array<[number, number]>
 
 export const GEORGIA_BBOX = boundingBoxOf(ring);
 
-/** Degrees of padding around the strict country bbox so the camera lock doesn't feel claustrophobic. */
+/** The strict country bounding box, used to FIT the initial camera so the whole of Georgia is clearly visible. Not a lock: the camera is free to move. */
+export const GEORGIA_FIT_BOUNDS: [[number, number], [number, number]] = [
+  [GEORGIA_BBOX.west, GEORGIA_BBOX.south],
+  [GEORGIA_BBOX.east, GEORGIA_BBOX.north],
+];
+
+/** Degrees of padding around the strict country bbox (kept for reference; the map no longer hard-locks its bounds). */
 const CAMERA_BUFFER_DEG = 0.45;
 
 export const MAX_BOUNDS: [[number, number], [number, number]] = [

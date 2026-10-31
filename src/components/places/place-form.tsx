@@ -1,4 +1,4 @@
-import { PLACE_CATEGORIES, type Place } from "@/db/schema";
+import { PLACE_CATEGORIES, PUBLICATION_STATUSES, VERIFICATION_STATUSES, type Place } from "@/db/schema";
 import { Alert } from "@/components/shared/alert";
 import { Button } from "@/components/shared/button";
 import { Field } from "@/components/shared/field";
@@ -8,14 +8,19 @@ export function PlaceForm({
   action,
   place,
   error,
+  confirmCreateAnyway = false,
 }: {
   action: (formData: FormData) => void | Promise<void>;
-  place?: Place;
+  /** The saved Place, or (on the create page) the values to pre-fill after a duplicate warning. */
+  place?: Partial<Place>;
   error?: string;
+  /** Set once the admin has seen the duplicate warning: the submit then deliberately creates anyway. */
+  confirmCreateAnyway?: boolean;
 }) {
   return (
     <form action={action} className="space-y-4">
       {error && <Alert>{error}</Alert>}
+      {confirmCreateAnyway && <input type="hidden" name="confirmCreateAnyway" value="1" />}
       <Field label="Name" name="name" defaultValue={place?.name} required />
 
       <label className="block space-y-1">
@@ -59,8 +64,58 @@ export function PlaceForm({
       <Field label="Image URL" name="imageUrl" defaultValue={place?.imageUrl ?? ""} />
       <Field label="Website" name="website" defaultValue={place?.website ?? ""} />
       <Field label="Phone" name="phone" defaultValue={place?.phone ?? ""} />
+      <Field
+        label="Typical visit (minutes)"
+        name="visitDurationMinutes"
+        type="number"
+        min={1}
+        max={1440}
+        defaultValue={place?.visitDurationMinutes ?? ""}
+        hint="Leave blank to use the category estimate. The Advisor budgets this time into the guest's day."
+      />
 
-      <Button type="submit">{place ? "Save changes" : "Create place"}</Button>
+      <Select
+        label="Price level"
+        name="priceLevel"
+        defaultValue={place?.priceLevel ?? ""}
+      >
+        <option value="">Unknown</option>
+        <option value="1">1 · budget</option>
+        <option value="2">2 · moderate</option>
+        <option value="3">3 · luxury</option>
+      </Select>
+      <p className="-mt-3 text-xs text-slate-500">
+        Optional. Unknown stays unknown: guests are never told an unpriced place is affordable.
+      </p>
+      <Field
+        label="Where the price level comes from"
+        name="priceLevelSource"
+        defaultValue={place?.priceLevelSource ?? ""}
+        hint="Required when a price level is set (for example, the venue's own menu, checked today). Confirmed at save time."
+      />
+
+      <div className="grid grid-cols-2 gap-4">
+        <Select label="Publication" name="publicationStatus" defaultValue={place?.publicationStatus ?? "draft"}>
+          {PUBLICATION_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </Select>
+        <Select label="Verification" name="verificationStatus" defaultValue={place?.verificationStatus ?? "unverified"}>
+          {VERIFICATION_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <p className="text-xs text-slate-500">
+        A place is only ever shown to guests when it is published, verified, not archived, and linked to their hotel as a facility or an
+        active partner.
+      </p>
+
+      <Button type="submit">{confirmCreateAnyway ? "Create anyway" : place?.id ? "Save changes" : "Create place"}</Button>
     </form>
   );
 }

@@ -192,15 +192,34 @@ class LocationService {
 
 export const locationService = new LocationService();
 
-/** One-shot position request for callers that don't want a live subscription (e.g. a future "use my location" button). Independent of start()/the watch. */
-export function getCurrentPosition(): Promise<Coordinates> {
+/**
+ * A one-shot fix WITH the evidence the server needs to judge it: the accuracy
+ * radius the device reports, and the moment it took the reading.
+ *
+ * Both come straight from the Geolocation API and are passed through unchanged.
+ * They are the device's own account of itself, not a guarantee — the server
+ * treats them as claims and applies its own limits
+ * (services/advisor/gps-evidence.ts).
+ */
+export type PositionEvidence = Coordinates & {
+  accuracyMeters: number;
+  capturedAtMs: number;
+};
+
+/** One-shot position request for callers that don't want a live subscription. Independent of start()/the watch. */
+export function getCurrentPosition(): Promise<PositionEvidence> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
       reject(new Error("Geolocation is not supported in this browser."));
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (position) => resolve(toCoordinates(position)),
+      (position) =>
+        resolve({
+          ...toCoordinates(position),
+          accuracyMeters: position.coords.accuracy,
+          capturedAtMs: position.timestamp,
+        }),
       (error) => reject(new Error(error.message)),
       FIRST_FIX_OPTIONS
     );

@@ -7,6 +7,7 @@ export type PreferencesInput = {
   categories: string[];
   budget: BudgetLevel | null;
   activityLevel: ActivityLevel | null;
+  maxDistanceMeters: number | null;
 };
 
 export async function findPreferencesForUser(userId: string) {

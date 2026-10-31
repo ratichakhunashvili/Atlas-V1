@@ -1,0 +1,2 @@
+ALTER TABLE "rate_limit_attempts" DROP CONSTRAINT "rate_limit_attempts_scope_check";--> statement-breakpoint
+ALTER TABLE "rate_limit_attempts" ADD CONSTRAINT "rate_limit_attempts_scope_check" CHECK ("rate_limit_attempts"."scope" in ('place_check_in', 'hotel_entry', 'qr_credential_issue', 'route_retry', 'support_lookup'));

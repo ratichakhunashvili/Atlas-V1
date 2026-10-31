@@ -1,44 +1,46 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { logoutAction } from "@/auth/actions";
-import { Button } from "@/components/shared/button";
+import { findActiveStayForUser, stayHasItineraryDays } from "@/db/queries/hotel-stays";
+import { listUpcomingHotelEvents } from "@/db/queries/hotel-events";
+import { GuestAppShell } from "@/components/guest/guest-app-shell";
 import { requireUser } from "@/lib/authorization";
+import { calculateDayNumber, stayEndFor } from "@/services/advisor/stay-day";
+import { stayReminders } from "@/services/stays/reminders";
+import { toCalendarDate } from "@/services/stays/stay-dates";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
+  const stay = await findActiveStayForUser(user.id);
+  const now = new Date();
+  const events = stay ? await listUpcomingHotelEvents(stay.hotel.id, now) : [];
+  const arrivalLocked = stay ? await stayHasItineraryDays({ userId: user.id, hotelId: stay.hotel.id }) : false;
+  const day = stay ? calculateDayNumber(stay.checkIn, stayEndFor(stay), now) : null;
 
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <Link href="/" className="text-lg font-semibold">
-            Atlas
-          </Link>
-          <nav className="flex items-center gap-4 text-sm">
-            <Link href="/" className="text-slate-600 hover:text-slate-900">
-              Home
-            </Link>
-            <Link href="/hotels" className="text-slate-600 hover:text-slate-900">
-              Hotels
-            </Link>
-            <Link href="/profile" className="text-slate-600 hover:text-slate-900">
-              Profile
-            </Link>
-            {user.role === "admin" && (
-              <Link href="/admin" className="text-slate-600 hover:text-slate-900">
-                Admin
-              </Link>
-            )}
-            <span className="text-slate-400">{user.email}</span>
-            <form action={logoutAction}>
-              <Button variant="secondary" type="submit">
-                Log out
-              </Button>
-            </form>
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
-    </div>
+    <GuestAppShell
+      isAdmin={user.role === "admin"}
+      hotelName={stay?.place.name ?? null}
+      checkIn={stay?.checkIn.toISOString() ?? null}
+      stayDates={
+        stay
+          ? {
+              checkInDate: toCalendarDate(stay.checkIn),
+              expectedCheckOutDate: stay.expectedCheckOut ? toCalendarDate(stay.expectedCheckOut) : null,
+              datesSource: stay.datesSource,
+              arrivalLocked,
+              dayNumber: day?.ok ? day.dayNumber : null,
+            }
+          : null
+      }
+      reminders={stay ? stayReminders({ expectedCheckOut: stay.expectedCheckOut, now }) : []}
+      upcomingEvents={events.map((event) => ({
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        startsAt: event.startsAt.toISOString(),
+        endsAt: event.endsAt.toISOString(),
+      }))}
+    >
+      {children}
+    </GuestAppShell>
   );
 }

@@ -12,7 +12,14 @@ export const hotels = pgTable("hotels", {
     .notNull()
     .unique()
     .references(() => places.id, { onDelete: "restrict" }),
-  qrToken: text("qr_token").notNull().unique(),
+  /**
+   * LEGACY, no longer read or written. Hotel-entry credentials live in
+   * `qr_credentials` (purpose "hotel_entry"), where only a hash is stored.
+   * Relaxed to nullable in 0005 so new hotels need no raw token; the column
+   * itself is kept rather than dropped so no existing row is destroyed. A
+   * later migration can remove it once nothing in the record needs it.
+   */
+  qrToken: text("qr_token").unique(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

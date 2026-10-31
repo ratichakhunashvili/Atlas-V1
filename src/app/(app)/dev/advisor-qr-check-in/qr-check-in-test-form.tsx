@@ -18,12 +18,10 @@ const QrScannerModal = dynamic(() => import("@/components/qr/qr-scanner-modal").
 
 export function QrCheckInTestForm({
   day,
-  stopsWithTokens,
-  regenerated,
+  stops,
 }: {
-  day: ItineraryDay;
-  stopsWithTokens: Array<{ stop: ItineraryStop; qrToken: string | null }>;
-  regenerated: boolean;
+  day: Pick<ItineraryDay, "dayNumber" | "generatedAt" | "completedAt">;
+  stops: Array<Pick<ItineraryStop, "id" | "position" | "name" | "isHotelStop" | "checkInMethod" | "visitedAt">>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -49,7 +47,7 @@ export function QrCheckInTestForm({
       <Card className="space-y-1 text-sm">
         <p>
           <span className="font-medium">Day:</span> #{day.dayNumber} — generated {day.generatedAt.toISOString()}
-          {regenerated ? " (just generated/regenerated)" : " (existing, returned as-is)"}
+          {" "}(read-only; opening this page never generates or changes the itinerary)
         </p>
         <p>
           <span className="font-medium">Day completedAt:</span> {day.completedAt ? day.completedAt.toISOString() : "null"}
@@ -59,9 +57,9 @@ export function QrCheckInTestForm({
       <Card className="space-y-2">
         <h2 className="font-medium">Stops</h2>
         <ol className="space-y-1 text-sm">
-          {[...stopsWithTokens]
-            .sort((a, b) => a.stop.position - b.stop.position)
-            .map(({ stop, qrToken: token }) => (
+          {[...stops]
+            .sort((a, b) => a.position - b.position)
+            .map((stop) => (
               <li key={stop.id} className="flex flex-col gap-1 rounded border border-slate-200 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
                   <span>
@@ -71,16 +69,6 @@ export function QrCheckInTestForm({
                     {stop.visitedAt ? `visited ${stop.visitedAt.toISOString()}` : "unvisited"}
                   </span>
                 </div>
-                {token && (
-                  <button
-                    type="button"
-                    onClick={() => setQrToken(token)}
-                    className="self-start font-mono text-xs text-slate-500 underline hover:text-slate-800"
-                    title="Click to copy this Place's qrToken into the manual field below (dev convenience only)"
-                  >
-                    qrToken: {token}
-                  </button>
-                )}
               </li>
             ))}
         </ol>
@@ -89,8 +77,7 @@ export function QrCheckInTestForm({
       <Card className="space-y-3">
         <h2 className="font-medium">Test QR check-in</h2>
         <p className="text-xs text-slate-500">
-          Use the real camera scanner, or paste/type a token directly for deterministic testing (including
-          deliberately-wrong tokens).
+          Scan a real Place QR, or enter its contents for deterministic testing (including deliberately-wrong values).
         </p>
 
         <Button type="button" variant="secondary" onClick={() => setScannerOpen(true)}>
@@ -99,7 +86,14 @@ export function QrCheckInTestForm({
 
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[16rem] flex-1">
-            <Field label="QR token" name="qrToken" value={qrToken} onChange={(e) => setQrToken(e.target.value)} />
+            <Field
+              label="Scanned QR contents"
+              name="qrToken"
+              type="password"
+              autoComplete="off"
+              value={qrToken}
+              onChange={(e) => setQrToken(e.target.value)}
+            />
           </div>
           <Button type="button" disabled={pending || !qrToken} onClick={() => submit(qrToken)}>
             {pending ? "Checking…" : "Submit QR"}

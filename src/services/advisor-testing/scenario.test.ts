@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  assertScenarioToolEnabled,
+  createAdvisorTestScenario,
   createScenarioTag,
   isSafeScenarioTag,
   scenarioEmail,
@@ -46,7 +48,7 @@ test("scenarioEmail and scenarioPlaceMarker embed the tag exactly, one-to-one", 
 
 test("scenarioPreset: Scenario C creates exactly one QR-enabled partner Place", () => {
   const preset = scenarioPreset("C");
-  const partners = preset.places.filter((p) => p.isPartner);
+  const partners = preset.places.filter((p) => p.eligibility === "partner");
   assert.equal(partners.length, 1);
   assert.equal(partners[0].hasQrToken, true);
 });
@@ -164,4 +166,26 @@ test("deleteAdvisorTestScenario still deletes the user and matched Places even i
   assert.equal(calls[0], "deleteUser:user-1");
   assert.ok(!calls.some((c) => c.startsWith("deleteHotel")), "no hotel to delete");
   assert.equal(calls.filter((c) => c.startsWith("deletePlace")).length, 3);
+});
+
+test("scenarioPreset: every scenario Place is a hotel-owned facility or a partner, except Scenario B's one explicit non-partner decoy", () => {
+  for (const type of ["A", "B", "C", "D", "E", "F"] as const) {
+    const preset = scenarioPreset(type);
+    const decoys = preset.places.filter((p) => p.eligibility === "none");
+    assert.equal(decoys.length, type === "B" ? 1 : 0, `scenario ${type}`);
+  }
+});
+
+test("assertScenarioToolEnabled throws in production and allows development/test", () => {
+  assert.throws(() => assertScenarioToolEnabled("production"), /disabled in production/);
+  assert.doesNotThrow(() => assertScenarioToolEnabled("development"));
+  assert.doesNotThrow(() => assertScenarioToolEnabled("test"));
+  assert.doesNotThrow(() => assertScenarioToolEnabled(undefined));
+});
+
+test("createAdvisorTestScenario refuses to run in production before touching any database (it would create ACTIVE partnerships)", async () => {
+  await assert.rejects(
+    () => createAdvisorTestScenario("B", "user", { adminId: "admin-1", nodeEnv: "production" }),
+    /disabled in production/
+  );
 });

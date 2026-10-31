@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Hotel, ItineraryDay, ItineraryStop, Place } from "@/db/schema";
-import { makeTestPlace } from "./test-utils";
+import { fakeRecordVerifiedVisit, loadAllAvailable, makeTestPlace } from "./test-utils";
 import { checkInStopWithQr, type QrCheckInDependencies } from "./check-in-qr";
 
 // Same calendar date as every fixture's checkIn below -> dayNumber resolves to 1.
@@ -21,8 +21,11 @@ function makeStop(overrides: Partial<ItineraryStop> = {}): ItineraryStop {
     latitude: 41.7151,
     longitude: 44.8271,
     imageUrl: null,
+    visitDurationMinutes: null,
     position: idCounter,
     visitedAt: null,
+    supersededAt: null,
+    supersededReason: null,
     ...overrides,
   };
 }
@@ -31,12 +34,15 @@ function makeDay(overrides: Partial<ItineraryDay> = {}): ItineraryDay {
   return {
     id: "day-1",
     userId: "user-1",
+    principalId: null,
     hotelId: "hotel-1",
     hotelStayId: "stay-1",
     dayNumber: 1,
     stopCount: 2,
     routeGeoJson: null,
     totalDurationSeconds: null,
+    originalDurationSeconds: null,
+    availableMinutes: null,
     generatedAt: new Date("2026-03-10T08:00:00Z"),
     completedAt: null,
     ...overrides,
@@ -71,7 +77,7 @@ function createFakeDeps(options: {
   const hotelPlace = makeTestPlace({ id: `${hotelId}-place`, category: "hotel" });
   const hotel = makeHotel(hotelPlace.id);
 
-  const findPlaceByQrToken: QrCheckInDependencies["findPlaceByQrToken"] = async (qrToken) =>
+  const findPlaceByCheckInCredential: QrCheckInDependencies["findPlaceByCheckInCredential"] = async (qrToken) =>
     places.find((p) => p.qrToken === qrToken) ?? null;
 
   const findActiveStayForUser: QrCheckInDependencies["findActiveStayForUser"] = async (uid) =>
@@ -85,10 +91,10 @@ function createFakeDeps(options: {
   const listItineraryStops: QrCheckInDependencies["listItineraryStops"] = async () =>
     [...stops].sort((a, b) => a.position - b.position);
 
-  const markStopVisited: QrCheckInDependencies["markStopVisited"] = async (stopId, _dayId, checkInMethod) => {
+  const markStopVisited: QrCheckInDependencies["markStopVisited"] = async (stopId, _dayId) => {
     const target = stops.find((s) => s.id === stopId);
     if (!target || target.visitedAt !== null) return null;
-    const visited: ItineraryStop = { ...target, visitedAt: new Date(), checkInMethod };
+    const visited: ItineraryStop = { ...target, visitedAt: new Date() };
     stops = stops.map((s) => (s.id === stopId ? visited : s));
     const dayCompleted = stops.every((s) => s.visitedAt !== null);
     if (dayCompleted) completedAt = new Date();
@@ -96,7 +102,15 @@ function createFakeDeps(options: {
   };
 
   return {
-    deps: { findPlaceByQrToken, findActiveStayForUser, findItineraryDay, listItineraryStops, markStopVisited },
+    deps: {
+      findPlaceByCheckInCredential,
+      findActiveStayForUser,
+      findItineraryDay,
+      listItineraryStops,
+      markStopVisited,
+      recordVerifiedVisit: fakeRecordVerifiedVisit,
+      loadAvailabilityContext: loadAllAvailable,
+    },
     getStops: () => stops,
     getCompletedAt: () => completedAt,
   };
@@ -203,8 +217,8 @@ test("cross-user: User B's scan resolves only User B's own itinerary, never User
 
   const userAStay = { id: "stay-a", checkIn: new Date("2026-03-10T08:00:00Z"), checkOut: null, hotel: makeHotel("hotel-a-place", "hp-a"), place: makeTestPlace({ category: "hotel" }) };
   const userBStay = { id: "stay-b", checkIn: new Date("2026-03-10T08:00:00Z"), checkOut: null, hotel: makeHotel("hotel-b-place", "hp-b"), place: makeTestPlace({ category: "hotel" }) };
-  const dayA = makeDay({ id: "day-a", userId: "user-a", hotelId: "hp-a" });
-  const dayB = makeDay({ id: "day-b", userId: "user-b", hotelId: "hp-b" });
+  const dayA = makeDay({ id: "day-a", userId: "user-a", principalId: null, hotelId: "hp-a" });
+  const dayB = makeDay({ id: "day-b", userId: "user-b", principalId: null, hotelId: "hp-b" });
 
   const stopsByDay = new Map<string, ItineraryStop[]>([
     ["day-a", [userAStop]],
@@ -212,15 +226,20 @@ test("cross-user: User B's scan resolves only User B's own itinerary, never User
   ]);
 
   const deps: QrCheckInDependencies = {
-    findPlaceByQrToken: async (token) => [placeA, otherPlace].find((p) => p.qrToken === token) ?? null,
+    findPlaceByCheckInCredential: async (token) => [placeA, otherPlace].find((p) => p.qrToken === token) ?? null,
     findActiveStayForUser: async (uid) => (uid === "user-a" ? userAStay : uid === "user-b" ? userBStay : null),
     findItineraryDay: async (uid, hotelId) => (uid === "user-a" && hotelId === "hp-a" ? dayA : uid === "user-b" && hotelId === "hp-b" ? dayB : null),
     listItineraryStops: async (dayId) => stopsByDay.get(dayId) ?? [],
-    markStopVisited: async (stopId, dayId, checkInMethod) => {
+    recordVerifiedVisit: fakeRecordVerifiedVisit,
+    loadAvailabilityContext: async (uid) => ({
+      stay: { id: "stay-1", hotelId: uid === "user-a" ? "hp-a" : "hp-b", dayNumber: 1 },
+      eligiblePlaceIds: { has: () => true } as unknown as ReadonlySet<string>,
+    }),
+    markStopVisited: async (stopId, dayId) => {
       const stops = stopsByDay.get(dayId) ?? [];
       const target = stops.find((s) => s.id === stopId);
       if (!target || target.visitedAt !== null) return null;
-      const visited = { ...target, visitedAt: new Date(), checkInMethod };
+      const visited = { ...target, visitedAt: new Date() };
       stopsByDay.set(dayId, stops.map((s) => (s.id === stopId ? visited : s)));
       return { stop: visited, dayCompleted: stopsByDay.get(dayId)!.every((s) => s.visitedAt !== null) };
     },

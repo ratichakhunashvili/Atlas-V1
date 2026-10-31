@@ -1,6 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { buildCandidates, MAX_CANDIDATE_DISTANCE_METERS, type HotelPlaceRelation } from "./candidates";
+import type { Place } from "@/db/schema";
+import type { EligiblePlace } from "@/services/eligibility/rules";
+import { buildCandidates, MAX_CANDIDATE_DISTANCE_METERS } from "./candidates";
 import { makeTestPlace } from "./test-utils";
 
 const HOTEL_LOCATION = { lat: 0, lng: 0 };
@@ -12,28 +14,35 @@ function latOffsetForMeters(meters: number): number {
   return (meters / EARTH_RADIUS_M) * (180 / Math.PI);
 }
 
+/** buildCandidates only ever receives already-ELIGIBLE places; these wrap fixtures the way services/eligibility would. */
+function facility(place: Place): EligiblePlace {
+  return { place, source: "facility", relationId: `facility-${place.id}`, priority: null, facilityType: "other" };
+}
+
+function partner(place: Place, priority: number | null = null): EligiblePlace {
+  return { place, source: "partner", relationId: `partnership-${place.id}`, priority, facilityType: null };
+}
+
 describe("buildCandidates", () => {
-  test("includes a Place within 5km with a selected category", () => {
+  test("includes an eligible Place within 5km with a selected category", () => {
     const place = makeTestPlace({ category: "restaurant", latitude: latOffsetForMeters(1000) });
     const result = buildCandidates({
       hotelLocation: HOTEL_LOCATION,
       hotelPlaceId: HOTEL_PLACE_ID,
-      nearbyPlaces: [place],
+      eligiblePlaces: [facility(place)],
       selectedCategories: ["restaurant"],
-      hotelPlaceRelations: [],
     });
     assert.equal(result.length, 1);
     assert.equal(result[0].place.id, place.id);
   });
 
-  test("excludes a Place outside 5km", () => {
+  test("excludes an eligible Place outside 5km", () => {
     const place = makeTestPlace({ category: "restaurant", latitude: latOffsetForMeters(6000) });
     const result = buildCandidates({
       hotelLocation: HOTEL_LOCATION,
       hotelPlaceId: HOTEL_PLACE_ID,
-      nearbyPlaces: [place],
+      eligiblePlaces: [facility(place)],
       selectedCategories: ["restaurant"],
-      hotelPlaceRelations: [],
     });
     assert.equal(result.length, 0);
   });
@@ -43,9 +52,8 @@ describe("buildCandidates", () => {
     const result = buildCandidates({
       hotelLocation: HOTEL_LOCATION,
       hotelPlaceId: HOTEL_PLACE_ID,
-      nearbyPlaces: [place],
+      eligiblePlaces: [facility(place)],
       selectedCategories: ["restaurant"],
-      hotelPlaceRelations: [],
     });
     assert.equal(result.length, 0);
   });
@@ -55,9 +63,8 @@ describe("buildCandidates", () => {
     const result = buildCandidates({
       hotelLocation: HOTEL_LOCATION,
       hotelPlaceId: HOTEL_PLACE_ID,
-      nearbyPlaces: [place],
+      eligiblePlaces: [partner(place)],
       selectedCategories: ["restaurant"],
-      hotelPlaceRelations: [],
     });
     assert.equal(result.length, 0);
   });
@@ -67,9 +74,8 @@ describe("buildCandidates", () => {
     const result = buildCandidates({
       hotelLocation: HOTEL_LOCATION,
       hotelPlaceId: HOTEL_PLACE_ID,
-      nearbyPlaces: [place],
+      eligiblePlaces: [partner(place)],
       selectedCategories: [],
-      hotelPlaceRelations: [],
     });
     assert.equal(result.length, 0);
   });
@@ -81,9 +87,8 @@ describe("buildCandidates", () => {
     const result = buildCandidates({
       hotelLocation: HOTEL_LOCATION,
       hotelPlaceId: HOTEL_PLACE_ID,
-      nearbyPlaces: [atLimit, justOver],
+      eligiblePlaces: [facility(atLimit), facility(justOver)],
       selectedCategories: ["restaurant"],
-      hotelPlaceRelations: [],
     });
 
     assert.equal(result.length, 1);
@@ -97,31 +102,46 @@ describe("buildCandidates", () => {
     const result = buildCandidates({
       hotelLocation: HOTEL_LOCATION,
       hotelPlaceId: HOTEL_PLACE_ID,
-      nearbyPlaces: [hotelPlace],
+      eligiblePlaces: [facility(hotelPlace)],
       selectedCategories: ["hotel"],
-      hotelPlaceRelations: [],
     });
     assert.equal(result.length, 0);
   });
 
-  test("marks a Place as a partner only when a hotel_places relation exists for it, carrying its priority", () => {
+  test("a partner-sourced Place is a partner carrying its priority; a hotel-owned facility is eligible but NOT a partner", () => {
     const partnerPlace = makeTestPlace({ category: "restaurant", latitude: latOffsetForMeters(200) });
-    const plainPlace = makeTestPlace({ category: "restaurant", latitude: latOffsetForMeters(300) });
-    const relations: HotelPlaceRelation[] = [{ placeId: partnerPlace.id, priority: 2 }];
+    const facilityPlace = makeTestPlace({ category: "restaurant", latitude: latOffsetForMeters(300) });
 
     const result = buildCandidates({
       hotelLocation: HOTEL_LOCATION,
       hotelPlaceId: HOTEL_PLACE_ID,
-      nearbyPlaces: [partnerPlace, plainPlace],
+      eligiblePlaces: [partner(partnerPlace, 2), facility(facilityPlace)],
       selectedCategories: ["restaurant"],
-      hotelPlaceRelations: relations,
     });
 
     const partnerCandidate = result.find((c) => c.place.id === partnerPlace.id);
-    const plainCandidate = result.find((c) => c.place.id === plainPlace.id);
+    const facilityCandidate = result.find((c) => c.place.id === facilityPlace.id);
     assert.equal(partnerCandidate?.isPartner, true);
     assert.equal(partnerCandidate?.partnerPriority, 2);
-    assert.equal(plainCandidate?.isPartner, false);
-    assert.equal(plainCandidate?.partnerPriority, null);
+    assert.equal(facilityCandidate?.isPartner, false);
+    assert.equal(facilityCandidate?.partnerPriority, null);
+  });
+
+  test("a Place that is not in the eligible set can never become a candidate (the pool is the eligible set, nothing else)", () => {
+    const eligible = makeTestPlace({ category: "restaurant", latitude: latOffsetForMeters(200) });
+    // A very attractive nearby Place that exists in the database but was never passed in as eligible.
+    makeTestPlace({ category: "restaurant", latitude: latOffsetForMeters(50) });
+
+    const result = buildCandidates({
+      hotelLocation: HOTEL_LOCATION,
+      hotelPlaceId: HOTEL_PLACE_ID,
+      eligiblePlaces: [partner(eligible)],
+      selectedCategories: ["restaurant"],
+    });
+
+    assert.deepEqual(
+      result.map((c) => c.place.id),
+      [eligible.id]
+    );
   });
 });
