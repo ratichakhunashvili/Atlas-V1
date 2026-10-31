@@ -151,6 +151,8 @@ function depsWithEvent(event: HotelEvent, extraPlaces: Place[] = []): GenerateIt
         relationId: `facility-${place.id}`,
         priority: null,
         facilityType: "other" as const,
+        featured: false,
+        offerText: null,
       })),
     findItineraryDay: async () => null,
     findLatestItineraryDayBefore: async () => null,

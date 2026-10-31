@@ -37,3 +37,13 @@ export const confirmPartnershipSchema = z.object({
 });
 
 export const partnershipIdSchema = z.uuid("Invalid partnership");
+
+/** Featured + offer, set per hotel partnership. An empty offer clears it. */
+export const promotionSchema = z.object({
+  featured: z.boolean(),
+  offerText: z
+    .string()
+    .trim()
+    .max(120, "Keep the offer to 120 characters or fewer.")
+    .transform((value) => (value === "" ? null : value)),
+});

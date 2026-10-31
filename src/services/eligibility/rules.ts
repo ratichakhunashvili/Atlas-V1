@@ -20,6 +20,10 @@ export type EligiblePlace = {
   relationId: string;
   priority: number | null;
   facilityType: FacilityType | null;
+  /** Featured by this hotel (partners only; always false for a facility). Ranking and presentation only. */
+  featured: boolean;
+  /** This hotel's offer for the partner, shown as written. Always null for a facility. */
+  offerText: string | null;
 };
 
 export type PartnershipRow = {
@@ -31,6 +35,8 @@ export type PartnershipRow = {
   endsAt: Date | null;
   confirmedAt: Date | null;
   priority: number | null;
+  featured: boolean;
+  offerText: string | null;
   place: Place;
 };
 
@@ -93,13 +99,17 @@ export function buildEligiblePlaces(input: BuildEligiblePlacesInput): EligiblePl
   for (const row of facilities) {
     if (!isFacilityEligible(row, hotelId) || seen.has(row.place.id)) continue;
     seen.add(row.place.id);
-    result.push({ place: row.place, source: "facility", relationId: row.id, priority: null, facilityType: row.facilityType });
+    result.push({ place: row.place, source: "facility", relationId: row.id, priority: null, facilityType: row.facilityType, featured: false, offerText: null });
   }
 
   for (const row of partnerships) {
     if (!isPartnershipEligible(row, hotelId, now) || seen.has(row.place.id)) continue;
     seen.add(row.place.id);
-    result.push({ place: row.place, source: "partner", relationId: row.id, priority: row.priority, facilityType: null });
+    result.push({ place: row.place, source: "partner", relationId: row.id, priority: row.priority,
+      facilityType: null,
+      featured: row.featured,
+      offerText: row.offerText,
+    });
   }
 
   return result;

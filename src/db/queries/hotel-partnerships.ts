@@ -15,6 +15,8 @@ const PARTNERSHIP_ROW_COLUMNS = {
   endsAt: hotelPartnerships.endsAt,
   confirmedAt: hotelPartnerships.confirmedAt,
   priority: hotelPartnerships.priority,
+  featured: hotelPartnerships.featured,
+  offerText: hotelPartnerships.offerText,
   place: places,
 } as const;
 
@@ -122,3 +124,16 @@ export async function listAllPartnershipsForAdmin() {
 }
 
 export type AdminPartnershipAcrossHotels = Awaited<ReturnType<typeof listAllPartnershipsForAdmin>>[number];
+
+/** Featured / offer for ONE hotel partnership. Never touches status, window or confirmation: it cannot change eligibility. */
+export async function updatePartnershipPromotion(
+  id: string,
+  input: { featured: boolean; offerText: string | null }
+): Promise<HotelPartnership | null> {
+  const [row] = await db
+    .update(hotelPartnerships)
+    .set({ featured: input.featured, offerText: input.offerText, updatedAt: new Date() })
+    .where(eq(hotelPartnerships.id, id))
+    .returning();
+  return row ?? null;
+}

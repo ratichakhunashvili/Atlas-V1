@@ -14,6 +14,7 @@ export const ADMIN_AUDIT_ACTIONS = [
   "partnership.suspended",
   "partnership.revoked",
   "partnership.reopened",
+  "partnership.promotion_changed",
   "place.created",
   "place.published",
   "place.unpublished",

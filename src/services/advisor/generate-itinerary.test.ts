@@ -246,12 +246,12 @@ function buildDeps(options: BuildDepsOptions = {}) {
       const entries: EligiblePlace[] = (options.eligiblePlaces ?? []).map((place) => {
         const relation = partnerById.get(place.id);
         return relation
-          ? { place, source: "partner", relationId: `partnership-${place.id}`, priority: relation.priority, facilityType: null }
-          : { place, source: "facility", relationId: `facility-${place.id}`, priority: null, facilityType: "other" };
+          ? { place, source: "partner", relationId: `partnership-${place.id}`, priority: relation.priority, facilityType: null, featured: false, offerText: null }
+          : { place, source: "facility", relationId: `facility-${place.id}`, priority: null, facilityType: "other", featured: false, offerText: null };
       });
       for (const relation of options.partnerRelations ?? []) {
         if (entries.some((entry) => entry.place.id === relation.placeId)) continue;
-        entries.push({ place: relation.place, source: "partner", relationId: `partnership-${relation.placeId}`, priority: relation.priority, facilityType: null });
+        entries.push({ place: relation.place, source: "partner", relationId: `partnership-${relation.placeId}`, priority: relation.priority, facilityType: null, featured: false, offerText: null });
       }
       return entries;
     },

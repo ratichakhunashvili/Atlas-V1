@@ -24,6 +24,8 @@ function partnership(overrides: Partial<PartnershipRow> & { hotelId: string; pla
     endsAt: null,
     confirmedAt: new Date("2026-01-01T00:00:00Z"),
     priority: null,
+    featured: false,
+    offerText: null,
     ...overrides,
   };
 }
@@ -198,5 +200,38 @@ describe("the Place itself must be published, verified and not archived", () => 
   test("a published AND verified Place with an active confirmed partnership is eligible", () => {
     const place = makeTestPlace({ id: "ok", category: "restaurant", publicationStatus: "published", verificationStatus: "verified" });
     assert.deepEqual(eligibleIds({ hotelId: HOTEL_A, partnerships: [partnership({ hotelId: HOTEL_A, place })] }), ["ok"]);
+  });
+});
+
+describe("featured partners are featured by one hotel only", () => {
+  test("a partner featured by Hotel A carries its offer for Hotel A, and is not featured for Hotel B", () => {
+    const tour = makeTestPlace({ id: "tour", category: "tour" });
+    const hotelBPlace = "hotel-b-place";
+    const partnerships = [
+      partnership({ hotelId: HOTEL_A, place: tour, featured: true, offerText: "10% off for hotel guests" }),
+      partnership({ hotelId: HOTEL_B, place: tour }),
+    ];
+    const forA = buildEligiblePlaces({ hotelId: HOTEL_A, hotelPlaceId: HOTEL_A_PLACE, partnerships, facilities: [], now: NOW });
+    const forB = buildEligiblePlaces({ hotelId: HOTEL_B, hotelPlaceId: hotelBPlace, partnerships, facilities: [], now: NOW });
+    assert.deepEqual([forA[0].featured, forA[0].offerText], [true, "10% off for hotel guests"]);
+    assert.deepEqual([forB[0].featured, forB[0].offerText], [false, null]);
+  });
+
+  test("featuring never makes an inactive partnership eligible", () => {
+    const tour = makeTestPlace({ id: "tour", category: "tour" });
+    const partnerships = [partnership({ hotelId: HOTEL_A, place: tour, featured: true, status: "suspended" })];
+    assert.deepEqual(buildEligiblePlaces({ hotelId: HOTEL_A, hotelPlaceId: HOTEL_A_PLACE, partnerships, facilities: [], now: NOW }), []);
+  });
+
+  test("a hotel's own facility is never featured", () => {
+    const pool = makeTestPlace({ id: "pool", category: "spa" });
+    const [entry] = buildEligiblePlaces({
+      hotelId: HOTEL_A,
+      hotelPlaceId: HOTEL_A_PLACE,
+      partnerships: [],
+      facilities: [facilityRow({ hotelId: HOTEL_A, place: pool })],
+      now: NOW,
+    });
+    assert.deepEqual([entry.featured, entry.offerText], [false, null]);
   });
 });

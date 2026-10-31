@@ -172,6 +172,8 @@ function activePartnership(id: string, hotel: DemoHotel, place: Place, priority:
     endsAt: null,
     confirmedAt: CONFIRMED,
     priority,
+    featured: false,
+    offerText: null,
     place,
   };
 }

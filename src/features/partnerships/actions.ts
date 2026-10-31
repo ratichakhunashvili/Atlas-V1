@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/authorization";
 import { recordAdminAudit } from "@/db/queries/admin-audit";
-import { createPendingPartnership, findPartnershipById, transitionPartnership } from "@/db/queries/hotel-partnerships";
+import { createPendingPartnership, findPartnershipById, transitionPartnership, updatePartnershipPromotion } from "@/db/queries/hotel-partnerships";
 import { findFacilityByPlaceId } from "@/db/queries/hotel-facilities";
 import { findHotelById } from "@/db/queries/hotels";
 import { findPlaceById } from "@/db/queries/places";
 import type { AdminAuditAction, PartnershipStatus } from "@/db/schema";
-import { addPartnershipSchema, confirmPartnershipSchema, partnershipIdSchema } from "./schema";
+import { addPartnershipSchema, confirmPartnershipSchema, partnershipIdSchema, promotionSchema } from "./schema";
 import { statusesThatCanTransitionTo, validateConfirmationWindow, validatePartnerCandidate } from "./rules";
 
 /**
@@ -176,4 +176,38 @@ export async function reopenPartnershipAction(partnershipId: string) {
     { confirmedAt: null, confirmedBy: null, revokedAt: null },
     "Partnership re-opened as pending review."
   );
+}
+
+/**
+ * Featured / offer for one hotel's partnership. Ranking and presentation only: status, dates and confirmation are
+ * untouched, so this can never make a partner visible to guests (or hide one).
+ */
+export async function updatePartnershipPromotionAction(partnershipId: string, formData: FormData) {
+  const admin = await requireAdmin();
+
+  const idParsed = partnershipIdSchema.safeParse(partnershipId);
+  if (!idParsed.success) redirect("/admin/hotels");
+  const existing = await findPartnershipById(idParsed.data);
+  if (!existing) redirect("/admin/hotels");
+
+  const parsed = promotionSchema.safeParse({
+    featured: formData.get("featured") === "on",
+    offerText: String(formData.get("offerText") ?? ""),
+  });
+  if (!parsed.success) finish(existing.hotelId, { error: parsed.error.issues[0]?.message ?? "Invalid input" });
+
+  const updated = await updatePartnershipPromotion(existing.id, parsed.data);
+  if (!updated) finish(existing.hotelId, { error: "That partnership no longer exists." });
+
+  await recordAdminAudit({
+    actorUserId: admin.id,
+    action: "partnership.promotion_changed",
+    targetType: "hotel_partnership",
+    targetId: existing.id,
+    hotelId: existing.hotelId,
+    before: { featured: existing.featured, offerText: existing.offerText },
+    after: parsed.data,
+  });
+
+  finish(existing.hotelId, { ok: parsed.data.featured ? "Saved. This partner is featured for this hotel's guests." : "Saved." });
 }

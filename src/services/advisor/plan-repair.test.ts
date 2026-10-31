@@ -30,6 +30,8 @@ const eligibleEntry = (place: ReturnType<typeof makeTestPlace>): EligiblePlace =
   relationId: `facility-${place.id}`,
   priority: null,
   facilityType: "other",
+  featured: false,
+  offerText: null,
 });
 
 const baseDay: ItineraryDay = {

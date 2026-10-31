@@ -15,6 +15,7 @@ import {
   reopenPartnershipAction,
   revokePartnershipAction,
   suspendPartnershipAction,
+  updatePartnershipPromotionAction,
 } from "@/features/partnerships/actions";
 
 /** Prefills the confirm form with the row's saved value so a blank field is a deliberate "clear", never an accidental wipe (e.g. of a migrated legacy priority or a saved end date). */
@@ -106,6 +107,33 @@ export default async function HotelPartnershipsPage({
               <p className="text-xs text-slate-500">
                 Starts {formatDate(partnership.startsAt)} · Ends {formatDate(partnership.endsAt)} · Priority{" "}
                 {partnership.priority ?? "—"} · Confirmed {formatDate(partnership.confirmedAt)}
+              </p>
+
+              <form
+                action={updatePartnershipPromotionAction.bind(null, partnership.id)}
+                className="flex flex-wrap items-end gap-3 rounded border border-slate-200 p-3"
+              >
+                <label className="flex h-10 items-center gap-2 text-sm text-slate-800">
+                  <input type="checkbox" name="featured" defaultChecked={partnership.featured} className="size-4" />
+                  Featured for this hotel
+                </label>
+                <div className="min-w-[16rem] flex-1">
+                  <Field
+                    label="Offer for guests (optional, max 120 characters)"
+                    name="offerText"
+                    id={`offer-${partnership.id}`}
+                    maxLength={120}
+                    defaultValue={partnership.offerText ?? ""}
+                    placeholder="e.g. 10% off for hotel guests"
+                  />
+                </div>
+                <Button variant="secondary" type="submit">
+                  Save featured &amp; offer
+                </Button>
+              </form>
+              <p className="text-xs text-slate-500">
+                A featured partner always takes one of a guest&apos;s three options when it fits their time and interests, and is
+                shown larger with a &quot;Featured&quot; label. It only applies while the partnership is active.
               </p>
 
               {(partnership.status === "pending_review" || partnership.status === "suspended") && (

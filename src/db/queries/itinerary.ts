@@ -415,3 +415,65 @@ export async function saveRouteGeometry(input: { dayId: string; userId: string; 
     .returning({ id: itineraryDays.id });
   return updated.length > 0;
 }
+
+/**
+ * "Choose 1 of 3": today's day row with no stops yet, recording the guest's free time. Returns null when the
+ * (user, hotel, day) row already exists — a concurrent start got there first.
+ */
+export async function createEmptyItineraryDay(input: {
+  userId: string;
+  hotelId: string;
+  hotelStayId: string;
+  dayNumber: number;
+  availableMinutes: number;
+  now: Date;
+}): Promise<ItineraryDay | null> {
+  try {
+    const [day] = await db
+      .insert(itineraryDays)
+      .values({
+        userId: input.userId,
+        hotelId: input.hotelId,
+        hotelStayId: input.hotelStayId,
+        dayNumber: input.dayNumber,
+        stopCount: 0,
+        availableMinutes: input.availableMinutes,
+        generatedAt: input.now,
+        completedAt: null,
+      })
+      .returning();
+    return day;
+  } catch (error) {
+    if (isUniqueViolation(error)) return null;
+    throw error;
+  }
+}
+
+/**
+ * Appends the guest's chosen activity as the day's one pending stop. The day row is locked first, so two picks at
+ * once cannot both pass the checks: there must be no unvisited stop yet, and the day must be under its limit.
+ */
+export async function appendPickedStop(input: {
+  dayId: string;
+  maxActivities: number;
+  stop: Omit<PersistStopInput, "isHotelStop" | "visitedAt" | "imageUrl"> & { placeId: string; imageUrl: string | null };
+}): Promise<{ ok: true; stop: ItineraryStop } | { ok: false; reason: "busy" | "limit" }> {
+  return db.transaction(async (tx) => {
+    await tx.select({ id: itineraryDays.id }).from(itineraryDays).where(eq(itineraryDays.id, input.dayId)).for("update");
+
+    const active = await listActiveStopsTx(tx, input.dayId);
+    if (active.some((stop) => stop.visitedAt === null)) return { ok: false, reason: "busy" } as const;
+    if (active.length >= input.maxActivities) return { ok: false, reason: "limit" } as const;
+
+    const position = await nextPositionTx(tx, input.dayId);
+    const [stop] = await tx
+      .insert(itineraryStops)
+      .values({ dayId: input.dayId, position, isHotelStop: false, visitedAt: null, ...input.stop })
+      .returning();
+    await tx
+      .update(itineraryDays)
+      .set({ stopCount: active.length + 1, completedAt: null })
+      .where(eq(itineraryDays.id, input.dayId));
+    return { ok: true, stop } as const;
+  });
+}

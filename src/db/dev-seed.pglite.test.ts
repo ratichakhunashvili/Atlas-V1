@@ -51,6 +51,8 @@ describe("development fixtures", () => {
       endsAt: row.partnership.endsAt,
       confirmedAt: row.partnership.confirmedAt,
       priority: row.partnership.priority,
+      featured: row.partnership.featured,
+      offerText: row.partnership.offerText,
       place: row.place,
     }));
 
@@ -60,6 +62,8 @@ describe("development fixtures", () => {
       placeId: row.facility.placeId,
       status: row.facility.status,
       facilityType: row.facility.facilityType,
+      featured: false,
+      offerText: null,
       place: row.place,
     }));
 

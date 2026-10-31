@@ -16,11 +16,11 @@ function latOffsetForMeters(meters: number): number {
 
 /** buildCandidates only ever receives already-ELIGIBLE places; these wrap fixtures the way services/eligibility would. */
 function facility(place: Place): EligiblePlace {
-  return { place, source: "facility", relationId: `facility-${place.id}`, priority: null, facilityType: "other" };
+  return { place, source: "facility", relationId: `facility-${place.id}`, priority: null, facilityType: "other", featured: false, offerText: null };
 }
 
 function partner(place: Place, priority: number | null = null): EligiblePlace {
-  return { place, source: "partner", relationId: `partnership-${place.id}`, priority, facilityType: null };
+  return { place, source: "partner", relationId: `partnership-${place.id}`, priority, facilityType: null, featured: false, offerText: null };
 }
 
 describe("buildCandidates", () => {

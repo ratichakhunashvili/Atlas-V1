@@ -148,6 +148,13 @@
       "when": 1793378833300,
       "tag": "0020_user_name",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793459357924,
+      "tag": "0021_partnership_featured_offer",
+      "breakpoints": true
     }
   ]
 }

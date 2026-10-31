@@ -29,6 +29,8 @@ function partnership(overrides: Partial<PartnershipRow> = {}, place: Place = ven
     endsAt: null,
     confirmedAt: T("2026-01-01T00:00:00Z"),
     priority: null,
+    featured: false,
+    offerText: null,
     place,
     ...overrides,
   };

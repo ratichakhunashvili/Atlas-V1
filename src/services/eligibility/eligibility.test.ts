@@ -55,6 +55,8 @@ function partnership(hotelId: string, place: Place, overrides: Partial<Partnersh
     endsAt: null,
     confirmedAt: CONFIRMED,
     priority: null,
+    featured: false,
+    offerText: null,
     place,
     ...overrides,
   };

@@ -37,6 +37,8 @@ const eligibleEntry = (place: ReturnType<typeof makeTestPlace>): EligiblePlace =
   relationId: `facility-${place.id}`,
   priority: null,
   facilityType: "other",
+  featured: false,
+  offerText: null,
 });
 
 function makeStop(stopId: string, placeId: string, position: number, overrides: Partial<ItineraryStop> = {}): ItineraryStop {

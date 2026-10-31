@@ -105,6 +105,8 @@ function buildDeps(options: Options) {
         relationId: `partnership-${p.id}`,
         priority: null,
         facilityType: null,
+        featured: false,
+        offerText: null,
       })),
       ...facilities.map((p) => ({
         place: p,
@@ -112,6 +114,8 @@ function buildDeps(options: Options) {
         relationId: `facility-${p.id}`,
         priority: null,
         facilityType: "other" as const,
+        featured: false,
+        offerText: null,
       })),
     ],
     findItineraryDay: async () => null,

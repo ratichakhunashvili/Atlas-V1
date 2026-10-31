@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, timestamp, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, pgTable, timestamp, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { hotels } from "./hotels";
 import { places } from "./places";
 import { enumCheck } from "./sql-helpers";
@@ -33,6 +33,14 @@ export const hotelPartnerships = pgTable(
     endsAt: timestamp("ends_at", { withTimezone: true }),
     // Nullable: null falls back to the Advisor's default freshness/distance ranking.
     priority: integer("priority"),
+    /**
+     * Featured by THIS hotel: a featured partner that fits the guest's choices always takes one of the three
+     * options and is shown larger, labelled "Featured". Ranking only — it can never make a Place eligible,
+     * and a partnership with Hotel A being featured says nothing about Hotel B.
+     */
+    featured: boolean("featured").notNull().default(false),
+    /** A short offer this hotel's guests get (e.g. "10% off for hotel guests"). Shown as written; Atlas takes no payment. */
+    offerText: text("offer_text"),
     // Set when an admin explicitly confirms; SET NULL so deleting the admin
     // account never deletes (or invalidates) the partnership record.
     confirmedBy: uuid("confirmed_by").references(() => users.id, { onDelete: "set null" }),
@@ -53,6 +61,7 @@ export const hotelPartnerships = pgTable(
       "hotel_partnerships_active_requires_confirmation_check",
       sql`${table.status} <> 'active' or ${table.confirmedAt} is not null`
     ),
+    check("hotel_partnerships_offer_text_check", sql`${table.offerText} is null or char_length(${table.offerText}) between 1 and 120`),
     check(
       "hotel_partnerships_window_check",
       sql`${table.startsAt} is null or ${table.endsAt} is null or ${table.endsAt} > ${table.startsAt}`

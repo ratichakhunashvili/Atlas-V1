@@ -1,0 +1,5 @@
+ALTER TABLE "admin_audit_events" DROP CONSTRAINT "admin_audit_events_action_check";--> statement-breakpoint
+ALTER TABLE "hotel_partnerships" ADD COLUMN "featured" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "hotel_partnerships" ADD COLUMN "offer_text" text;--> statement-breakpoint
+ALTER TABLE "hotel_partnerships" ADD CONSTRAINT "hotel_partnerships_offer_text_check" CHECK ("hotel_partnerships"."offer_text" is null or char_length("hotel_partnerships"."offer_text") between 1 and 120);--> statement-breakpoint
+ALTER TABLE "admin_audit_events" ADD CONSTRAINT "admin_audit_events_action_check" CHECK ("admin_audit_events"."action" in ('partnership.proposed', 'partnership.confirmed', 'partnership.suspended', 'partnership.revoked', 'partnership.reopened', 'partnership.promotion_changed', 'place.created', 'place.published', 'place.unpublished', 'place.verified', 'place.unverified', 'place.archived', 'place.unarchived', 'place.deleted', 'qr_credential.issued', 'qr_credential.rotated', 'qr_credential.revoked', 'model.saved', 'model.enabled', 'model.disabled', 'model.deleted', 'staff.role_changed', 'support.guest_lookup'));

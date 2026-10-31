@@ -53,7 +53,8 @@ export default async function AdminPartnershipsPage({ searchParams }: { searchPa
             { label: "Hotel", width: 160 },
             { label: "Place", width: 220 },
             { label: "Status", width: 120 },
-            { label: "Window", width: 220 },
+            { label: "Window", width: 200 },
+            { label: "Featured", width: 110 },
             { label: "Updated", width: 130 },
             { label: "Actions", hidden: true },
           ]}
@@ -64,6 +65,7 @@ export default async function AdminPartnershipsPage({ searchParams }: { searchPa
               place.name,
               <StatusPill key="status" status={partnershipStatus(partnership.status, partnership.endsAt, now)} />,
               formatWindow(partnership.startsAt, partnership.endsAt),
+              partnership.featured ? (partnership.offerText ? "Yes · offer" : "Yes") : "—",
               DATE.format(partnership.updatedAt),
               <RowAction
                 key="edit"
