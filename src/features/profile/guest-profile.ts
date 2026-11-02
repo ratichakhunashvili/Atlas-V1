@@ -1,0 +1,39 @@
+/**
+ * The facts the Profile screen shows, as plain data a client component can receive.
+ * Built by loadGuestProfile (guest-profile-data.ts); the stay wording is pure and tested.
+ */
+export type GuestProfile = {
+  name: string | null;
+  email: string;
+  stay: {
+    hotelName: string;
+    imageUrl: string | null;
+    /** e.g. "12 Mar – 15 Mar" */
+    dates: string;
+    /** e.g. "Night 2 of 3", "Stay ended" */
+    progress: string;
+  } | null;
+  achievements: { unlocked: number; total: number };
+  interests: string;
+  price: string;
+};
+
+const DAY_MS = 86_400_000;
+const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Tbilisi" });
+
+export function describeStay(input: { checkIn: Date; expectedCheckOut: Date | null; checkOut: Date | null; now: Date }): { dates: string; progress: string } {
+  const end = input.checkOut ?? input.expectedCheckOut;
+  const dates = end ? `${DAY.format(input.checkIn)} – ${DAY.format(end)}` : `From ${DAY.format(input.checkIn)}`;
+  if (input.checkOut || (input.expectedCheckOut && input.now >= input.expectedCheckOut)) return { dates, progress: "Stay ended" };
+  // Without a check-out date there is no "of N" to show.
+  if (!input.expectedCheckOut) return { dates, progress: "Checked in" };
+  if (input.now < input.checkIn) return { dates, progress: "Starts soon" };
+  const nights = Math.max(1, Math.ceil((input.expectedCheckOut.getTime() - input.checkIn.getTime()) / DAY_MS));
+  const night = Math.min(nights, Math.floor((input.now.getTime() - input.checkIn.getTime()) / DAY_MS) + 1);
+  return { dates, progress: `Night ${night} of ${nights}` };
+}
+
+/** The letter in the avatar circle. */
+export function initialFor(name: string | null, email: string): string {
+  return ((name?.trim() || email).charAt(0) || "?").toUpperCase();
+}

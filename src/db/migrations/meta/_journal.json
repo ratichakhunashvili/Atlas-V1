@@ -162,6 +162,13 @@
       "when": 1793460668434,
       "tag": "0022_check_in_qr_or_gps",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793634883914,
+      "tag": "0023_auth_rate_limit",
+      "breakpoints": true
     }
   ]
 }

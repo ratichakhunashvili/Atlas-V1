@@ -91,6 +91,7 @@ export default async function HomePage({
         category: place.category,
         address: place.address,
         priceLevel: place.priceLevel,
+        imageUrl: place.imageUrl,
         at: [place.longitude, place.latitude],
       }))}
     />

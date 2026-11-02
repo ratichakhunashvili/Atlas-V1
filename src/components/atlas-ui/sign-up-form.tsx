@@ -26,6 +26,7 @@ export function AtlasSignUpForm() {
       </div>
 
       {state.emailUsed ? <ErrorBanner>An account with this email already exists.</ErrorBanner> : null}
+      {state.formError ? <ErrorBanner>{state.formError}</ErrorBanner> : null}
 
       <div className="flex w-full flex-col items-start gap-[16px]">
         <AtlasField

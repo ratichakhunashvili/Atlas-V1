@@ -9,6 +9,9 @@ import { requireUser } from "@/lib/authorization";
 import { createUser, findUserByEmail } from "@/db/queries/users";
 import { upsertPreferences } from "@/db/queries/preferences";
 import { preferencesSchema, signupSchema } from "./schema";
+import { isAuthAttemptAllowed, recordAuthAttempt } from "@/db/queries/auth-rate-limit";
+import { clientIp } from "@/lib/client-ip";
+import { authRateLimitKey, authRateLimitedMessage } from "@/services/rate-limit/auth-policy";
 
 /**
  * Create account (Figma SignUp, SignUpEmailUsed, SignUpWeak). Problems come back as form state —
@@ -18,6 +21,8 @@ import { preferencesSchema, signupSchema } from "./schema";
 export type SignUpField = "name" | "email" | "password";
 export type SignUpState = {
   emailUsed?: boolean;
+  /** A problem with the whole attempt rather than one field (too many attempts). */
+  formError?: string;
   fieldErrors?: Partial<Record<SignUpField, string>>;
   values?: { name: string; email: string };
 };
@@ -35,6 +40,15 @@ export async function signupAction(_previous: SignUpState, formData: FormData): 
     }
     return { fieldErrors, values };
   }
+
+  // Counted after validation, so a typo in the form costs nothing. It also bounds how fast anyone
+  // can use the "email already in use" answer to find out which emails have accounts.
+  const now = new Date();
+  const ipKey = authRateLimitKey("ip", await clientIp());
+  if (!(await isAuthAttemptAllowed({ scope: "sign_up_ip", keyHash: ipKey, now }))) {
+    return { formError: authRateLimitedMessage(), values };
+  }
+  await recordAuthAttempt({ scope: "sign_up_ip", keyHash: ipKey, now });
 
   const emailUsed: SignUpState = {
     emailUsed: true,

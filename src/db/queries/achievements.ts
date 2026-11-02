@@ -1,5 +1,5 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { achievements, type Achievement } from "@/db/schema";
 import {
@@ -32,6 +32,12 @@ export async function countUnlocksForAchievement(achievementId: string) {
 
 export async function deleteAchievementIfUnearned(achievementId: string) {
   return deleteOperation(db, achievementId);
+}
+
+/** The badges attached to these Places. The caller passes only Places eligible for the guest's hotel. */
+export async function listAchievementsForPlaces(placeIds: readonly string[]): Promise<Achievement[]> {
+  if (placeIds.length === 0) return [];
+  return db.select().from(achievements).where(inArray(achievements.placeId, [...placeIds]));
 }
 
 /** The badge attached to one Place, if it has one. At most one exists (unique constraint). */

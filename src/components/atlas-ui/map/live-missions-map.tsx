@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import { AtlasIcon } from "../asset";
 import { AtlasBottomBar } from "../bottom-bar";
@@ -29,6 +30,7 @@ export type LivePlace = {
   category: string;
   address: string | null;
   priceLevel: number | null;
+  imageUrl: string | null;
   /** [lng, lat] */
   at: [number, number];
 };
@@ -55,22 +57,25 @@ function matches(filter: Filter, place: LivePlace) {
   return filter === "All" || (filter === "Hotel" ? place.source === "facility" : place.source === "partner");
 }
 
-function LivePlaceCard({ place, selected, onSelect }: { place: LivePlace; selected: boolean; onSelect: () => void }) {
+/** A card opens the place's details; tapping its marker on the map highlights it and scrolls it into view. */
+function LivePlaceCard({ place, selected }: { place: LivePlace; selected: boolean }) {
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
+    <Link
+      id={`live-place-${place.id}`}
+      href={`/places/${place.id}`}
+      aria-current={selected ? "true" : undefined}
       className={`flex w-[268px] shrink-0 snap-start items-start gap-[10px] rounded-[16px] bg-atlas-paper px-[12px] py-[10px] text-left wide:w-full ${
         selected ? "border-2 border-atlas-teal" : "border border-atlas-beige"
       }`}
     >
-      <span
-        aria-hidden
-        className="flex size-[56px] shrink-0 items-center justify-center rounded-[10px] bg-atlas-beige font-manrope text-[10px] leading-[14px] text-atlas-ink"
-      >
-        Photo
-      </span>
+      {place.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- admin-entered URLs from any host; next/image would need each host allowlisted
+        <img src={place.imageUrl} alt="" loading="lazy" className="size-[56px] shrink-0 rounded-[10px] object-cover" />
+      ) : (
+        <span aria-hidden className="flex size-[56px] shrink-0 items-center justify-center rounded-[10px] bg-atlas-beige font-grotesk text-[20px] font-bold text-atlas-teal">
+          {place.name.replace(/^\[[^\]]*\]\s*/, "").charAt(0)}
+        </span>
+      )}
       <span className="flex min-w-0 flex-1 flex-col items-start gap-[3px]">
         <span className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
           {place.source === "facility" ? "At your hotel" : "Partner"} · {label(place.category)}
@@ -89,7 +94,7 @@ function LivePlaceCard({ place, selected, onSelect }: { place: LivePlace; select
           ) : null}
         </span>
       </span>
-    </button>
+    </Link>
   );
 }
 
@@ -111,6 +116,10 @@ export function LiveMissionsMap({ hotel, places }: { hotel: LiveHotel; places: L
       if (places.some((place) => place.id === id && matches(filter, place))) {
         setSelected(id);
         setCollapsed(false);
+        // After the sheet opens, bring this place's card into view so the tap visibly answers.
+        requestAnimationFrame(() =>
+          document.getElementById(`live-place-${id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" })
+        );
       }
     },
     [places, filter]
@@ -241,7 +250,7 @@ export function LiveMissionsMap({ hotel, places }: { hotel: LiveHotel; places: L
               </p>
             ) : (
               visible.map((place) => (
-                <LivePlaceCard key={place.id} place={place} selected={place.id === selected} onSelect={() => selectPlace(place.id)} />
+                <LivePlaceCard key={place.id} place={place} selected={place.id === selected} />
               ))
             )}
           </div>

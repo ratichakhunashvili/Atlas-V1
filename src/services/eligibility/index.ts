@@ -208,6 +208,7 @@ export type EligibleMapPoint = {
   longitude: number;
   address: string | null;
   priceLevel: number | null;
+  imageUrl: string | null;
 };
 
 export type GuestMapPlacesResult =
@@ -247,6 +248,7 @@ export async function getEligibleMapPlacesForGuest(
       longitude: place.longitude,
       address: place.address,
       priceLevel: place.priceLevel,
+      imageUrl: place.imageUrl,
     })),
   };
 }

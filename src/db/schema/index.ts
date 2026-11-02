@@ -11,6 +11,7 @@ export * from "./hotel-events";
 export * from "./qr-credentials";
 export * from "./pending-hotel-switches";
 export * from "./rate-limit-attempts";
+export * from "./auth-rate-limit-attempts";
 export * from "./place-visits";
 export * from "./achievements";
 export * from "./place-models";

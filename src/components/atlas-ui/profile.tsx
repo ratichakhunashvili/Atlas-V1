@@ -5,8 +5,7 @@ import { logoutAction } from "@/auth/actions";
 import { useState, type ReactNode } from "react";
 import { AtlasIcon, AtlasLogo } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
-import { useLivePlan } from "./demo/live";
-import type { AchievementId } from "./demo/plan-model";
+import { initialFor, type GuestProfile } from "@/features/profile/guest-profile";
 import { AtlasDialog } from "./dialog";
 import { DemoAction, FRONT_DESK_NOTICE } from "./navigation";
 import { screenHref, type ScreenKey } from "./screen-hrefs";
@@ -14,7 +13,7 @@ import { AtlasButton, AtlasLink, AtlasTextLink } from "./ui";
 
 /*
  * Stay · Profile — Figma frame 1:1542: the guest, their current stay, achievements, preferences
- * and app settings. Achievements and preferences come from the demo state. The language row is a
+ * and app settings, all from the signed-in guest's own data (loadGuestProfile). The language row is a
  * design state only: Georgian translation is a future integration, and the row says so rather
  * than relabelling an English interface. Calling the front desk is not connected either.
  *
@@ -24,7 +23,8 @@ import { AtlasButton, AtlasLink, AtlasTextLink } from "./ui";
  */
 
 const ROW = "flex min-h-[48px] w-full items-center justify-between gap-[8px] text-left";
-const ALL_ACHIEVEMENTS: AchievementId[] = ["achievement-1", "achievement-2", "achievement-3", "achievement-4", "achievement-5"];
+/** More badges than this collapse into "+N", so the row stays on one line on a phone. */
+const MAX_BADGES = 7;
 
 function SettingRow({ label, value, to, divider = true }: { label: string; value?: string; to: ScreenKey; divider?: boolean }) {
   return (
@@ -77,9 +77,8 @@ function Badge({ unlocked }: { unlocked: boolean }) {
   );
 }
 
-export function ProfileScreen({ confirmSignOut = false }: { confirmSignOut?: boolean }) {
+export function ProfileScreen({ profile, confirmSignOut = false }: { profile: GuestProfile; confirmSignOut?: boolean }) {
   const router = useRouter();
-  const live = useLivePlan();
   const [calling, setCalling] = useState(false);
   const [signingOut, setSigningOut] = useState(confirmSignOut);
 
@@ -88,31 +87,42 @@ export function ProfileScreen({ confirmSignOut = false }: { confirmSignOut?: boo
     const href = screenHref("Stay");
     if (confirmSignOut && href) router.replace(href);
   };
-  const unlockedCount = live.unlocked.length;
-  const { preferences } = live.state;
+  const { unlocked: unlockedCount, total } = profile.achievements;
+  const shown = Math.min(total, MAX_BADGES);
 
   return (
     <main className="relative flex min-h-[100dvh] w-full flex-col bg-atlas-paper">
       <div className="mx-auto flex w-full max-w-[640px] flex-1 flex-col items-start gap-[14px] px-[16px] pb-[24px] pt-[calc(14px+env(safe-area-inset-top))] wide:pt-[calc(24px+env(safe-area-inset-top))]">
         <div className="flex w-full items-center gap-[12px]">
           <span className="flex size-[48px] shrink-0 items-center justify-center rounded-[24px] bg-atlas-sand font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal">
-            G
+            {initialFor(profile.name, profile.email)}
           </span>
           <span className="flex min-w-0 flex-1 flex-col items-start gap-px">
-            <span className="font-grotesk text-[22px] font-bold leading-[28px] text-atlas-teal">[Guest name]</span>
-            <span className="font-manrope text-[13px] leading-[18px] text-atlas-slate">[guest@email.com]</span>
+            <span className="max-w-full truncate font-grotesk text-[22px] font-bold leading-[28px] text-atlas-teal">{profile.name?.trim() || "Guest"}</span>
+            <span className="max-w-full truncate font-manrope text-[13px] leading-[18px] text-atlas-slate">{profile.email}</span>
           </span>
         </div>
 
         <section aria-label="Your stay" className="atlas-dark flex w-full items-center gap-[12px] rounded-[16px] bg-atlas-teal p-[12px]">
-          <span className="flex size-[56px] shrink-0 items-center justify-center rounded-[12px] bg-atlas-lagoon font-manrope text-[10px] leading-[14px] text-atlas-beige">
-            Photo
-          </span>
+          {profile.stay?.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- admin-entered URLs from any host; next/image would need each host allowlisted
+            <img src={profile.stay.imageUrl} alt="" className="size-[56px] shrink-0 rounded-[12px] object-cover" />
+          ) : (
+            <span aria-hidden="true" className="flex size-[56px] shrink-0 items-center justify-center rounded-[12px] bg-atlas-lagoon font-grotesk text-[22px] font-bold text-atlas-beige">
+              {(profile.stay?.hotelName ?? "A").charAt(0)}
+            </span>
+          )}
           <span className="flex min-w-0 flex-1 flex-col items-start gap-[2px]">
             <span className="font-manrope text-[12px] leading-[16px] text-atlas-beige">Your stay</span>
-            <span className="font-grotesk text-[18px] font-bold leading-[23px] text-atlas-paper">Hotel A</span>
-            <span className="w-full font-manrope text-[13px] leading-[18px] text-atlas-linen">[check-in] – [check-out]</span>
-            <span className="font-manrope text-[12px] leading-[16px] text-atlas-beige">Night 2 of 3</span>
+            <span className="max-w-full truncate font-grotesk text-[18px] font-bold leading-[23px] text-atlas-paper">{profile.stay?.hotelName ?? "No active stay"}</span>
+            {profile.stay ? (
+              <>
+                <span className="w-full font-manrope text-[13px] leading-[18px] text-atlas-linen">{profile.stay.dates}</span>
+                <span className="font-manrope text-[12px] leading-[16px] text-atlas-beige">{profile.stay.progress}</span>
+              </>
+            ) : (
+              <span className="w-full font-manrope text-[13px] leading-[18px] text-atlas-linen">Scan your hotel&apos;s Atlas code to start.</span>
+            )}
           </span>
           <button
             type="button"
@@ -139,27 +149,29 @@ export function ProfileScreen({ confirmSignOut = false }: { confirmSignOut?: boo
             </span>
           </span>
           <span className="flex flex-wrap items-start gap-[8px]">
-            {ALL_ACHIEVEMENTS.map((id, index) => (
-              <Badge key={id} unlocked={index < unlockedCount} />
+            {Array.from({ length: shown }, (_, index) => (
+              <Badge key={index} unlocked={index < unlockedCount} />
             ))}
+            {total > shown ? <span className="self-center font-manrope text-[13px] text-atlas-slate">+{total - shown}</span> : null}
           </span>
           <span className="font-manrope text-[13px] leading-[18px] text-atlas-ink">
             <span className="font-semibold">
-              {unlockedCount} of {ALL_ACHIEVEMENTS.length} unlocked
-            </span>{" "}
-            this stay
+              {unlockedCount} of {total} unlocked
+            </span>
           </span>
-          <span className="flex w-full items-start gap-[4px]">
-            {ALL_ACHIEVEMENTS.map((id, index) => (
-              <span key={id} className={`h-[5px] min-w-px flex-1 rounded-[3px] ${index < unlockedCount ? "bg-atlas-teal" : "bg-atlas-beige"}`} />
-            ))}
-          </span>
+          {total > 0 ? (
+            <span className="flex w-full items-start gap-[4px]" aria-hidden="true">
+              {Array.from({ length: total }, (_, index) => (
+                <span key={index} className={`h-[5px] min-w-px flex-1 rounded-[3px] ${index < unlockedCount ? "bg-atlas-teal" : "bg-atlas-beige"}`} />
+              ))}
+            </span>
+          ) : null}
         </AtlasLink>
 
         <Section title="Your preferences">
-          <SettingRow label="Interests" value={preferences.interests.join(", ") || "None chosen"} to="PrefsEdit" />
-          <SettingRow label="Free time" value={preferences.time} to="PrefsEdit" />
-          <SettingRow label="Price level" value={preferences.price} to="PrefsEdit" divider={false} />
+          <SettingRow label="Interests" value={profile.interests} to="PrefsEdit" />
+          <SettingRow label="Free time" value="Chosen each day" to="PrefsEdit" />
+          <SettingRow label="Price level" value={profile.price} to="PrefsEdit" divider={false} />
         </Section>
 
         <Section title="App">
@@ -180,7 +192,7 @@ export function ProfileScreen({ confirmSignOut = false }: { confirmSignOut?: boo
           <AtlasLogo tone="teal" width={35} height={40} />
           <span className="flex flex-col items-start gap-px">
             <span className="font-grotesk text-[13px] font-bold leading-[17px] tracking-[2.6px] text-atlas-teal">ATLAS</span>
-            <span className="font-manrope text-[12px] leading-[16px] text-atlas-slate">All trips leave a story. · [version]</span>
+            <span className="font-manrope text-[12px] leading-[16px] text-atlas-slate">All trips leave a story.</span>
           </span>
         </div>
       </div>

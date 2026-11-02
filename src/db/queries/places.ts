@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, gte, ilike, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { hotelFacilities, hotelPartnerships, places, type Place, type PlaceCategory, type PublicationStatus, type VerificationStatus } from "@/db/schema";
+import { achievementUnlocks, achievements, hotelFacilities, hotelPartnerships, places, type Place, type PlaceCategory, type PublicationStatus, type VerificationStatus } from "@/db/schema";
 import type { DuplicateCandidate } from "@/services/catalog/duplicates";
 import { boundingBoxForRadius, distanceMeters, type LatLng } from "@/lib/geo";
 
@@ -319,4 +319,27 @@ export async function adminListDuplicateCandidates(candidate: {
     category: row.category,
     archived: row.archivedAt !== null,
   }));
+}
+
+/**
+ * Every badge this guest has earned, with the name of the Place it was earned at.
+ *
+ * History, not a recommendation: these are Places the guest has already visited and verified,
+ * so the list is not filtered by current eligibility. A badge earned at a previous hotel, or at
+ * a partner whose relationship later ended, stays readable (CLAUDE.md: historical records remain
+ * understandable). Nothing here may be used to suggest a Place.
+ */
+export async function listEarnedBadgesForUser(userId: string) {
+  return db
+    .select({
+      achievementId: achievements.id,
+      name: achievements.name,
+      placeName: places.name,
+      unlockedAt: achievementUnlocks.unlockedAt,
+      method: achievementUnlocks.verificationMethod,
+    })
+    .from(achievementUnlocks)
+    .innerJoin(achievements, eq(achievementUnlocks.achievementId, achievements.id))
+    .innerJoin(places, eq(achievements.placeId, places.id))
+    .where(eq(achievementUnlocks.userId, userId));
 }
