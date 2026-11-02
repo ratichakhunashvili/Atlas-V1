@@ -1,14 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { gpsCheckInFailureMessage, qrCheckInFailureMessage } from "@/app/(app)/advisor-messages";
-import { checkInGpsAction, checkInQrAction } from "@/features/advisor/actions";
 import { simulateScanAction } from "@/features/plan/actions";
-import { getCurrentPosition } from "@/services/location";
 import { AtlasIcon } from "./asset";
 import { PendingSubmit } from "./pending-submit";
+import { useStopCheckIn } from "./use-stop-check-in";
 
 // The camera library is only loaded when the guest actually opens the scanner.
 const QrScannerModal = dynamic(() => import("@/components/qr/qr-scanner-modal").then((m) => m.QrScannerModal), { ssr: false });
@@ -19,41 +16,12 @@ const QrScannerModal = dynamic(() => import("@/components/qr/qr-scanner-modal").
  * Achievement unlocked screen for this stop.
  */
 export function CheckInPanel({ stopId, placeName, testScan }: { stopId: string; placeName: string; testScan: boolean }) {
-  const router = useRouter();
   const [scanning, setScanning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [working, setWorking] = useState<null | "qr" | "gps">(null);
+  const { error, working, checkInWithCode, checkInByLocation } = useStopCheckIn({ stopId, placeName });
 
-  const unlocked = () => router.push(`/plan/unlocked?stop=${stopId}`);
-
-  // Plain async handlers, not a transition: a navigation started after an awaited server action inside a
-  // transition can be dropped, which left the guest on My plan after a successful check-in.
   async function onScan(decodedText: string) {
     setScanning(false);
-    setError(null);
-    setWorking("qr");
-    const result = await checkInQrAction(decodedText);
-    setWorking(null);
-    if (!result.ok) return setError(qrCheckInFailureMessage(result.reason));
-    // A code for a different place on the guest's day would name another stop; only this one opens its badge.
-    if (result.stop.id !== stopId) return setError("That QR code belongs to a different place.");
-    unlocked();
-  }
-
-  async function checkInByLocation() {
-    setError(null);
-    setWorking("gps");
-    let position;
-    try {
-      position = await getCurrentPosition({ fresh: true });
-    } catch (problem) {
-      setWorking(null);
-      return setError(problem instanceof Error ? `We couldn't get your location: ${problem.message}` : "We couldn't get your location.");
-    }
-    const result = await checkInGpsAction(stopId, position.latitude, position.longitude, position.accuracyMeters, position.capturedAtMs);
-    setWorking(null);
-    if (!result.ok) return setError(gpsCheckInFailureMessage(result.reason));
-    unlocked();
+    await checkInWithCode(decodedText);
   }
 
   const busy = working !== null;

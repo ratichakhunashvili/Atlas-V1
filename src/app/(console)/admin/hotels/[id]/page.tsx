@@ -49,6 +49,7 @@ export default async function EditHotelPage({
         description="Scanned at the front desk to start a guest's stay. It cannot be used to check in at a Place."
         hasActiveCredential={entryCredential !== null}
         issuedAt={entryCredential?.createdAt ?? null}
+        linkPath="/checkin/"
         issue={issueHotelEntryCredentialAction.bind(null, hotel.id)}
         revoke={revokeHotelEntryCredentialAction.bind(null, hotel.id)}
       />

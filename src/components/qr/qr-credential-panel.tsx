@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Alert } from "@/components/shared/alert";
 import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
+import { QrPrintCard } from "@/components/qr/qr-print-card";
 import type { IssueCredentialResult, RevokeCredentialResult } from "@/features/qr-credentials/actions";
 
 /**
@@ -20,6 +21,7 @@ export function QrCredentialPanel({
   description,
   hasActiveCredential,
   issuedAt,
+  linkPath,
   issue,
   revoke,
 }: {
@@ -27,6 +29,8 @@ export function QrCredentialPanel({
   description: string;
   hasActiveCredential: boolean;
   issuedAt: Date | null;
+  /** When set, the QR image holds this site's `${linkPath}<code>` link, so a phone's own camera app opens Atlas. */
+  linkPath?: string;
   issue: () => Promise<IssueCredentialResult>;
   revoke: () => Promise<RevokeCredentialResult>;
 }) {
@@ -82,8 +86,9 @@ export function QrCredentialPanel({
       {revealed && (
         <div className="space-y-2 rounded border border-amber-300 bg-amber-50 p-3">
           <p className="text-xs font-medium text-amber-900">
-            Shown once. Copy it into your QR generator now — it cannot be retrieved later.
+            Shown once. Download or print the QR image now — it cannot be retrieved later.
           </p>
+          <QrPrintCard value={linkPath ? `${window.location.origin}${linkPath}${revealed}` : revealed} title={label} />
           <code className="block break-all rounded bg-white px-2 py-1 font-mono text-xs text-slate-900">
             {revealed}
           </code>

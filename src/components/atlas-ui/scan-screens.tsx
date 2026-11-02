@@ -1,55 +1,74 @@
 "use client";
 
-import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { CAMERA_PROBLEM_COPY, useQrCamera, type QrCameraState, type QrTorch } from "@/components/qr/use-qr-camera";
+import type { CheckInMethod } from "@/db/schema";
+import { extractQrToken } from "@/services/qr/extract";
 import { AtlasIcon } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
-import { chooseCheckIn } from "./demo/demo-store";
-import { useLivePlan, type LivePlan } from "./demo/live";
-import { STOPS, type StopId } from "./demo/plan-model";
 import type { ScanProblem } from "./scan-problems";
-import { screenHref, type ScreenKey } from "./screen-hrefs";
+import { type ScreenKey } from "./screen-hrefs";
 import { AtlasButton, AtlasLink, AtlasTextLink } from "./ui";
+import { acceptedProofs, useStopCheckIn } from "./use-stop-check-in";
 
 /*
- * The Scan tab: Scan (1:410) and the six check-in problems (1:1042 – 1:1127).
+ * The Scan tab (1:410), Join your hotel (70:3730) and the check-in problem cases (1:1042 – 1:1127).
  *
- * The camera area is the design's own placeholder — a dark surface, not a camera. Nothing is
- * photographed, scanned, located or sent: tapping the viewfinder simulates a good scan at the
- * stop the guest is checking in at, as the prototype does, and the real camera, code reader and
- * location check plug in here later.
+ * The camera area shows the real camera through the shared useQrCamera reader. What a code means is decided on the
+ * server only: a place code goes to the QR check-in action, a hotel code to the existing /checkin/<token> landing
+ * with its explicit "Start my stay" button.
  *
- * Phone: the camera area above a sheet; on short screens the page scrolls rather than letting
- * the sheet cover the viewfinder. Wide layout: the sheet becomes a panel beside the camera area.
+ * Every camera screen fits the screen exactly (no page scroll): the camera area takes whatever height the sheet
+ * leaves. Wide layout: the sheet becomes a panel beside the camera area.
  */
 
-export function CameraLayout({ camera, panel, label, labelTop }: { camera: ReactNode; panel: ReactNode; label: string; labelTop: number }) {
+export function CameraLayout({ camera, panel, label, labelTop = 520 }: { camera: ReactNode; panel: ReactNode; label?: string; labelTop?: number }) {
   return (
-    <main className="flex min-h-[100dvh] w-full flex-col bg-atlas-night wide:grid wide:h-[100dvh] wide:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
-      <div className="atlas-dark relative min-h-[440px] w-full flex-1 overflow-hidden short:min-h-[360px] wide:h-full wide:min-h-0">
+    <main className="flex h-[100dvh] w-full flex-col overflow-hidden bg-atlas-night wide:grid wide:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+      <div className="atlas-dark relative min-h-0 w-full flex-1 overflow-hidden [container-type:size] wide:h-full">
         {camera}
-        <p
-          aria-hidden
-          className="absolute left-0 right-0 px-[16px] text-center font-manrope text-[12px] leading-[16px] text-atlas-mist wide:bottom-[20px] wide:top-auto!"
-          style={{ top: `min(${labelTop}px, calc(100% - 36px))` }}
-        >
-          {label}
-        </p>
+        {label ? (
+          <p
+            aria-hidden
+            className="absolute left-0 right-0 px-[16px] text-center font-manrope text-[12px] leading-[16px] text-atlas-mist wide:bottom-[20px] wide:top-auto!"
+            style={{ top: `min(${labelTop}px, calc(100% - 36px))` }}
+          >
+            {label}
+          </p>
+        ) : null}
       </div>
-      <div className="relative w-full wide:flex wide:h-full wide:flex-col wide:overflow-y-auto wide:bg-atlas-paper">{panel}</div>
+      <div className="relative max-h-[62dvh] w-full shrink-0 overflow-y-auto wide:flex wide:h-full wide:max-h-none wide:flex-col wide:bg-atlas-paper">{panel}</div>
     </main>
   );
 }
+
+const TOP_BUTTON = "absolute top-[calc(12px+env(safe-area-inset-top))] z-20 flex size-[44px] items-center justify-center";
 
 export function CloseButton({ to = "Main", label }: { to?: ScreenKey; label?: string }) {
   return (
     <AtlasLink
       to={to}
       label={label ?? (to === "AttractionDetail" ? "Close the camera view" : "Close the scanner")}
-      className="absolute left-[16px] top-[calc(16px+env(safe-area-inset-top))] z-10 flex size-[44px] items-center justify-center rounded-[12px] bg-atlas-ink/75"
+      className={`${TOP_BUTTON} left-[16px] rounded-[12px] bg-atlas-ink/75`}
     >
       <AtlasIcon src="/atlas-ui/icon-close-light.svg" size={20} />
     </AtlasLink>
+  );
+}
+
+function FlashButton({ torch }: { torch: QrTorch }) {
+  if (!torch.supported) return null;
+  return (
+    <button
+      type="button"
+      aria-pressed={torch.on}
+      aria-label={torch.on ? "Turn the flashlight off" : "Turn the flashlight on"}
+      onClick={torch.toggle}
+      className={`${TOP_BUTTON} right-[16px] rounded-[22px] ${torch.on ? "bg-atlas-beige" : "bg-atlas-ink/75"}`}
+    >
+      <AtlasIcon src="/atlas-ui/icon-flash.svg" size={20} className={torch.on ? "invert" : ""} />
+    </button>
   );
 }
 
@@ -67,109 +86,268 @@ export function ViewfinderCorners() {
   );
 }
 
-/** The stop the scanner checks in at: the one the guest chose, else the next partner in the plan. */
-export function scanTarget(live: LivePlan): StopId | undefined {
-  const chosen = live.state.checkInTarget;
-  if (chosen && STOPS[chosen].kind === "partner") return chosen;
-  return live.timing.stops.find((s) => (s.status === "next" || s.status === "later") && STOPS[s.id].kind === "partner")?.id;
+// Sized from the camera area's own height (it is a size container), so the frame never runs under the sheet.
+const VIEWFINDER = "relative size-[max(88px,min(240px,calc(100vw-64px),calc(100cqh-200px)))] shrink-0";
+
+/** What the camera area says under the viewfinder for each camera state. */
+function cameraStatus(state: QrCameraState, busy: boolean): string | null {
+  if (busy) return "Checking the code…";
+  if (state === "starting") return "Starting the camera…";
+  if (state === "scanning") return "Hold the code inside the frame";
+  if (state in CAMERA_PROBLEM_COPY) return CAMERA_PROBLEM_COPY[state as keyof typeof CAMERA_PROBLEM_COPY];
+  return null;
 }
 
-function SimulatedCheckIn({ stop, className, label, children }: { stop: StopId; className: string; label?: string; children: ReactNode }) {
+/**
+ * The live camera with the heading and viewfinder on top. The video fills the camera area; a gradient keeps the
+ * heading readable over a bright picture.
+ */
+function LiveCamera({
+  regionId,
+  heading,
+  closeTo,
+  state,
+  torch,
+  busy,
+  showViewfinder,
+}: {
+  regionId: string;
+  heading: ReactNode;
+  closeTo: ScreenKey;
+  state: QrCameraState;
+  torch: QrTorch;
+  busy: boolean;
+  showViewfinder: boolean;
+}) {
+  const live = state === "starting" || state === "scanning";
+  const status = showViewfinder ? cameraStatus(state, busy) : null;
   return (
-    <Link href={screenHref("Unlocked") ?? "/unlocked"} aria-label={label} onClick={() => chooseCheckIn(stop)} className={className}>
-      {children}
-    </Link>
+    <>
+      {/* The library restyles the element it renders into, so it gets an inner element inside a fixed frame. */}
+      <div className="absolute inset-0 overflow-hidden" hidden={!live}>
+        <div id={regionId} className="atlas-scan-region" />
+      </div>
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[45%] bg-linear-to-b from-atlas-night/85 to-transparent" />
+      <CloseButton to={closeTo} />
+      <FlashButton torch={torch} />
+      <div className="relative z-10 flex h-full flex-col items-center gap-[10px] px-[24px] pb-[16px] pt-[calc(64px+env(safe-area-inset-top))] wide:justify-center">
+        <div className="flex w-full flex-col items-center gap-[4px] text-center wide:hidden">{heading}</div>
+        {showViewfinder ? (
+          <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-[10px]">
+            <div className={VIEWFINDER}>
+              <ViewfinderCorners />
+              {busy ? <span className="absolute inset-0 animate-pulse rounded-[14px] bg-atlas-paper/15" /> : null}
+            </div>
+            {status ? (
+              <p role="status" className="max-w-[320px] rounded-[10px] bg-atlas-ink/60 px-[10px] py-[4px] text-center font-manrope text-[13px] leading-[18px] text-atlas-paper">
+                {status}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }
 
-export function ScanScreen() {
-  const [flash, setFlash] = useState(false);
-  const live = useLivePlan();
-  const target = scanTarget(live);
-  const isNext = target && target === live.timing.next?.id;
-  const name = target ? STOPS[target].name : undefined;
+const EYEBROW = "font-grotesk text-[11px] font-medium uppercase leading-[14px] tracking-[0.88px] text-atlas-beige";
+const TITLE =
+  "line-clamp-2 font-grotesk text-[22px] font-bold leading-[28px] text-atlas-paper [@media(max-height:640px)]:line-clamp-1 [@media(max-height:640px)]:text-[19px] [@media(max-height:640px)]:leading-[24px]";
+const SUB = "w-full text-center font-manrope text-[14px] leading-[19px] text-atlas-fog [@media(max-height:640px)]:hidden";
+const OUTLINE_BUTTON =
+  "flex h-[48px] w-full shrink-0 items-center justify-center rounded-[14px] border border-atlas-teal font-manrope text-[15px] font-semibold text-atlas-teal disabled:opacity-60";
+const SOLID_BUTTON =
+  "flex h-[48px] w-full shrink-0 items-center justify-center rounded-[14px] bg-atlas-teal font-manrope text-[15px] font-semibold text-atlas-paper disabled:opacity-60";
 
-  const heading = target ? (
+/** "Type the code instead": the fallback when the camera can't read or isn't allowed. */
+function TypedCode({ onSubmit, disabled }: { onSubmit: (code: string) => void; disabled: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="font-manrope text-[14px] font-semibold text-atlas-teal underline underline-offset-2">
+        Type the code instead
+      </button>
+    );
+  }
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = code.trim();
+    if (value) onSubmit(value);
+  }
+  return (
+    <form onSubmit={submit} className="flex w-full gap-[8px]">
+      <label htmlFor="atlas-scan-typed-code" className="sr-only">
+        Code printed under the QR code
+      </label>
+      <input
+        id="atlas-scan-typed-code"
+        value={code}
+        onChange={(event) => setCode(event.target.value)}
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        required
+        autoFocus
+        placeholder="Code under the QR"
+        className="h-[44px] min-w-0 flex-1 rounded-[12px] border border-atlas-sand-deep bg-white px-[12px] font-manrope text-[15px] text-atlas-ink"
+      />
+      <button type="submit" disabled={disabled} className="h-[44px] shrink-0 rounded-[12px] bg-atlas-teal px-[16px] font-manrope text-[15px] font-semibold text-atlas-paper disabled:opacity-60">
+        Continue
+      </button>
+    </form>
+  );
+}
+
+function ErrorNote({ children }: { children: ReactNode }) {
+  return (
+    <p role="alert" className="w-full rounded-[10px] bg-atlas-danger-soft px-[12px] py-[8px] font-manrope text-[14px] leading-[19px] text-atlas-danger">
+      {children}
+    </p>
+  );
+}
+
+const SHEET = "flex w-full flex-col items-start gap-[10px] rounded-t-[24px] bg-atlas-paper px-[16px] pb-[12px] pt-[16px] wide:rounded-none";
+
+export type ScanTarget = { stopId: string; name: string; checkInMethod: CheckInMethod };
+export type ScanEmpty = { title: string; body: string; action: { label: string; href: string } };
+
+const SCAN_REGION = "atlas-scan-region";
+
+/** Scan (centre tab): check in at today's current stop with its Atlas QR code, or by location. */
+export function ScanScreen({ target, empty }: { target: ScanTarget | null; empty: ScanEmpty }) {
+  if (!target) return <NothingToScan empty={empty} />;
+  return <StopScanner target={target} />;
+}
+
+function NothingToScan({ empty }: { empty: ScanEmpty }) {
+  const router = useRouter();
+  const heading = (
     <>
-      <p className="font-grotesk text-[11px] font-medium uppercase leading-[14px] tracking-[0.88px] text-atlas-beige">
-        {isNext ? "Next stop" : "Checking in at"}
-      </p>
-      <h1 className="font-grotesk text-[22px] font-bold leading-[28px] text-atlas-paper">{name}</h1>
-      <p className="w-full text-center font-manrope text-[14px] leading-[19px] text-atlas-fog">
-        Point your camera at the Atlas code at any partner&apos;s counter
-      </p>
-      <p className="flex items-center gap-[6px] font-manrope text-[13px] leading-[18px] text-atlas-paper">
-        <AtlasIcon src="/atlas-ui/icon-pin-light-15.svg" size={15} />
-        Location not checked in this prototype
-      </p>
+      <h1 className={TITLE}>{empty.title}</h1>
+      <p className={SUB}>{empty.body}</p>
     </>
-  ) : (
+  );
+  return (
+    <CameraLayout
+      camera={
+        <>
+          <CloseButton />
+          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-[6px] px-[24px] text-center">
+            <AtlasIcon src="/atlas-ui/icon-qr-light-17.svg" size={34} />
+            {heading}
+          </div>
+        </>
+      }
+      panel={
+        <>
+          <section className={SHEET}>
+            <button type="button" onClick={() => router.push(empty.action.href)} className={SOLID_BUTTON}>
+              {empty.action.label}
+            </button>
+          </section>
+          <AtlasBottomBar active="scan" />
+        </>
+      }
+    />
+  );
+}
+
+function StopScanner({ target }: { target: ScanTarget }) {
+  const proofs = acceptedProofs(target.checkInMethod);
+  const { error, setError, working, checkInWithCode, checkInByLocation } = useStopCheckIn({ stopId: target.stopId, placeName: target.name });
+  const { state, restart, torch } = useQrCamera({
+    regionId: SCAN_REGION,
+    autoStart: proofs.qr,
+    onDecode: (text) => void checkInWithCode(text),
+  });
+  const busy = working !== null;
+  const paused = proofs.qr && state === "paused" && !busy;
+  const cameraProblem = state in CAMERA_PROBLEM_COPY;
+
+  const scanAgain = () => {
+    setError(null);
+    restart();
+  };
+
+  const heading = (
     <>
-      <h1 className="font-grotesk text-[22px] font-bold leading-[28px] text-atlas-paper">No stop to check in at</h1>
-      <p className="w-full text-center font-manrope text-[14px] leading-[19px] text-atlas-fog">
-        Check-in works for partner stops in today&apos;s plan. Add one from the map or My plan.
+      <p className={EYEBROW}>Checking in at</p>
+      <h1 className={TITLE}>{target.name}</h1>
+      <p className={SUB}>
+        {proofs.qr ? "Point your camera at the Atlas code at the counter" : "This stop is confirmed by your location when you arrive"}
       </p>
     </>
   );
 
   return (
     <CameraLayout
-      label={target ? "[Camera placeholder] Tap the frame to simulate a scan" : "[Camera placeholder]"}
-      labelTop={520}
       camera={
-        <>
-          <CloseButton />
-          <button
-            type="button"
-            aria-pressed={flash}
-            aria-label="Flashlight"
-            onClick={() => setFlash(!flash)}
-            className={`absolute right-[16px] top-[calc(16px+env(safe-area-inset-top))] z-10 flex size-[44px] items-center justify-center rounded-[22px] ${flash ? "bg-atlas-paper/30" : "bg-atlas-ink/75"}`}
-          >
-            <AtlasIcon src="/atlas-ui/icon-flash.svg" size={20} />
-          </button>
-          {/*
-           * Heading and viewfinder in one column from 76 px down, as the design places them (the
-           * viewfinder lands at 196 on a 390 x 844 screen); in flow, a wrapping heading pushes the
-           * viewfinder down instead of covering it.
-           */}
-          <div className="relative flex flex-col items-center gap-[4px] px-[24px] pb-[52px] pt-[calc(76px+env(safe-area-inset-top))] wide:h-full wide:justify-center wide:pb-[52px] wide:pt-[76px]">
-            <div className="flex w-full flex-col items-center gap-[6px] text-center wide:hidden">{heading}</div>
-            {target ? (
-            <SimulatedCheckIn
-              stop={target}
-              label={`Simulate a good scan at ${name}`}
-              className="relative block size-[min(240px,calc(100vw_-_32px))] shrink-0 short:size-[min(200px,calc(100vw_-_32px))]"
-            >
-              <ViewfinderCorners />
-            </SimulatedCheckIn>
-            ) : null}
-          </div>
-        </>
+        <LiveCamera regionId={SCAN_REGION} heading={heading} closeTo="MyPlan" state={state} torch={torch} busy={working === "qr"} showViewfinder={proofs.qr} />
       }
       panel={
         <>
-          <div className="hidden flex-col items-center gap-[6px] bg-atlas-teal px-[24px] py-[20px] text-center wide:flex">{heading}</div>
-          <section className="flex w-full flex-col items-start gap-[12px] rounded-t-[24px] bg-atlas-paper px-[16px] pb-[12px] pt-[18px] wide:rounded-none">
-            <h2 className="font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">Can&apos;t find the code?</h2>
-            <p className="w-full font-manrope text-[14px] leading-[1.55] text-atlas-slate">Ask staff for the Atlas card, or use your location.</p>
-            {target ? (
-              <SimulatedCheckIn
-                stop={target}
-                className="flex h-[52px] w-full items-center justify-center rounded-[14px] border border-atlas-teal font-manrope text-[16px] font-semibold leading-[22px] text-atlas-teal"
-              >
-                Check in with my location
-              </SimulatedCheckIn>
-            ) : (
-              <AtlasButton to="MyPlan" tone="outline">
-                Open my plan
-              </AtlasButton>
-            )}
-            <p className="w-full text-center font-manrope text-[12px] leading-[1.5] text-atlas-slate">
-              Prototype: the camera isn&apos;t opened and your location isn&apos;t checked. Nothing is saved or sent.
-            </p>
+          <div className="hidden flex-col items-center gap-[4px] bg-atlas-teal px-[24px] py-[20px] text-center wide:flex">{heading}</div>
+          <section className={SHEET}>
+            {error ? <ErrorNote>{error}</ErrorNote> : null}
+            {paused || (proofs.qr && cameraProblem) ? (
+              <button type="button" onClick={scanAgain} className={SOLID_BUTTON}>
+                {cameraProblem ? "Try the camera again" : "Scan again"}
+              </button>
+            ) : null}
+            {proofs.gps ? (
+              <button type="button" disabled={busy} onClick={checkInByLocation} className={proofs.qr ? OUTLINE_BUTTON : SOLID_BUTTON}>
+                {working === "gps" ? "Checking your location…" : "Check in with my location"}
+              </button>
+            ) : null}
+            {proofs.qr ? <TypedCode disabled={busy} onSubmit={(code) => void checkInWithCode(code)} /> : null}
           </section>
           <AtlasBottomBar active="scan" />
+        </>
+      }
+    />
+  );
+}
+
+const HOTEL_REGION = "atlas-hotel-scan-region";
+
+/** ScanHotel · Join your hotel: read the hotel's code and open its landing, where the guest confirms the stay. */
+export function HotelScanScreen() {
+  const router = useRouter();
+  const [opening, setOpening] = useState(false);
+  const open = (scanned: string) => {
+    const token = extractQrToken(scanned);
+    if (!token) return;
+    setOpening(true);
+    router.push(`/checkin/${encodeURIComponent(token)}`);
+  };
+  const { state, restart, torch } = useQrCamera({ regionId: HOTEL_REGION, onDecode: open });
+  const cameraProblem = state in CAMERA_PROBLEM_COPY;
+
+  const heading = (
+    <>
+      <p className={EYEBROW}>Join your hotel</p>
+      <h1 className={TITLE}>Scan the hotel&apos;s Atlas code</h1>
+      <p className={SUB}>Find it on the card at reception or in your room.</p>
+    </>
+  );
+
+  return (
+    <CameraLayout
+      camera={<LiveCamera regionId={HOTEL_REGION} heading={heading} closeTo="NoStay" state={state} torch={torch} busy={opening} showViewfinder />}
+      panel={
+        <>
+          <div className="hidden flex-col items-center gap-[4px] bg-atlas-teal px-[24px] py-[20px] text-center wide:flex">{heading}</div>
+          <section className={`${SHEET} pb-[calc(16px+env(safe-area-inset-bottom))]`}>
+            <h2 className="font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">Can&apos;t scan the code?</h2>
+            {cameraProblem ? (
+              <button type="button" onClick={restart} className={SOLID_BUTTON}>
+                Try the camera again
+              </button>
+            ) : null}
+            <TypedCode disabled={opening} onSubmit={open} />
+            <p className="w-full font-manrope text-[13px] leading-[1.5] text-atlas-slate">Or ask the front desk to confirm your stay.</p>
+          </section>
         </>
       }
     />

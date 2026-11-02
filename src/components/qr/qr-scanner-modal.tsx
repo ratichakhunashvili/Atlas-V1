@@ -1,54 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import { useState, type FormEvent } from "react";
+import { CAMERA_PROBLEM_COPY, useQrCamera } from "./use-qr-camera";
 
 const REGION_ID = "atlas-qr-scanner-region";
 
 /**
- * html5-qrcode calls its internal camera <video> element's .play() without
- * handling the returned promise. If that element is torn down (e.g. we stop
- * the scanner right after a successful scan) while play() is still pending,
- * the browser rejects it with this AbortError — benign, but Next's dev
- * overlay treats the unhandled rejection as a fatal error. Swallow only this
- * specific, known rejection while the scanner is mounted. (Same fix Map
- * Advisor Functional and Map Achievement Functional both needed for the same
- * library — carried forward rather than re-discovered.)
- */
-function isBenignPlayAbort(reason: unknown): boolean {
-  return (
-    reason instanceof DOMException && reason.name === "AbortError" && reason.message.includes("play() request was interrupted")
-  );
-}
-
-/** scanner.stop() throws *synchronously* (not a rejected promise) when the scanner isn't currently running, so a chained .catch() alone can't guard it. */
-function safeStop(scanner: Html5Qrcode) {
-  try {
-    scanner
-      .stop()
-      .catch(() => {})
-      .finally(() => {
-        try {
-          scanner.clear();
-        } catch {
-          // ignore
-        }
-      });
-  } catch {
-    try {
-      scanner.clear();
-    } catch {
-      // ignore
-    }
-  }
-}
-
-/**
- * The one QR-scanning implementation in Atlas — request camera permission,
- * decode a QR code, hand the raw decoded text back to the caller. Never
- * decides whether the scanned text is valid itself; that's always a server
- * decision (see services/advisor/check-in-qr.ts). Reusable for hotel entry and
- * Place check-in; the caller chooses the server workflow for the token purpose.
+ * The scanner as a dialog (My plan's "Scan the QR code"). The camera and decoding are the shared useQrCamera; this
+ * only adds the dialog, a flash toggle and the typed-code fallback. It never decides whether the scanned text is
+ * valid — that's always a server decision. Reusable for hotel entry and Place check-in; the caller chooses the
+ * server workflow for the token purpose.
  */
 export function QrScannerModal({
   onClose,
@@ -61,78 +22,15 @@ export function QrScannerModal({
   title?: string;
   description?: string;
 }) {
-  const onScanRef = useRef(onScan);
-  const [cameraAttempt, setCameraAttempt] = useState(0);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState("");
-  const cameraRequested = cameraAttempt > 0;
-  useEffect(() => {
-    onScanRef.current = onScan;
-  });
-
-  useEffect(() => {
-    if (cameraAttempt === 0) return;
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      if (isBenignPlayAbort(event.reason)) {
-        event.preventDefault();
-      }
-    };
-    window.addEventListener("unhandledrejection", handleUnhandledRejection);
-
-    const scanner = new Html5Qrcode(REGION_ID);
-    let stopped = false;
-    let running = false;
-
-    const stopIfRunning = () => {
-      if (running) {
-        running = false;
-        safeStop(scanner);
-      }
-    };
-
-    const startPromise = scanner
-      .start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        (decodedText) => {
-          if (stopped) return;
-          stopped = true;
-          stopIfRunning();
-          onScanRef.current(decodedText);
-        },
-        () => {}
-      )
-      .then(() => {
-        running = true;
-        if (stopped) stopIfRunning();
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Camera access is unavailable.";
-        try {
-          scanner.clear();
-        } catch {
-          // The manual code field remains available if scanner cleanup fails.
-        }
-        setCameraError(message.toLowerCase().includes("permission")
-          ? "Camera access was denied. Enter the code manually or allow camera access in your browser settings."
-          : "Could not start the camera. Enter the code manually or try again.");
-      });
-
-    return () => {
-      stopped = true;
-      startPromise.finally(() => {
-        stopIfRunning();
-        setTimeout(() => {
-          window.removeEventListener("unhandledrejection", handleUnhandledRejection);
-        }, 1000);
-      });
-    };
-  }, [cameraAttempt]);
+  const { state, restart, torch } = useQrCamera({ regionId: REGION_ID, onDecode: onScan, autoStart: false });
+  const cameraProblem = state in CAMERA_PROBLEM_COPY ? CAMERA_PROBLEM_COPY[state as keyof typeof CAMERA_PROBLEM_COPY] : null;
+  const cameraShown = state === "starting" || state === "scanning";
 
   function submitManualCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const code = manualCode.trim();
-    if (code) onScanRef.current(code);
+    if (code) onScan(code);
   }
 
   return (
@@ -148,21 +46,22 @@ export function QrScannerModal({
           </button>
         </div>
         <p className="atlas-panel-copy">{description}</p>
-        {cameraRequested && <div id={REGION_ID} className="atlas-qr-camera" />}
-        {cameraError && <p className="atlas-qr-error" role="status">{cameraError}</p>}
-        {!cameraRequested || cameraError ? (
-          <button
-            type="button"
-            className="atlas-secondary-action"
-            onClick={() => {
-              setCameraError(null);
-              setCameraAttempt((attempt) => attempt + 1);
-            }}
-          >
-            {cameraError ? "Try camera again" : "Start camera"}
-          </button>
+        {/* Always mounted so the library can find it; hidden while the camera is off. */}
+        <div id={REGION_ID} className="atlas-qr-camera" hidden={!cameraShown} />
+        {cameraProblem && <p className="atlas-qr-error" role="status">{cameraProblem}</p>}
+        {cameraShown ? (
+          <div className="atlas-qr-hint flex items-center justify-between gap-[8px]">
+            <span>{state === "starting" ? "Starting the camera…" : "Point your camera at the QR code."}</span>
+            {torch.supported ? (
+              <button type="button" aria-pressed={torch.on} onClick={torch.toggle} className="atlas-secondary-action">
+                {torch.on ? "Flash off" : "Flash on"}
+              </button>
+            ) : null}
+          </div>
         ) : (
-          <p className="atlas-qr-hint">Point your camera at the QR code.</p>
+          <button type="button" className="atlas-secondary-action" onClick={restart}>
+            {cameraProblem ? "Try camera again" : "Start camera"}
+          </button>
         )}
         <form className="atlas-qr-manual" onSubmit={submitManualCode}>
           <label htmlFor="atlas-qr-manual-code">Or enter a code</label>

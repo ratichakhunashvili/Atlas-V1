@@ -152,6 +152,12 @@ select:disabled {
 .atlas-qr-heading h2 { margin-top: 4px; font-size: 21px; font-weight: 680; letter-spacing: -.03em; }
 .atlas-qr-camera { min-height: 210px; margin-top: 16px; overflow: hidden; border-radius: 20px; background: #dfe5db; }
 .atlas-qr-camera video { width: 100%; border-radius: 20px; object-fit: cover; }
+/* Full-screen camera on the Scan pages: the library sizes its <video> inline, so cover the area explicitly. */
+/* The camera keeps its true shape (the QR reader maps screen pixels to camera pixels by the video's box, so a
+   stretched box squashes the code it reads); use-qr-camera.ts scales the whole run up to cover the frame instead. */
+.atlas-scan-region { position: absolute !important; inset: 0; overflow: hidden; }
+.atlas-scan-region > div { position: absolute !important; left: 0; top: 50%; width: 100% !important; transform: translateY(-50%); }
+.atlas-scan-region video { width: 100% !important; height: auto !important; }
 .atlas-qr-hint,.atlas-qr-error { margin-top: 10px; color: var(--atlas-muted); font-size: 12px; }
 .atlas-qr-error { border-radius: 12px; background: #fff2e9; padding: 10px; color: #7b3020; }
 .atlas-qr-dialog > .atlas-secondary-action { width: 100%; margin-top: 14px; }
