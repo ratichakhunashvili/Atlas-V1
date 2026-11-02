@@ -6,7 +6,8 @@ import { AtlasBottomBar } from "../bottom-bar";
 import { PlanSegment } from "../missions-chrome";
 import type { MarkerImage } from "./markers";
 import { useMapScene, useSceneContext, type ScenePlace } from "./scene";
-import { useShortScreen } from "../use-layout";
+import { useShortScreen, useWideLayout } from "../use-layout";
+import { useSheetSwipe } from "../use-sheet-swipe";
 
 /*
  * Main · Missions › Map (home) — Figma frame 1:205 — on real data.
@@ -99,6 +100,8 @@ export function LiveMissionsMap({ hotel, places }: { hotel: LiveHotel; places: L
   const short = useShortScreen();
   const [userCollapsed, setCollapsed] = useState<boolean | null>(null);
   const collapsed = userCollapsed ?? short;
+  const wide = useWideLayout();
+  const swipe = useSheetSwipe({ collapsed, setCollapsed, openHeight: SHEET_HEIGHT, collapsedHeight: SHEET_COLLAPSED, enabled: !wide });
   const { moveCamera, dimension, setDimension } = useSceneContext();
 
   const scenePlaces: ScenePlace[] = visible.map((place) => ({ id: place.id, marker: marker(place, place.id === selected), at: place.at }));
@@ -206,8 +209,9 @@ export function LiveMissionsMap({ hotel, places }: { hotel: LiveHotel; places: L
 
         <section
           aria-label="Places"
-          className="pointer-events-auto absolute left-0 right-0 flex flex-col items-center gap-[8px] overflow-hidden rounded-t-[22px] bg-atlas-paper pt-[8px] shadow-[0px_-4px_18px_0px_rgba(28,41,41,0.1)] wide:static wide:h-auto! wide:min-h-0 wide:flex-1 wide:rounded-none wide:pt-0 wide:shadow-none"
-          style={{ bottom: "var(--atlas-nav-h)", height: collapsed ? SHEET_COLLAPSED : SHEET_HEIGHT }}
+          {...swipe.handlers}
+          className={`pointer-events-auto absolute left-0 right-0 flex touch-pan-x flex-col items-center gap-[8px] overflow-hidden rounded-t-[22px] bg-atlas-paper pt-[8px] shadow-[0px_-4px_18px_0px_rgba(28,41,41,0.1)] ${swipe.dragging ? "" : "motion-safe:transition-[height] motion-safe:duration-200"} wide:touch-auto wide:static wide:h-auto! wide:min-h-0 wide:flex-1 wide:rounded-none wide:pt-0 wide:shadow-none`}
+          style={{ bottom: "var(--atlas-nav-h)", height: swipe.height }}
         >
           <div aria-hidden className="h-[4px] w-[36px] shrink-0 rounded-[2px] bg-atlas-beige wide:hidden" />
           <button
@@ -226,7 +230,7 @@ export function LiveMissionsMap({ hotel, places }: { hotel: LiveHotel; places: L
           </div>
           <div
             id="live-place-cards"
-            hidden={collapsed}
+            hidden={collapsed && !swipe.dragging}
             className="atlas-scroll-fade flex w-full snap-x items-start gap-[10px] overflow-x-auto scroll-px-[16px] px-[16px] pb-[6px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden wide:min-h-0 wide:flex-1 wide:snap-none wide:flex-col wide:overflow-y-auto wide:overflow-x-hidden wide:px-[4px] wide:[mask-image:none] wide:[scrollbar-width:thin]"
           >
             {visible.length === 0 ? (
