@@ -69,7 +69,7 @@ export default function WelcomePage() {
         </AtlasButton>
         <p className="w-full text-center font-manrope text-[12px] leading-[1.5] text-atlas-beige">
           You&apos;ll need an Atlas account. We only ask for what we need to plan your visits.{" "}
-          <AtlasLink to="PrivacyPublic" className="text-atlas-beige">
+          <AtlasLink to="PrivacyPublic" className="atlas-hit inline-block py-[4px] text-atlas-beige underline underline-offset-2">
             Privacy
           </AtlasLink>
         </p>

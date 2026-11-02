@@ -62,11 +62,12 @@ export function MapToast({ kind, collapsed = false }: { kind: MapToastKind; coll
   return (
     <div
       role="status"
-      className="pointer-events-auto absolute left-[12px] right-[12px] flex h-[44px] items-center gap-[8px] rounded-[14px] bg-atlas-ink px-[14px] drop-shadow-[0px_6px_9px_rgba(28,41,41,0.3)] wide:bottom-[16px]! wide:left-[calc(var(--atlas-panel-w)+32px)] wide:right-auto wide:w-[320px]"
-      style={{ bottom: `calc(var(--atlas-nav-h) + ${(collapsed ? SHEET_COLLAPSED : SHEET_HEIGHT) + 12}px)` }}
+      className="pointer-events-auto absolute left-[12px] right-[12px] flex h-[44px] items-center gap-[8px] rounded-[14px] bg-atlas-ink px-[14px] drop-shadow-[0px_6px_9px_rgba(28,41,41,0.3)] wide:bottom-[40px]! wide:left-[calc(var(--atlas-panel-w)+32px)] wide:right-[16px] wide:max-w-[320px]"
+      // Clear of the Mapbox logo and attribution, which sit just above the sheet.
+      style={{ bottom: `calc(var(--atlas-nav-h) + ${(collapsed ? SHEET_COLLAPSED : SHEET_HEIGHT) + 36}px)` }}
     >
       <AtlasIcon src="/atlas-ui/icon-locate-light-18.svg" size={18} />
-      <p className="font-manrope text-[14px] leading-[19px] text-atlas-paper">{TOAST_TEXT[kind]}</p>
+      <p className="min-w-0 truncate font-manrope text-[14px] leading-[19px] text-atlas-paper">{TOAST_TEXT[kind]}</p>
     </div>
   );
 }
