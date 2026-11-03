@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { findPreferencesForUser, upsertPreferences } from "@/db/queries/preferences";
 import { requireUser } from "@/lib/authorization";
-import { simulateScanForTesting, pickChoiceForUser, startDayForUser, type StartDayResult } from "@/services/advisor/daily-plan";
+import { restartTodayForTesting, simulateScanForTesting, pickChoiceForUser, startDayForUser, type StartDayResult } from "@/services/advisor/daily-plan";
 import { removeUnavailableStopForUser } from "@/services/advisor/plan-repair";
 import { INTERESTS, budgetForPriceLabel, categoriesForInterests, minutesForTimeLabel, type Interest } from "./interests";
 import { isTestFinishAllowed } from "./test-finish";
@@ -115,4 +115,13 @@ export async function simulateScanAction(): Promise<void> {
   const result = await simulateScanForTesting(user.id);
   revalidatePath("/", "layout"); // plan, Profile and Achievements all read this data
   redirect(result.ok ? `/plan/unlocked?stop=${result.stopId}` : "/plan");
+}
+
+/** Test environments only: "Start today again" — sets today's plan aside (kept as history) and goes back to free time. */
+export async function restartTodayAction(): Promise<void> {
+  const user = await requireUser();
+  if (!(await isTestFinishAllowed(user.id))) redirect("/plan");
+  const restarted = await restartTodayForTesting(user.id);
+  revalidatePath("/", "layout"); // plan, Profile and Achievements all read this data
+  redirect(restarted ? "/preferences" : "/plan");
 }

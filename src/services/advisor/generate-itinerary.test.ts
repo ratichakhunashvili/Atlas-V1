@@ -577,22 +577,6 @@ test("an admin bypasses the cooldown and regenerates today's itinerary in place"
   assert.equal(getRouteCallCount(), 2);
 });
 
-test("a guest with the server-decided cooldown bypass regenerates today's itinerary, and stays a guest otherwise", async () => {
-  const nearby = [makePlace({ category: "restaurant" })];
-  const guest = makeUser();
-  const { deps, getRouteCallCount } = buildDeps({ user: guest, eligiblePlaces: nearby, preferences: { categories: ["restaurant"] } });
-
-  const first = await generateItineraryForUser(guest.id, NOW, deps, { bypassCooldown: true });
-  const second = await generateItineraryForUser(guest.id, new Date(NOW.getTime() + 5 * 60 * 1000), deps, { bypassCooldown: true });
-  assert.equal(second.ok && second.regenerated, true);
-  if (first.ok && second.ok) assert.equal(second.itinerary.day.id, first.itinerary.day.id);
-  assert.equal(getRouteCallCount(), 2);
-
-  const third = await generateItineraryForUser(guest.id, new Date(NOW.getTime() + 10 * 60 * 1000), deps);
-  assert.equal(third.ok && third.regenerated, false, "without the bypass the cooldown still applies");
-  assert.equal(getRouteCallCount(), 2);
-});
-
 test("cooldown expired (existing day generated long ago) rebuilds the same day in place", async () => {
   const store = createFakeItineraryStore();
   store.seedDay(

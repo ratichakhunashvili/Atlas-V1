@@ -37,7 +37,7 @@ describe("db/queries/itinerary.ts: history is never deleted and completed stops 
       assert.match(around, /isNull\(itineraryStops\.supersededAt\)/, "and only act on still-active rows");
       count += 1;
     }
-    assert.equal(count, 3, "exactly three supersede paths: full rebuild, replacement, explicit removal");
+    assert.equal(count, 4, "exactly four supersede paths: full rebuild, replacement, explicit removal, test-only restart");
   });
 
   test("every ACTIVE read excludes superseded rows", () => {

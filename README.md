@@ -48,7 +48,7 @@ Auth.js · Mapbox GL JS.
    | `MAPBOX_SERVER_TOKEN` | Server-side Mapbox token for routing. Keep it secret; it must never reach the browser. |
    | `ADMIN_EMAIL` | Only used by the admin seed script below. |
    | `ATLAS_DEPLOYMENT_ENV` | `local`, `development`, `qa`, `staging` or `production`. Read on the server for the no-QR test entry and for the development-only routes (`/dev`, `/demo`, `/map-preview`). Missing or unknown values **fail closed**: no test entry, and development routes are hidden whenever a non-local value is declared. `NODE_ENV` alone cannot tell staging from production, so it is not used for this. |
-   | `ATLAS_TEST_ENTRY_ACCOUNTS` | Comma-separated emails allowed to open a seeded test stay without scanning a hotel QR (for example `guest@atlas.test` after `npm run db:seed:dev`). Only honoured when `ATLAS_DEPLOYMENT_ENV` is `local`/`development`/`qa`/`staging`, and only for accounts mapped to a fictional fixture hotel in code. Production always requires the hotel QR. The same accounts may also regenerate today's plan without the 24-hour cooldown (no fixture mapping needed for that); production never allows it. |
+   | `ATLAS_TEST_ENTRY_ACCOUNTS` | Comma-separated emails allowed to open a seeded test stay without scanning a hotel QR (for example `guest@atlas.test` after `npm run db:seed:dev`). Only honoured when `ATLAS_DEPLOYMENT_ENV` is `local`/`development`/`qa`/`staging`, and only for accounts mapped to a fictional fixture hotel in code. Production always requires the hotel QR. |
 
 4. Apply the database migrations to your **development** database:
 

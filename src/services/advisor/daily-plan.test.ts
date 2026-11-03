@@ -5,6 +5,7 @@ import type { GuestStay } from "@/services/eligibility";
 import type { EligiblePlace } from "@/services/eligibility/rules";
 import { MAX_DAILY_ACTIVITIES } from "./daily-choices";
 import {
+  restartTodayForTesting,
   simulateScanForTesting,
   getDailyPlanForUser,
   pickChoiceForUser,
@@ -111,6 +112,13 @@ function deps(): DailyPlanDependencies {
     recordVerifiedVisit: async ({ placeId }) => {
       visits.push(placeId);
     },
+    setDayAside: async (dayId, now) => {
+      const day = days.find((d) => d.id === dayId && d.dayNumber > 0);
+      if (!day) return false;
+      day.dayNumber = -Math.floor(now.getTime() / 1000);
+      for (const s of stops) if (s.dayId === dayId && !s.visitedAt && !s.supersededAt) s.supersededAt = now;
+      return true;
+    },
   };
 }
 
@@ -169,6 +177,15 @@ describe("daily plan: starting the day", () => {
     preferences[GUEST_A] = prefs(GUEST_A, ["museum"]);
     assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: false, reason: "no_eligible_experiences" });
     assert.equal(days.length, 0, "the guest's one day is not used up");
+  });
+
+  it("test restart frees today's slot so the day can start again, keeping the old day as history", async () => {
+    assert.equal(await restartTodayForTesting(GUEST_A, NOW, deps()), false, "nothing to restart before starting");
+    assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: true });
+    assert.equal(await restartTodayForTesting(GUEST_A, NOW, deps()), true);
+    assert.equal((await getDailyPlanForUser(GUEST_A, NOW, deps())).status, "not_started");
+    assert.deepEqual(await startDayForUser(GUEST_A, 240, NOW, deps()), { ok: true });
+    assert.equal(days.length, 2, "the first day is kept, not deleted");
   });
 
   it("starts once a day only", async () => {

@@ -86,6 +86,8 @@ export type DailyPlanDependencies = {
   /** TEST ONLY path (simulated scan): the same visit + unlock recording a real check-in performs. */
   markStopVisited: (stopId: string, dayId: string) => Promise<unknown>;
   recordVerifiedVisit: (input: { userId: string; placeId: string; method: CheckInMethod; now: Date }) => Promise<unknown>;
+  /** TEST ONLY path ("Start today again"): frees today's slot, keeping the old day as history. */
+  setDayAside: (dayId: string, now: Date) => Promise<boolean>;
 };
 
 async function loadDefaultDependencies(): Promise<DailyPlanDependencies> {
@@ -108,6 +110,7 @@ async function loadDefaultDependencies(): Promise<DailyPlanDependencies> {
     ensureDefaultAchievement: achievementsQ.ensureDefaultAchievementForPlace,
     markStopVisited: itineraryQ.markStopVisited,
     recordVerifiedVisit: visitsQ.recordVerifiedVisit,
+    setDayAside: itineraryQ.setItineraryDayAsideForTesting,
   };
 }
 
@@ -326,4 +329,16 @@ export async function simulateScanForTesting(
   if (!marked) return { ok: false };
   await d.recordVerifiedVisit({ userId, placeId: state.current.placeId, method: "qr", now });
   return { ok: true, stopId: state.current.id };
+}
+
+/**
+ * TEST ONLY: "Start today again". Sets today's day aside (kept as history, see setItineraryDayAsideForTesting) so the
+ * guest can pick free time and interests again. The caller (a server action) must refuse this outside allowed
+ * non-production environments.
+ */
+export async function restartTodayForTesting(userId: string, now: Date = new Date(), deps?: DailyPlanDependencies): Promise<boolean> {
+  const d = deps ?? (await loadDefaultDependencies());
+  const state = await getDailyPlanForUser(userId, now, d);
+  if (state.status === "no_stay" || state.status === "not_started") return false;
+  return d.setDayAside(state.dayId, now);
 }

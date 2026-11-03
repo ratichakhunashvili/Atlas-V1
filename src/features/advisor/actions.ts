@@ -16,7 +16,6 @@ import {
 } from "@/services/advisor/plan-repair";
 import { checkAttemptAllowed, recordFailedAttempt, reserveAttempt } from "@/db/queries/rate-limit";
 import { rateLimitedMessage } from "@/services/rate-limit/policy";
-import { isGenerationCooldownBypassed } from "@/features/test-entry/offer";
 import { gpsEvidenceMessage } from "@/services/advisor/gps-evidence";
 import { availableMinutesSchema, checkInArSchema, checkInGpsSchema, checkInQrSchema, directionsToStopSchema, removeStopSchema } from "./schema";
 
@@ -200,7 +199,6 @@ export async function generateItineraryAction(availableMinutes?: number): Promis
 
   return generateItineraryForUser(user.id, new Date(), undefined, {
     availableMinutes: parsed.data.availableMinutes,
-    bypassCooldown: await isGenerationCooldownBypassed(user.id),
   });
 }
 

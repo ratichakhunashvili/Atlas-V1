@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { chooseAgainAction, pickChoiceAction } from "@/features/plan/actions";
+import { chooseAgainAction, pickChoiceAction, restartTodayAction } from "@/features/plan/actions";
 import type { DailyChoice } from "@/services/advisor/daily-choices";
 import type { DailyPlanState, DailyStopView } from "@/services/advisor/daily-plan";
 import { AtlasAsset, AtlasIcon } from "./asset";
@@ -286,6 +286,18 @@ export function DailyPlanScreen({
           ))}
         </div>
       </div>
+
+      {testFinish ? (
+        // Test accounts only (non-production): the action checks again on the server.
+        <form action={restartTodayAction} className="w-full">
+          <button
+            type="submit"
+            className="h-[44px] w-full rounded-[22px] border border-dashed border-atlas-slate font-manrope text-[13px] font-semibold text-atlas-ink"
+          >
+            Test: start today again
+          </button>
+        </form>
+      ) : null}
 
       {noticeText ? (
         <p role="status" className="w-full rounded-[12px] bg-atlas-sand px-[12px] py-[10px] font-manrope text-[14px] leading-[19px] text-atlas-ink">

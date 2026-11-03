@@ -79,21 +79,6 @@ export function decideTestEntry(input: {
 }
 
 /**
- * Whether this account may regenerate today's plan without waiting out the 24-hour cooldown. Two server-side
- * conditions, both required: a recognised non-production deployment and an allowlisted account. Unlike test entry it
- * needs no fixture hotel, so the account can use a real hotel QR stay. Production always refuses.
- */
-export function canBypassGenerationCooldown(input: {
-  deploymentEnvRaw: string | undefined | null;
-  accountEmail: string | null | undefined;
-  allowlistRaw: string | undefined | null;
-}): boolean {
-  if (!isTestEntryEnvironment(parseDeploymentEnv(input.deploymentEnvRaw))) return false;
-  const email = input.accountEmail?.trim().toLowerCase();
-  return !!email && parseTestAccountAllowlist(input.allowlistRaw).has(email);
-}
-
-/**
  * Development-only routes (/dev, /demo, /map-preview).
  *
  * Blocked whenever the app is in framework production mode, or whenever a

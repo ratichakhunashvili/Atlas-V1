@@ -477,3 +477,24 @@ export async function appendPickedStop(input: {
     return { ok: true, stop } as const;
   });
 }
+
+/**
+ * TEST ONLY ("Start today again"): moves a day out of today's slot without deleting anything. Its unvisited stops are
+ * superseded; visited stops, visits and badges stay as history. The day gets a negative day number (unique per second),
+ * which no real day uses, so today's slot is free for a new start. Only a positive (real) day can be set aside.
+ */
+export async function setItineraryDayAsideForTesting(dayId: string, now: Date): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [moved] = await tx
+      .update(itineraryDays)
+      .set({ dayNumber: -Math.floor(now.getTime() / 1000) })
+      .where(and(eq(itineraryDays.id, dayId), sql`${itineraryDays.dayNumber} > 0`))
+      .returning({ id: itineraryDays.id });
+    if (!moved) return false;
+    await tx
+      .update(itineraryStops)
+      .set({ supersededAt: now, supersededReason: "plan_regenerated" })
+      .where(and(eq(itineraryStops.dayId, dayId), isNull(itineraryStops.visitedAt), isNull(itineraryStops.supersededAt)));
+    return true;
+  });
+}
