@@ -25,6 +25,8 @@ function makePlace(overrides: Partial<Place> = {}): Place {
     priceLevel: null,
     priceLevelSource: null,
     priceLevelVerifiedAt: null,
+    kind: "business",
+    kindConfirmedAt: null,
     archivedAt: null,
     publicationStatus: "published",
     publishedAt: new Date("2026-01-01T00:00:00Z"),

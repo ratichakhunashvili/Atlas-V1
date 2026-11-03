@@ -169,6 +169,13 @@
       "when": 1793634883914,
       "tag": "0023_auth_rate_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793699596543,
+      "tag": "0024_catalogue_contracts_and_kind",
+      "breakpoints": true
     }
   ]
 }

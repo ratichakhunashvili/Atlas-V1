@@ -1,9 +1,11 @@
 # Atlas
 
 Atlas is a hotel-anchored experience platform for guests who are already staying at a hotel.
-A guest only ever sees facilities owned by their own hotel and external places that their
-specific hotel has explicitly partnered with and an admin has confirmed. A place being nearby,
-popular, or present in the database or in Mapbox does not make it eligible.
+The approved target model is the **Atlas catalogue** ([docs/catalogue-model-plan.md](docs/catalogue-model-plan.md)):
+guests discover their own hotel's facilities, attractions, and every business with an active Atlas
+contract, and the hotel's own partners get extra promotion. **The code still enforces the earlier
+rule** (only the hotel's own facilities and places that hotel has partnered with) until that plan's
+phases are implemented. A place being nearby, popular, or present in Mapbox never makes it eligible.
 
 The product rules and working agreements for this project are in [CLAUDE.md](CLAUDE.md).
 [AGENTS.md](AGENTS.md) notes that this Next.js version has breaking changes: read the guides in

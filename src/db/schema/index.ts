@@ -6,6 +6,7 @@ export * from "./user-preferences";
 // Legacy, frozen: nothing reads or writes hotel_places any more — partnerships live in hotel_partnerships.
 export * from "./hotel-places";
 export * from "./hotel-partnerships";
+export * from "./atlas-partner-contracts";
 export * from "./hotel-facilities";
 export * from "./hotel-events";
 export * from "./qr-credentials";

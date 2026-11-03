@@ -1,5 +1,10 @@
 # Atlas — Layer 0: repository audit and phased implementation plan
 
+> **Eligibility model changed (2026-11-03).** Rows below that describe the hotel-partner-only eligibility boundary
+> reflect the old rule. The new target model and its phases C1–C5 are in
+> [`catalogue-model-plan.md`](catalogue-model-plan.md) and take precedence for discovery, details, filtering,
+> recommendations and itinerary eligibility.
+
 Status: **proposal, awaiting owner approval. No implementation code and no migrations were written for it.**
 Checks run this session: `npm test` → **409/409 passing**. `npm run typecheck`, `npm run lint` and `npm run build`
 were **not** rerun. No database, browser or device check ran.

@@ -99,6 +99,12 @@ describe("no guest-facing code can read Places without eligibility", () => {
        * Pinned by db/guest-support.pglite.test.ts.
        */
       "db/operations/guest-support.ts",
+      /*
+       * ADMIN Atlas contracts and Place kinds (docs/catalogue-model-plan.md, phase C1): reads Place names and kinds
+       * for /admin/contracts and sets a kind. Admin-only, behind requireAdmin(); returns no Place to a guest and
+       * decides no eligibility (services/eligibility does not read contracts or kinds in phase C1).
+       */
+      "db/operations/atlas-contracts.ts",
     ]);
     const users = files.filter((f) => /\.(from|innerJoin|leftJoin)\(places\b/.test(f.text) && !f.path.endsWith(".test.ts"));
     for (const f of users) assert.ok(allowed.has(f.path), `${f.path} reads the places table directly; route guest reads through services/eligibility`);

@@ -36,13 +36,13 @@ Do not proceed to the next phase just because the current code compiles. Never c
 
 Atlas is a hotel-anchored experience platform for guests who are already staying at a hotel. Its promise is: **“Tell us when you’re free. We’ll figure out what you can do.”**
 
-The hotel provides the guest’s context. Atlas helps them make the most of their stay through hotel-owned facilities and experiences that the guest’s specific hotel has explicitly approved as partners. Atlas is not a hotel search or comparison engine, review website, generic map directory, or generic tourism recommendation engine.
+The hotel provides the guest’s context. Atlas helps them make the most of their stay through their hotel’s own facilities, attractions, and businesses contracted with Atlas, with the hotel’s own partners given extra prominence. Atlas is not a hotel search or comparison engine, review website, generic map directory, or generic tourism recommendation engine.
 
 The core guest journey is:
 
 ```text
 Hotel QR → identify hotel and stay → choose interests and free time
-→ see eligible hotel facilities and that hotel’s approved partners
+→ see the hotel’s facilities, attractions and Atlas partners
 → create or select an itinerary → visit an experience
 → verify the visit → unlock an achievement
 ```
@@ -53,47 +53,44 @@ Atlas may eventually cover attractions, landmarks, scenic places, restaurants, t
 
 For visual design and brand-facing copy, follow [docs/atlas-brand-book.md](docs/atlas-brand-book.md) for the logo, palette, typography, Path System, photography, and voice. The brand book does not override this file's product and security rules or approve unimplemented features, bookings, payments, rewards, commissions, partner relationships, or claims. Verify product capability and status before presenting an example from the brand book as live UI.
 
-## Critical product rule: hotel-specific partners only
+## Critical product rule: the Atlas catalogue
 
-This is a core eligibility rule, not a ranking preference. **Only an active external business or experience explicitly partnered with the guest’s specific hotel may be recommended as an external destination, itinerary stop, mission, task, offer, or booking option.**
+This is a core eligibility rule, enforced on the server. The detailed model, conflicts and phases are in [docs/catalogue-model-plan.md](docs/catalogue-model-plan.md). Until those phases are implemented and approved, the running code still enforces the earlier hotel-partner-only rule; do not change it outside an approved phase.
 
-A Place being nearby, popular, highly rated, present in Atlas’s database, or present in Mapbox does not make it eligible. A partnership with Hotel A does not apply to Hotel B. If a Place is partnered with multiple hotels, each hotel must have its own explicit relationship.
+A guest's **base** is the hotel of their own valid active stay, established by the hotel QR. It is the starting point, the return destination and the only hotel shown on the map. A guest of that hotel may be shown, as a destination, itinerary stop, mission or achievement location:
 
-Atlas’s database and hotel relationships are authoritative. Mapbox may render the map and provide directions or routing; Mapbox search, generic POIs, and third-party listings must never automatically become Atlas recommendations.
+1. **Atlas partners**: businesses with an active, explicitly confirmed, in-window **Atlas contract**, regardless of any partnership with the guest's hotel.
+2. **Attractions**: non-commercial Places, independent of any contract or partnership.
+3. **Hotel facilities**: owned by the guest's own hotel, for that hotel's guests only.
 
-Enforce eligibility in server-side queries and business logic for every feature and API that returns recommended experiences. Never rely on frontend filtering. Client-supplied hotel or Place IDs must not bypass the rule.
+Every Place must also be published, verified and not archived. A business without an active Atlas contract must not appear. Other hotels, and other hotels' facilities, must not appear.
 
-Keep hotel-owned facilities distinct from external partners. A hotel’s own pool, spa, sauna, gym, restaurant, room service, or event may be eligible for that hotel’s guests without an external partnership. An external business must have an explicit active partnership.
+**Hotel partnerships promote; they do not decide visibility.** A hotel may partner with a business already in Atlas's network. That business receives additional promotion and priority in relevant recommendations to that hotel's guests only. A partnership never makes an otherwise ineligible Place visible, and losing one removes only the promotion.
 
-If no eligible partner fits a guest’s request, show relevant hotel-owned facilities if available, explain that no matching hotel-approved partner is available, and let the guest adjust interests or time. Itineraries may have fewer stops. Never substitute an unapproved nearby business or invent a partnership.
+A Place being nearby, popular, highly rated, present in Atlas's database without qualifying, or present in Mapbox does not make it eligible. Atlas's database is authoritative. Mapbox may render the map and provide directions or routing; Mapbox search, generic POIs and third-party listings must never become Atlas recommendations.
 
-Authorized administrators must manage hotel-to-Place relationships explicitly, including their status and any availability rules the product later supports.
+Enforce eligibility in server-side queries and business logic for every feature and API that returns Places. Never rely on frontend filtering. Client-supplied hotel ids, Place ids, radius or category filters may only narrow the catalogue, never widen it. Category filters for businesses must not hide attractions.
 
-### Required partner-eligibility tests
+If nothing eligible fits a guest's request, say so plainly and let the guest adjust interests or time. Itineraries may have fewer stops. Never substitute an ineligible business or invent a contract or partnership.
 
-Before approving partner-discovery implementation, test at least:
+Commercial arrangements stay behind the scenes. Atlas and hotels share commission under their agreements; guest screens never mention contracts, commission or "approval". The only guest-visible trace of a hotel partnership is promotion such as "Recommended by <hotel>".
 
-1. Hotel A receives Partner A when Hotel A has an active relationship.
-2. Hotel B does not receive Partner A without its own relationship.
-3. A nearby non-partner in Atlas’s database is excluded from discovery and itinerary generation.
-4. A Mapbox-only Place is not recommended.
-5. A hotel-owned facility is eligible without an external partnership.
-6. A Place explicitly partnered with two hotels is eligible for guests of those hotels only.
-7. Manipulated client parameters cannot bypass server-side eligibility.
-8. No eligible external partners results in no random substitutions.
+Authorized administrators manage Atlas contracts, Place kinds (attraction / business / hotel), hotel facilities and hotel partnerships explicitly, with status, dates and audit history. Do not model commission until a phase for it is approved.
 
-Also test that inactive, expired, or revoked relationships are excluded and that historical itinerary records remain understandable if a relationship later changes.
+### Required catalogue-eligibility tests
+
+Before approving catalogue-discovery implementation, test at least the list in [docs/catalogue-model-plan.md section 9](docs/catalogue-model-plan.md), including: a contracted business is visible to guests of any hotel; uncontracted, pending, suspended, ended or expired contracts are excluded; attractions are visible without contracts and survive business filters; facilities appear only for their own hotel; other hotels never appear; a hotel partnership only promotes, and only for that hotel; a lapsed contract makes a partnership promote nothing; Mapbox-only and uncontracted database Places are never recommended; manipulated client parameters cannot widen the catalogue; no random substitutions; losing a partnership does not make a planned stop unavailable while losing the contract does, with history kept readable.
 
 ## Product and architecture principles
 
 - The map is the main application interface. Build mobile-first.
-- Recommend only real, verified Places stored in Atlas and eligible for the guest’s hotel.
+- Recommend only real, verified Places stored in Atlas and eligible under the catalogue rule for the guest’s stay.
 - Use one canonical `Place` model. Do not create competing Attractions, Businesses, or POI entities when a Place plus explicit relationships can represent them.
-- Keep these concepts distinct: Place; Hotel associated with a Place; HotelStay; external hotel partnership; hotel-owned facility; Itinerary; ItineraryStop; Achievement; AchievementUnlock; purpose-specific QR token; Event; UserPreferences.
+- Keep these concepts distinct: Place; Hotel associated with a Place; HotelStay; Atlas partner contract; attraction; hotel partnership (promotion); hotel-owned facility; Itinerary; ItineraryStop; Achievement; AchievementUnlock; purpose-specific QR token; Event; UserPreferences.
 - Use explicit relationships and foreign keys. Avoid duplicated canonical data.
 - Use one application, one hotel system, one user/authentication system, one database, one Mapbox map instance, one browser geolocation service, one routing service, one QR infrastructure with distinct token purposes, one authorization system, and shared server-side business logic.
 - A Place may serve as an itinerary destination, hotel partner, achievement location, or future 3D location without duplicating the Place entity.
-- Generate itineraries from available time, preferences, eligible Places, distance, travel time, visit duration, and the need to return to the hotel. Add weather only when reliable data is available and budget where relevant.
+- Generate itineraries from available time, preferences, the full eligible catalogue (hotel partners prioritised), distance, travel time, visit duration, and the need to return to the hotel. Add weather only when reliable data is available and budget where relevant.
 - Route changes happen only after an explicit guest action or a deliberate generation action in the approved workflow. Do not silently regenerate routes.
 - Achievements are unlocks, not an XP or points economy.
 - Avoid unnecessary complexity. Do not add AI agents, microservices, or infrastructure just because they are fashionable. Build for future growth without prematurely engineering for millions of users.
@@ -124,7 +121,8 @@ Add tables only when the relevant phase needs them. The model may eventually inc
 - `hotels`
 - `hotel_stays`
 - `user_preferences`
-- explicit hotel-to-external-Place partnerships (for example, `hotel_partnerships`)
+- explicit Atlas contracts for businesses (for example, `atlas_partner_contracts`) and an explicit Place kind (attraction / business / hotel)
+- explicit hotel-to-Place promotional partnerships (for example, `hotel_partnerships`)
 - explicit hotel-owned facilities (for example, `hotel_facilities`)
 - `itinerary_days`
 - `itinerary_stops`
@@ -135,7 +133,7 @@ Add tables only when the relevant phase needs them. The model may eventually inc
 - reservations/bookings only after booking is approved
 - hotel/admin roles or permissions as needed
 
-External partnerships and hotel-owned facilities must remain distinguishable, whether represented by separate tables or an equally explicit, validated model. Define ownership, deletion or archival behavior, uniqueness, indexes, data retention, and important constraints deliberately. Do not create every future table in the initial phase.
+Atlas contracts, hotel partnerships and hotel-owned facilities must remain distinguishable, whether represented by separate tables or an equally explicit, validated model. Define ownership, deletion or archival behavior, uniqueness, indexes, data retention, and important constraints deliberately. Do not create every future table in the initial phase.
 
 ## Code quality and security
 

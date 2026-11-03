@@ -1,5 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import {
+  atlasPartnerContracts,
   hotelFacilities,
   hotelPartnerships,
   hotelStays,
@@ -80,6 +81,11 @@ export const DEV_FIXTURE_IDS = {
   tourPartnershipA: "a71a5000-0000-4000-8000-000000004002",
   tourPartnershipB: "a71a5000-0000-4000-8000-000000004003",
   wineBarPartnershipA: "a71a5000-0000-4000-8000-000000004004",
+
+  // Atlas contracts (docs/catalogue-model-plan.md). Not read by guest eligibility until phase C2.
+  cafeContract: "a71a5000-0000-4000-8000-000000005001",
+  tourContract: "a71a5000-0000-4000-8000-000000005002",
+  wineBarContract: "a71a5000-0000-4000-8000-000000005003",
 } as const;
 
 export const DEV_FIXTURE_EMAILS = {
@@ -118,6 +124,9 @@ export type SeedDevFixturesResult = {
  */
 function recommendablePlace(input: Omit<NewPlace, "publicationStatus" | "publishedAt" | "verificationStatus" | "verifiedAt">, now: Date): NewPlace {
   return {
+    // Every fixture's kind is a deliberate choice, so it is recorded as confirmed.
+    kind: input.category === "hotel" ? "hotel" : "business",
+    kindConfirmedAt: now,
     ...input,
     publicationStatus: "published",
     publishedAt: now,
@@ -233,6 +242,17 @@ export async function seedDevFixtures(
         },
         now
       ),
+    ])
+    .onConflictDoNothing();
+
+  // Cafe and tour are Atlas partners; the gallery is a business with NO contract (never visible in the catalogue
+  // model); the wine bar's contract is only proposed. Guest eligibility ignores all of this until phase C2.
+  await db
+    .insert(atlasPartnerContracts)
+    .values([
+      { id: id.cafeContract, placeId: id.cafePlace, status: "active", confirmedBy: id.adminUser, confirmedAt: now },
+      { id: id.tourContract, placeId: id.tourPlace, status: "active", confirmedBy: id.adminUser, confirmedAt: now },
+      { id: id.wineBarContract, placeId: id.wineBarPlace, status: "pending_review" },
     ])
     .onConflictDoNothing();
 

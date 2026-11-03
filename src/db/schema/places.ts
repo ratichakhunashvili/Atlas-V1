@@ -39,6 +39,17 @@ export type PlaceCategory = (typeof PLACE_CATEGORIES)[number];
 export const PUBLICATION_STATUSES = ["draft", "published"] as const;
 export type PublicationStatus = (typeof PUBLICATION_STATUSES)[number];
 
+/**
+ * What a Place IS for the Atlas catalogue (docs/catalogue-model-plan.md), set explicitly by an admin — never derived
+ * from `category`, because a museum or a tour can be commercial or not.
+ * - business: a commercial Place; guests may only ever see it through an active Atlas contract.
+ * - attraction: a non-commercial Place; no contract or partnership is involved.
+ * - hotel: a hotel's anchor Place; only the guest's OWN hotel is ever shown.
+ * Phase C1 stores and manages this; guest eligibility does not read it yet.
+ */
+export const PLACE_KINDS = ["business", "attraction", "hotel"] as const;
+export type PlaceKind = (typeof PLACE_KINDS)[number];
+
 export const VERIFICATION_STATUSES = ["unverified", "verified"] as const;
 export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
 
@@ -87,6 +98,12 @@ export const places = pgTable(
      */
     priceLevelSource: text("price_level_source"),
     priceLevelVerifiedAt: timestamp("price_level_verified_at", { withTimezone: true }),
+    kind: text("kind").notNull().default("business").$type<PlaceKind>(),
+    /**
+     * When an admin last chose `kind` on purpose. Null means the kind is only a suggestion (the migration's backfill
+     * from category, or the column default), so later phases can refuse to treat an unconfirmed "attraction" as one.
+     */
+    kindConfirmedAt: timestamp("kind_confirmed_at", { withTimezone: true }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     // New and migrated Places start as draft / unverified so nothing becomes
     // recommendable by accident; an admin publishes and verifies explicitly.
@@ -116,6 +133,7 @@ export const places = pgTable(
       sql`${table.priceLevel} is null or (${table.priceLevelSource} is not null and ${table.priceLevelVerifiedAt} is not null)`
     ),
     check("places_category_check", enumCheck(table.category, PLACE_CATEGORIES)),
+    check("places_kind_check", enumCheck(table.kind, PLACE_KINDS)),
     check("places_publication_status_check", enumCheck(table.publicationStatus, PUBLICATION_STATUSES)),
     check("places_verification_status_check", enumCheck(table.verificationStatus, VERIFICATION_STATUSES)),
     // Status and its timestamp must agree, so a status can never be set without leaving an audit trail.

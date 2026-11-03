@@ -6,7 +6,12 @@ This document is a practical handoff summary of Atlas's product rules, architect
 
 Atlas is a mobile-first, hotel-anchored experience platform for people staying at a hotel. The hotel is the guest's context: Atlas may show that hotel's own eligible facilities and external experiences explicitly partnered with that same hotel. It is not a hotel-search engine, review site, generic tourism directory, or unrestricted nearby-places recommender. Its promise is: **“Tell us when you’re free. We’ll figure out what you can do.”** Georgia is the initial geographic focus.
 
-## Non-negotiable guest eligibility rule
+> **Superseded product rule (2026-11-03).** The approved target model is the Atlas catalogue in
+> [`catalogue-model-plan.md`](catalogue-model-plan.md): every business with an active Atlas contract plus attractions are
+> discoverable by any hotel's guests, hotel facilities only by their own hotel, and hotel partnerships only add promotion.
+> The section below describes what the **code still enforces** until that plan's phases are implemented.
+
+## Guest eligibility rule as currently implemented
 
 A guest may see only:
 

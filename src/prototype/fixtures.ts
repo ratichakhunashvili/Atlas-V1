@@ -58,6 +58,8 @@ function fixturePlace(
     priceLevel: null,
     priceLevelSource: null,
     priceLevelVerifiedAt: null,
+    kind: fields.category === "hotel" ? "hotel" : "business",
+    kindConfirmedAt: FIXTURE_DATE,
     archivedAt: null,
     publicationStatus: "published",
     publishedAt: FIXTURE_DATE,

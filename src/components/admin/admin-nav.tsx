@@ -13,6 +13,7 @@ import { SCREEN_HREFS } from "@/components/atlas-ui/screen-hrefs";
 const ITEMS: readonly { href: string; label: string; section: string }[] = [
   { href: SCREEN_HREFS.AdminHotels, label: "Hotels", section: "/admin/hotels" },
   { href: SCREEN_HREFS.AdminPlaces, label: "Places", section: SCREEN_HREFS.AdminPlaces },
+  { href: "/admin/contracts", label: "Atlas contracts", section: "/admin/contracts" },
   { href: SCREEN_HREFS.AdminPartnerships, label: "Hotel partners", section: SCREEN_HREFS.AdminPartnerships },
   { href: SCREEN_HREFS.AdminFacilities, label: "Facilities", section: SCREEN_HREFS.AdminFacilities },
   { href: SCREEN_HREFS.AdminQR, label: "QR codes", section: SCREEN_HREFS.AdminQR },

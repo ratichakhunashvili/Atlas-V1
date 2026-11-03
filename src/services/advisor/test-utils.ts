@@ -26,6 +26,8 @@ export function makeTestPlace(overrides: Partial<Place> & { category: PlaceCateg
     priceLevel: overrides.priceLevel ?? null,
     priceLevelSource: overrides.priceLevelSource ?? (overrides.priceLevel ? "test fixture" : null),
     priceLevelVerifiedAt: overrides.priceLevelVerifiedAt ?? (overrides.priceLevel ? new Date("2026-01-01T00:00:00Z") : null),
+    kind: overrides.kind ?? (overrides.category === "hotel" ? "hotel" : "business"),
+    kindConfirmedAt: overrides.kindConfirmedAt ?? null,
     archivedAt: overrides.archivedAt ?? null,
     publicationStatus: overrides.publicationStatus ?? "published",
     publishedAt: overrides.publishedAt ?? new Date("2026-01-01T00:00:00Z"),

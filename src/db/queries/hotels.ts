@@ -50,17 +50,29 @@ export async function findHotelById(id: string) {
 
 /** No QR token here: a new hotel starts with no entry credential, and an admin issues one explicitly (see features/qr-credentials/actions.ts). */
 export async function createHotel(input: { placeId: string }) {
-  const [hotel] = await db.insert(hotels).values(input).returning();
-  return hotel;
+  return db.transaction(async (tx) => {
+    const [hotel] = await tx.insert(hotels).values(input).returning();
+    await markPlaceAsHotel(tx, input.placeId);
+    return hotel;
+  });
 }
 
 export async function updateHotelPlace(id: string, placeId: string) {
-  const [hotel] = await db
-    .update(hotels)
-    .set({ placeId, updatedAt: new Date() })
-    .where(eq(hotels.id, id))
-    .returning();
-  return hotel ?? null;
+  return db.transaction(async (tx) => {
+    const [hotel] = await tx
+      .update(hotels)
+      .set({ placeId, updatedAt: new Date() })
+      .where(eq(hotels.id, id))
+      .returning();
+    if (hotel) await markPlaceAsHotel(tx, placeId);
+    return hotel ?? null;
+  });
+}
+
+/** A hotel's anchor Place is certainly a hotel (docs/catalogue-model-plan.md): record that kind as confirmed. */
+async function markPlaceAsHotel(tx: Pick<typeof db, "update">, placeId: string) {
+  const now = new Date();
+  await tx.update(places).set({ kind: "hotel", kindConfirmedAt: now, updatedAt: now }).where(eq(places.id, placeId));
 }
 
 export async function deleteHotel(id: string) {
