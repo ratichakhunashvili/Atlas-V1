@@ -36,7 +36,7 @@ export default async function EditAchievementPage({
   return (
     <div className="max-w-xl space-y-6">
       <div>
-        <Link href="/admin/achievements" className="text-sm text-slate-600 underline">
+        <Link href="/admin/achievements" className="atlas-hit inline-block text-sm text-slate-600 underline">
           ← Achievements
         </Link>
         <h1 className="mt-2 text-xl font-semibold">Edit badge</h1>

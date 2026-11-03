@@ -26,7 +26,7 @@ export function HotelTable({ hotels }: { hotels: HotelWithPlace[] }) {
               {hotel.entryCredentialIssuedAt ? "Issued (secret stored hashed)" : "Not issued"}
             </td>
             <td className="space-x-2 py-2 text-right">
-              <Link href={`/admin/hotels/${hotel.id}`} className="text-slate-700 underline">
+              <Link href={`/admin/hotels/${hotel.id}`} className="atlas-hit inline-block text-slate-700 underline">
                 Edit
               </Link>
               <form action={deleteHotelAction} className="inline">

@@ -94,7 +94,7 @@ export default async function AdminAttractionsPage({
                   )}
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link href={`/admin/places/${place.id}`} className="text-sm text-slate-700 underline">
+                    <Link href={`/admin/places/${place.id}`} className="atlas-hit inline-block text-sm text-slate-700 underline">
                       Edit
                     </Link>
 

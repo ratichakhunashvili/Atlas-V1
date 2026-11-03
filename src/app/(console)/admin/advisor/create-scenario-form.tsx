@@ -17,7 +17,7 @@ export function CreateScenarioForm({ labels }: { labels: Record<string, string> 
       }}
       className="flex flex-wrap items-end gap-3"
     >
-      <div className="min-w-[20rem]">
+      <div className="w-full sm:w-auto sm:min-w-[20rem]">
         <Select label="Scenario type" name="type" defaultValue="A">
           {Object.entries(labels).map(([type, label]) => (
             <option key={type} value={type}>

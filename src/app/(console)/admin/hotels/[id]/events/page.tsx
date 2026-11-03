@@ -42,7 +42,7 @@ export default async function HotelEventsPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link href={`/admin/hotels/${hotel.id}`} className="text-sm text-slate-600 underline">
+        <Link href={`/admin/hotels/${hotel.id}`} className="atlas-hit inline-block text-sm text-slate-600 underline">
           ← {hotel.place.name}
         </Link>
         <h1 className="mt-2 text-xl font-semibold">Hotel events — {hotel.place.name}</h1>

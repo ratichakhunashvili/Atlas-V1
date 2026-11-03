@@ -33,14 +33,14 @@ export default async function EditHotelPage({
   return (
     <div className="max-w-xl space-y-6">
       <h1 className="text-xl font-semibold">Edit hotel</h1>
-      <p className="flex gap-4 text-sm">
-        <Link href={`/admin/hotels/${hotel.id}/partnerships`} className="text-slate-700 underline">
+      <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <Link href={`/admin/hotels/${hotel.id}/partnerships`} className="atlas-hit text-slate-700 underline">
           Manage external partners
         </Link>
-        <Link href={`/admin/hotels/${hotel.id}/facilities`} className="text-slate-700 underline">
+        <Link href={`/admin/hotels/${hotel.id}/facilities`} className="atlas-hit text-slate-700 underline">
           Manage hotel-owned facilities
         </Link>
-        <Link href={`/admin/hotels/${hotel.id}/events`} className="text-slate-700 underline">
+        <Link href={`/admin/hotels/${hotel.id}/events`} className="atlas-hit text-slate-700 underline">
           Manage hotel events
         </Link>
       </p>

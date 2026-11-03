@@ -34,7 +34,7 @@ export default async function ModelPlacementPage({
   return (
     <div className="max-w-4xl space-y-6">
       <div>
-        <Link href="/admin/models" className="text-sm text-slate-600 underline">
+        <Link href="/admin/models" className="atlas-hit inline-block text-sm text-slate-600 underline">
           ← 3D models
         </Link>
         <h1 className="mt-2 text-xl font-semibold">Placement</h1>

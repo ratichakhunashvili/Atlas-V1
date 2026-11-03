@@ -57,7 +57,7 @@ export default async function HotelPartnershipsPage({
   return (
     <div className="space-y-6">
       <div>
-        <Link href={`/admin/hotels/${hotel.id}`} className="text-sm text-slate-600 underline">
+        <Link href={`/admin/hotels/${hotel.id}`} className="atlas-hit inline-block text-sm text-slate-600 underline">
           ← {hotel.place.name}
         </Link>
         <h1 className="mt-2 text-xl font-semibold">External partners — {hotel.place.name}</h1>
@@ -73,7 +73,7 @@ export default async function HotelPartnershipsPage({
       <Card className="space-y-3">
         <h2 className="font-medium">Propose a partner</h2>
         <form action={addPartnershipAction.bind(null, hotel.id)} className="flex flex-wrap items-end gap-2">
-          <div className="min-w-[16rem] flex-1">
+          <div className="w-full sm:w-auto sm:min-w-[16rem] sm:flex-1">
             <Select label="Place" name="placeId" defaultValue="" required>
               <option value="" disabled>
                 Select a place…
@@ -117,7 +117,7 @@ export default async function HotelPartnershipsPage({
                   <input type="checkbox" name="featured" defaultChecked={partnership.featured} className="size-4" />
                   Featured for this hotel
                 </label>
-                <div className="min-w-[16rem] flex-1">
+                <div className="w-full sm:w-auto sm:min-w-[16rem] sm:flex-1">
                   <Field
                     label="Offer for guests (optional, max 120 characters)"
                     name="offerText"

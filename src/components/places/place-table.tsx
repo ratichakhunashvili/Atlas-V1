@@ -35,7 +35,7 @@ export function PlaceTable({ places }: { places: Place[] }) {
               {place.publicationStatus} · {place.verificationStatus}
             </td>
             <td className="space-x-2 py-2 text-right">
-              <Link href={`/admin/places/${place.id}`} className="text-slate-700 underline">
+              <Link href={`/admin/places/${place.id}`} className="atlas-hit inline-block text-slate-700 underline">
                 Edit
               </Link>
               <form action={place.archivedAt ? unarchivePlaceAction : archivePlaceAction} className="inline">

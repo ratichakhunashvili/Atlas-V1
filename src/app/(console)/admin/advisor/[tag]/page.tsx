@@ -49,7 +49,7 @@ export default async function AdvisorTestScenarioPage({ params }: { params: Prom
         actions below operate on real rows for this test user only.
       </Alert>
 
-      <Link href="/admin/advisor" className="text-sm text-slate-600 underline">
+      <Link href="/admin/advisor" className="atlas-hit inline-block text-sm text-slate-600 underline">
         ← Back to Advisor Testing
       </Link>
 

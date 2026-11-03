@@ -34,7 +34,7 @@ export function AdminShell({ email, children }: { email: string; children: React
           </form>
         </div>
       </aside>
-      <main className="flex min-w-0 flex-1 flex-col items-start gap-[20px] px-[16px] pb-[calc(32px+env(safe-area-inset-bottom))] pt-[24px] sm:p-[32px]">
+      <main className="flex min-w-0 flex-1 flex-col items-start gap-[20px] [&>*]:max-w-full px-[16px] pb-[calc(32px+env(safe-area-inset-bottom))] pt-[24px] sm:p-[32px]">
         {children}
       </main>
     </div>

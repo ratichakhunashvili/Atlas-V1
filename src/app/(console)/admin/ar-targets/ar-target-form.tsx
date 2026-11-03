@@ -62,7 +62,7 @@ export function ArTargetForm({
           type="file"
           accept="image/*"
           onChange={onFileChosen}
-          className="mt-1 block w-full text-sm"
+          className="mt-1 block min-h-[44px] w-full py-[10px] text-sm"
           // Deliberately unnamed: an input with no name is not submitted, so the
           // image cannot be posted even by accident.
         />
