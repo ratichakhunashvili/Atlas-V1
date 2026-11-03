@@ -1,7 +1,7 @@
 import "server-only";
 import { findActiveStayForUser } from "@/db/queries/hotel-stays";
 import { findUserById } from "@/db/queries/users";
-import { decideTestEntry, type TestEntryDecision } from "@/services/deployment/environment";
+import { canBypassGenerationCooldown, decideTestEntry, type TestEntryDecision } from "@/services/deployment/environment";
 import { TEST_ENTRY_FIXTURES } from "@/services/deployment/test-fixtures";
 
 /**
@@ -33,4 +33,14 @@ export async function isTestEntryOffered(userId: string): Promise<boolean> {
   const decision = await decideForCurrentUser(userId);
   if (!decision.allowed) return false;
   return (await findActiveStayForUser(userId)) === null;
+}
+
+/** May this account regenerate today's plan inside the cooldown? Same server-side reads as test entry; no fixture needed. */
+export async function isGenerationCooldownBypassed(userId: string): Promise<boolean> {
+  const account = await findUserById(userId);
+  return canBypassGenerationCooldown({
+    deploymentEnvRaw: process.env.ATLAS_DEPLOYMENT_ENV,
+    accountEmail: account?.email,
+    allowlistRaw: process.env.ATLAS_TEST_ENTRY_ACCOUNTS,
+  });
 }

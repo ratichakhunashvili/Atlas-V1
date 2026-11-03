@@ -45,6 +45,11 @@ export const DEFAULT_AVAILABLE_MINUTES: AvailableMinutes = 120;
 export type GenerateItineraryOptions = {
   /** Free time in minutes, from AVAILABLE_MINUTE_OPTIONS. Anything else falls back to DEFAULT_AVAILABLE_MINUTES. */
   availableMinutes?: number;
+  /**
+   * Skip the 24-hour cooldown for an allowlisted test account in a non-production deployment. Decided on the server
+   * by the caller (features/test-entry/offer.ts), never taken from a request.
+   */
+  bypassCooldown?: boolean;
 };
 
 export type GenerateItineraryResult =
@@ -525,7 +530,8 @@ export async function generateItineraryForUser(
     // exception here: an ordinary Generate never changes an existing day, even when one of its
     // pending stops has become unavailable — that needs the dedicated, explicit plan-repair action
     // (services/advisor/plan-repair.ts), so the route can never change silently.
-    if (hoursSinceGeneration < GENERATION_COOLDOWN_HOURS && !isAdmin) {
+    // An allowlisted test account (non-production only) skips it too, but stays an ordinary guest otherwise.
+    if (hoursSinceGeneration < GENERATION_COOLDOWN_HOURS && !isAdmin && !options.bypassCooldown) {
       const stops = await d.listItineraryStops(existingDay.id);
       return { ok: true, itinerary: { day: existingDay, stops }, regenerated: false };
     }

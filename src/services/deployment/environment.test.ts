@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  canBypassGenerationCooldown,
   decideTestEntry,
   developmentToolsBlocked,
   parseDeploymentEnv,
@@ -75,4 +76,17 @@ test("development tools are blocked in framework production mode and any declare
   assert.equal(developmentToolsBlocked("development", undefined), false);
   assert.equal(developmentToolsBlocked("development", "local"), false);
   assert.equal(developmentToolsBlocked(undefined, "development"), false);
+});
+
+test("an allowlisted account may skip the generation cooldown only in a non-production deployment", () => {
+  const input = { deploymentEnvRaw: "staging", accountEmail: "Tester@Example.com ", allowlistRaw: "tester@example.com" };
+  for (const env of ["local", "development", "qa", "staging"]) {
+    assert.equal(canBypassGenerationCooldown({ ...input, deploymentEnvRaw: env }), true, env);
+  }
+  for (const env of ["production", "", undefined, "prod", "stagingx"]) {
+    assert.equal(canBypassGenerationCooldown({ ...input, deploymentEnvRaw: env }), false, String(env));
+  }
+  assert.equal(canBypassGenerationCooldown({ ...input, allowlistRaw: "" }), false);
+  assert.equal(canBypassGenerationCooldown({ ...input, accountEmail: "other@example.com" }), false);
+  assert.equal(canBypassGenerationCooldown({ ...input, accountEmail: null }), false);
 });
