@@ -50,7 +50,7 @@ export const INITIAL_DIMENSION: MapDimension = "3D";
 
 type SceneContextValue = {
   scene: MapScene | null;
-  setScene: (scene: MapScene) => void;
+  setScene: (scene: MapScene | null) => void;
   placeClickRef: React.RefObject<((id: string) => void) | null>;
   camera: { target: CameraTarget; seq: number };
   moveCamera: (target: CameraTarget) => void;
@@ -92,6 +92,10 @@ export function useMapScene(scene: MapScene, onPlaceClick?: (id: string) => void
   useEffect(() => {
     setScene(JSON.parse(key) as MapScene);
   }, [key, setScene]);
+
+  // Leaving a map screen clears its scene, which hides the shared map until the next map screen.
+  // Moving straight to another map screen sets the new scene in the same commit, so nothing flickers.
+  useEffect(() => () => setScene(null), [setScene]);
 
   useEffect(() => {
     placeClickRef.current = onPlaceClick ?? null;

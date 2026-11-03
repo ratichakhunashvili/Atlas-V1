@@ -3,17 +3,23 @@ import { AtlasMap } from "@/components/atlas-ui/map/atlas-map";
 import { MapSceneProvider } from "@/components/atlas-ui/map/scene";
 
 /*
- * Screens drawn over the map: home, the toasts, choosing the next stop in the sheet, and the
- * walking routes. They share this layout, so the one Mapbox map stays alive as the guest moves
- * between them; each screen only describes what the map should show.
+ * The guest's main screens: home, the walking routes, and every bottom-bar tab (My plan, Scan,
+ * Profile, Achievements, place details, preferences). They share this layout so the ONE Mapbox
+ * map is created once and survives moving between them (CLAUDE.md: never recreate the map).
+ *
+ * Map screens describe a scene (useMapScene) and are drawn over the map. Other screens describe
+ * none: the map is then hidden and stays idle until a map screen shows it again, so switching
+ * back to Missions is instant instead of re-downloading the style and tiles.
  */
 export default function MapScreensLayout({ children }: { children: ReactNode }) {
   return (
     <MapSceneProvider>
-      <main className="relative h-[100dvh] w-full overflow-hidden">
-        <AtlasMap />
+      <div className="relative min-h-[100dvh] w-full">
+        <div className="fixed inset-0">
+          <AtlasMap />
+        </div>
         {children}
-      </main>
+      </div>
     </MapSceneProvider>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Map as MapboxMap } from "mapbox-gl/esm";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -15,6 +16,9 @@ import { useReducedMotion, useWideLayout } from "../use-layout";
  */
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+
+/** Routes drawn over the map (the screens in app/(guest)/(map) that call useMapScene). */
+const MAP_SCREEN = /^\/(?:$|directions|route|map\/)/;
 
 export function AtlasMap() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,6 +63,22 @@ export function AtlasMap() {
     };
   }, [placeClickRef]);
 
+  // Mapbox's logo sits above the screen's sheet. Placed as soon as the scene is known, not after
+  // the style has loaded, so the logo doesn't appear at the bottom first and then jump up.
+  useEffect(() => {
+    if (!scene || !containerRef.current) return;
+    containerRef.current.style.setProperty("--atlas-map-inset", wide ? "0px" : `calc(${scene.bottomInset}px + env(safe-area-inset-bottom))`);
+  }, [scene, wide]);
+
+  // Shown again after a tab that had no map: the window may have changed size while it was hidden.
+  // Also kept visible while a map screen is still loading (no scene yet), so returning to
+  // Missions shows the map at once instead of a blank background.
+  const pathname = usePathname();
+  const visible = scene !== null || MAP_SCREEN.test(pathname);
+  useEffect(() => {
+    if (visible && ready) mapRef.current?.resize();
+  }, [visible, ready]);
+
   // Apply the scene.
   useEffect(() => {
     const map = mapRef.current;
@@ -90,7 +110,9 @@ export function AtlasMap() {
   }, [camera, ready, reducedMotion]);
 
   return (
-    <div className="atlas-map absolute inset-0 bg-atlas-dune">
+    // Hidden (not unmounted) on screens without a scene. Mapbox only draws when something changes,
+    // so a hidden, idle map costs no rendering work while the guest is on another tab.
+    <div className={`atlas-map absolute inset-0 bg-atlas-dune ${visible ? "" : "invisible"}`} aria-hidden={visible ? undefined : true}>
       {/* mapbox-gl.css makes the container position: relative, so size it explicitly. */}
       <div ref={containerRef} className="h-full w-full" />
       {!ready && !failed ? (
