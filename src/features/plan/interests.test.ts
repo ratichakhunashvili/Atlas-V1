@@ -8,6 +8,7 @@ import {
   categoriesForInterests,
   interestsForCategories,
   minutesForTimeLabel,
+  stayHeaderSummary,
 } from "./interests";
 
 describe("interest mapping", () => {
@@ -33,5 +34,22 @@ describe("interest mapping", () => {
     assert.equal(budgetForPriceLabel("Any"), null);
     assert.equal(budgetForPriceLabel("Luxury"), "luxury");
     assert.equal(budgetForPriceLabel("free"), undefined);
+  });
+});
+
+describe("stayHeaderSummary", () => {
+  it("reads time, interests and price in the design's order", () => {
+    assert.equal(
+      stayHeaderSummary({ availableMinutes: 120, categories: categoriesForInterests(["Food", "Culture"]), budget: "moderate" }),
+      "2 h free · Food, Culture · Moderate"
+    );
+  });
+
+  it("says 'Any' instead of leaving gaps, and leaves out time that was never recorded", () => {
+    assert.equal(stayHeaderSummary({ availableMinutes: null, categories: [], budget: null }), "Any interest · Any price");
+  });
+
+  it("keeps odd minutes readable", () => {
+    assert.equal(stayHeaderSummary({ availableMinutes: 95, categories: [], budget: "budget" }), "1 h 35 min free · Any interest · Budget");
   });
 });

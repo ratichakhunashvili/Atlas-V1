@@ -73,3 +73,22 @@ export function budgetForPriceLabel(label: unknown): BudgetLevel | null | undefi
 export function minutesForTimeLabel(label: unknown): number | undefined {
   return TIME_CHOICES.find((choice) => choice.label === label)?.minutes;
 }
+
+function freeTimeLabel(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes));
+  if (m < 60) return `${m} min`;
+  return m % 60 === 0 ? `${m / 60} h` : `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
+/** The stay header's second line, e.g. "2 h free · Food, Culture · Moderate". Time is left out when today has none recorded. */
+export function stayHeaderSummary(input: { availableMinutes: number | null; categories: readonly string[]; budget: string | null }): string {
+  const interests = interestsForCategories(input.categories);
+  const price = priceLabelFor(input.budget);
+  return [
+    input.availableMinutes !== null ? `${freeTimeLabel(input.availableMinutes)} free` : null,
+    interests.length > 0 ? interests.join(", ") : "Any interest",
+    price === "Any" ? "Any price" : price,
+  ]
+    .filter((part) => part !== null)
+    .join(" · ");
+}

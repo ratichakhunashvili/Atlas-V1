@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { LiveMissionsMap } from "@/components/atlas-ui/map/live-missions-map";
 import { AtlasButton, AtlasField, type } from "@/components/atlas-ui/ui";
 import { findCurrentStayForUser } from "@/db/queries/hotel-stays";
+import { findPreferencesForUser } from "@/db/queries/preferences";
 import { checkInToHotelFormAction } from "@/features/hotel-stays/actions";
+import { stayHeaderSummary } from "@/features/plan/interests";
 import { enterTestStayFormAction } from "@/features/test-entry/actions";
 import { isTestEntryOffered } from "@/features/test-entry/offer";
 import { requireUser } from "@/lib/authorization";
@@ -79,10 +81,17 @@ export default async function HomePage({
   }
 
   // Preferences come first, every day: until today's time and interests are set, there is nothing to show yet.
-  if ((await getDailyPlanForUser(user.id)).status === "not_started") redirect("/preferences");
+  const [plan, saved] = await Promise.all([getDailyPlanForUser(user.id), findPreferencesForUser(user.id)]);
+  if (plan.status === "not_started") redirect("/preferences");
+  const summary = stayHeaderSummary({
+    availableMinutes: plan.status === "no_stay" ? null : plan.availableMinutes,
+    categories: saved?.categories ?? [],
+    budget: saved?.budget ?? null,
+  });
 
   return (
     <LiveMissionsMap
+      summary={summary}
       hotel={{ name: stay.place.name, address: stay.place.address, at: [map.hotelLocation.lng, map.hotelLocation.lat] }}
       places={map.places.map((place) => ({
         id: place.id,

@@ -6,7 +6,7 @@ import type { DailyPlanState, DailyStopView } from "@/services/advisor/daily-pla
 import { AtlasAsset, AtlasIcon } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
 import { CheckInPanel } from "./check-in-panel";
-import { PlanSegment } from "./missions-chrome";
+import { PlanSegment, StayHeader } from "./missions-chrome";
 import { PendingSubmit } from "./pending-submit";
 import { type } from "./ui";
 
@@ -40,11 +40,16 @@ function duration(minutes: number) {
   return m % 60 === 0 ? `${m / 60} h` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
-function Shell({ children }: { children: ReactNode }) {
+type Header = { hotelName: string; summary: string };
+
+function Shell({ header, children }: { header: Header; children: ReactNode }) {
   return (
     <main className="relative flex min-h-[100dvh] w-full flex-col bg-atlas-paper">
       <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col items-start gap-[14px] px-[12px] pb-[24px] pt-[calc(12px+env(safe-area-inset-top))] wide:px-[24px] wide:pt-[calc(20px+env(safe-area-inset-top))]">
-        <PlanSegment active="plan" />
+        <div className="flex w-full flex-col items-start gap-[10px]">
+          <StayHeader hotelName={header.hotelName} summary={header.summary} />
+          <PlanSegment active="plan" />
+        </div>
         {children}
       </div>
       <div className="sticky bottom-0 z-10">
@@ -206,9 +211,9 @@ function Finished({ state }: { state: Extract<Started, { status: "finished" }> }
   );
 }
 
-function NotStarted({ hotelName }: { hotelName: string }) {
+function NotStarted({ hotelName, header }: { hotelName: string; header: Header }) {
   return (
-    <Shell>
+    <Shell header={header}>
       <div className="flex w-full max-w-[560px] flex-1 flex-col items-start justify-center gap-[16px] self-center">
         <div className="w-full max-w-[366px] overflow-hidden">
           <AtlasAsset src="/atlas-ui/pattern-teal-wave.svg" width={366} height={130} className="max-w-none" />
@@ -236,21 +241,24 @@ export function DailyPlanScreen({
   state,
   testFinish,
   notice,
+  summary,
 }: {
   state: Exclude<DailyPlanState, { status: "no_stay" }>;
+  /** The header's second line, built on the server from the guest's saved preferences. */
+  summary: string;
   testFinish: boolean;
   notice?: string;
 }) {
-  if (state.status === "not_started") return <NotStarted hotelName={state.hotelName} />;
+  if (state.status === "not_started") return <NotStarted hotelName={state.hotelName} header={{ hotelName: state.hotelName, summary }} />;
 
   const remaining = state.remainingMinutes;
   const noticeText = notice ? NOTICES[notice] : undefined;
 
   return (
-    <Shell>
+    <Shell header={{ hotelName: state.hotel.name, summary }}>
       <div className="flex w-full flex-col items-start gap-[8px]">
         <div className="flex w-full items-center justify-between gap-[8px]">
-          <h1 className="font-grotesk text-[20px] font-bold leading-[26px] text-atlas-teal">Today at {state.hotel.name}</h1>
+          <h1 className="font-grotesk text-[20px] font-bold leading-[26px] text-atlas-teal">Today</h1>
           <Link
             href="/preferences/edit"
             className="flex h-[44px] shrink-0 items-center gap-[6px] rounded-[22px] border border-atlas-beige px-[12px] font-manrope text-[13px] font-semibold text-atlas-ink"

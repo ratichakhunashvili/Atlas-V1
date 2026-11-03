@@ -42,6 +42,31 @@ export function ContextHeader({ summary: override, className = "" }: { summary?:
   );
 }
 
+/**
+ * The same header on real data: the guest's own hotel and their saved time, interests and price, read on the server.
+ * The pencil opens Edit preferences, which saves for the next plan and never changes today's.
+ */
+export function StayHeader({ hotelName, summary, className = "" }: { hotelName: string; summary: string; className?: string }) {
+  return (
+    <div className={`flex w-full items-center gap-[10px] rounded-[14px] border border-atlas-beige bg-atlas-paper p-[4px] ${className}`}>
+      <AtlasLink
+        to="Stay"
+        label={`Your stay at ${hotelName}`}
+        className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] bg-atlas-teal"
+      >
+        <AtlasIcon src="/atlas-ui/icon-home-light-18.svg" size={18} />
+      </AtlasLink>
+      <AtlasLink to="PrefsEdit" className="flex h-[44px] min-w-0 flex-1 flex-col items-start justify-center gap-px text-left">
+        <span className="w-full truncate font-grotesk text-[15px] font-bold leading-[19px] text-atlas-teal">{hotelName}</span>
+        <span className="w-full truncate font-manrope text-[12px] leading-[16px] text-atlas-slate">{summary}</span>
+      </AtlasLink>
+      <AtlasLink to="PrefsEdit" label="Edit time and interests" className="flex size-[44px] shrink-0 items-center justify-center rounded-[10px]">
+        <AtlasIcon src="/atlas-ui/icon-edit.svg" size={18} />
+      </AtlasLink>
+    </div>
+  );
+}
+
 type Segment = "explore" | "plan";
 
 const SEGMENT = "flex h-[44px] min-w-0 flex-1 items-center justify-center gap-[6px] rounded-[12px] font-manrope text-[14px] font-semibold leading-[19px]";

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 import { AtlasIcon } from "../asset";
 import { AtlasBottomBar } from "../bottom-bar";
-import { PlanSegment } from "../missions-chrome";
+import { PlanSegment, StayHeader } from "../missions-chrome";
 import type { MarkerImage } from "./markers";
 import { useMapScene, useSceneContext, type ScenePlace } from "./scene";
 import { useShortScreen, useWideLayout } from "../use-layout";
@@ -98,7 +98,7 @@ function LivePlaceCard({ place, selected }: { place: LivePlace; selected: boolea
   );
 }
 
-export function LiveMissionsMap({ hotel, places }: { hotel: LiveHotel; places: LivePlace[] }) {
+export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; places: LivePlace[]; summary: string }) {
   const [filter, setFilter] = useState<Filter>("All");
   const visible = places.filter((place) => matches(filter, place));
   const [selected, setSelected] = useState<string | null>(places[0]?.id ?? null);
@@ -195,17 +195,7 @@ export function LiveMissionsMap({ hotel, places }: { hotel: LiveHotel; places: L
       <div className="contents wide:pointer-events-auto wide:absolute wide:bottom-[16px] wide:left-[16px] wide:top-[calc(16px+env(safe-area-inset-top))] wide:flex wide:w-[var(--atlas-panel-w)] wide:flex-col wide:gap-[10px] wide:overflow-hidden wide:rounded-[22px] wide:bg-atlas-paper wide:p-[12px] wide:shadow-[0px_6px_24px_0px_rgba(28,41,41,0.16)]">
         <div className={`absolute inset-x-0 flex flex-col [--top:12px] ${TOP} wide:static wide:shrink-0 wide:gap-[10px]`}>
           <div className="pointer-events-auto mx-[12px] wide:mx-0">
-            <div className="flex w-full items-center gap-[10px] rounded-[14px] border border-atlas-beige bg-atlas-paper p-[4px]">
-              <span className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] bg-atlas-teal">
-                <AtlasIcon src="/atlas-ui/icon-home-light-18.svg" size={18} />
-              </span>
-              <span className="flex h-[44px] min-w-0 flex-1 flex-col items-start justify-center gap-px">
-                <h1 className="w-full truncate font-grotesk text-[15px] font-bold leading-[19px] text-atlas-teal">{hotel.name}</h1>
-                <span className="w-full truncate font-manrope text-[12px] leading-[16px] text-atlas-slate">
-                  {hotel.address ?? "Your hotel and the places it has approved"}
-                </span>
-              </span>
-            </div>
+            <StayHeader hotelName={hotel.name} summary={summary} />
           </div>
           <div className="pointer-events-auto mx-[12px] mt-[6px] wide:mx-0 wide:mt-0">
             <PlanSegment active="explore" />
