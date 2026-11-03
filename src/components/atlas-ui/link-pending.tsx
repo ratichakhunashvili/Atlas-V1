@@ -13,8 +13,10 @@ export function LinkPending() {
   return (
     <span
       aria-hidden
-      className={`pointer-events-none absolute bottom-[3px] left-1/2 h-[3px] w-[22px] -translate-x-1/2 rounded-full bg-current transition-opacity duration-150 motion-safe:animate-pulse ${
-        pending ? "opacity-80" : "opacity-0"
+      className={`pointer-events-none absolute bottom-[3px] left-1/2 h-[3px] w-[22px] -translate-x-1/2 rounded-full bg-current ${
+        // animate-pulse animates opacity itself, so it must only run while pending; on an idle
+        // tab it would override opacity-0 and leave a faint line under the label.
+        pending ? "opacity-80 motion-safe:animate-pulse" : "opacity-0"
       }`}
     />
   );

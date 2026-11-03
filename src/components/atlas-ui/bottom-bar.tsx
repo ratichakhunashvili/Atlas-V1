@@ -105,7 +105,9 @@ function Tab({
     );
   }
   return (
-    <Link href={href} style={style} className={`relative ${className}`}>
+    // The pending bar is placed inside the tab, so the tab needs a position. Most tabs already have
+    // one ("absolute" in the design bar); adding "relative" on top would override it and move the tab.
+    <Link href={href} style={style} className={/\b(absolute|relative|fixed|sticky)\b/.test(className) ? className : `relative ${className}`}>
       {children}
       <LinkPending />
     </Link>
