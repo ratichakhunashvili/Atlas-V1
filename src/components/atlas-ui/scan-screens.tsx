@@ -165,7 +165,7 @@ function TypedCode({ onSubmit, disabled }: { onSubmit: (code: string) => void; d
   const [code, setCode] = useState("");
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="font-manrope text-[14px] font-semibold text-atlas-teal underline underline-offset-2">
+      <button type="button" onClick={() => setOpen(true)} className="atlas-hit font-manrope text-[14px] font-semibold text-atlas-teal underline underline-offset-2">
         Type the code instead
       </button>
     );

@@ -260,10 +260,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
   position: relative;
 }
 
+/* Grows a small control's touch area to at least 44px tall without changing how it looks. */
 .atlas-hit::after {
   content: "";
   position: absolute;
-  inset: -6px 0;
+  inset: min(-6px, calc((100% - 44px) / 2)) 0;
 }
 
 .atlas-app :focus-visible {

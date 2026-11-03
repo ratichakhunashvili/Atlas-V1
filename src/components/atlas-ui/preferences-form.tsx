@@ -96,7 +96,7 @@ export function PreferencesForm({
                 <AtlasIcon src="/atlas-ui/icon-back.svg" size={18} />
               </Link>
             ) : null}
-            <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">{editing ? "My plan" : hotelName}</p>
+            <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">{editing ? "Back" : hotelName}</p>
           </div>
 
           <div className="flex w-full flex-col items-start gap-[6px]">
