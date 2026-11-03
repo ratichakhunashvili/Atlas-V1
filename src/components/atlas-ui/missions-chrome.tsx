@@ -1,5 +1,6 @@
 "use client";
 
+import { LinkPending } from "./link-pending";
 import { AtlasIcon } from "./asset";
 import { useDemoState } from "./demo/demo-store";
 import { preferencesSummary } from "./demo/live";
@@ -55,15 +56,17 @@ export function PlanSegment({ active, className = "" }: { active: Segment; class
           Explore
         </span>
       ) : (
-        <AtlasLink to="Main" className={`${SEGMENT} text-atlas-teal`}>
+        <AtlasLink to="Main" className={`relative ${SEGMENT} text-atlas-teal`}>
           <AtlasIcon src="/atlas-ui/icon-map-teal.svg" size={16} />
           Explore
+          <LinkPending />
         </AtlasLink>
       )}
       {explore ? (
-        <AtlasLink to="MyPlan" className={`${SEGMENT} text-atlas-teal`}>
+        <AtlasLink to="MyPlan" className={`relative ${SEGMENT} text-atlas-teal`}>
           <AtlasIcon src="/atlas-ui/icon-list-teal.svg" size={16} />
           My plan
+          <LinkPending />
         </AtlasLink>
       ) : (
         <span aria-current="page" className={`${SEGMENT} bg-atlas-teal text-atlas-paper`}>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { AtlasAsset, AtlasIcon } from "./asset";
+import { LinkPending } from "./link-pending";
 import { screenHref, type ScreenKey } from "./screen-hrefs";
 
 /*
@@ -104,8 +105,9 @@ function Tab({
     );
   }
   return (
-    <Link href={href} style={style} className={className}>
+    <Link href={href} style={style} className={`relative ${className}`}>
       {children}
+      <LinkPending />
     </Link>
   );
 }

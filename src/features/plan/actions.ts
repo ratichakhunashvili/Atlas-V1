@@ -74,7 +74,7 @@ export async function startPlanAction(_prev: PlanFormState, formData: FormData):
     };
   }
 
-  revalidatePath("/plan");
+  revalidatePath("/", "layout"); // plan, Profile and Achievements all read this data
   redirect("/plan");
 }
 
@@ -83,7 +83,7 @@ export async function savePreferencesAction(_prev: PlanFormState, formData: Form
   const user = await requireUser();
   const saved = await savePreferencesFrom(user.id, formData);
   if (!saved.ok) return saved.state;
-  revalidatePath("/plan");
+  revalidatePath("/", "layout"); // plan, Profile and Achievements all read this data
   redirect("/plan?notice=saved");
 }
 
@@ -94,7 +94,7 @@ export async function pickChoiceAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const placeId = placeIdSchema.safeParse(formData.get("placeId"));
   const result = placeId.success ? await pickChoiceForUser(user.id, placeId.data) : { ok: false as const, reason: "not_offered" as const };
-  revalidatePath("/plan");
+  revalidatePath("/", "layout"); // plan, Profile and Achievements all read this data
   // "busy": a pick is already in place (a double tap, or another tab) — show it, not an error.
   redirect(result.ok || result.reason === "busy" || result.reason === "not_choosing" ? "/plan" : "/plan?notice=pick-failed");
 }
@@ -104,7 +104,7 @@ export async function chooseAgainAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const stopId = z.string().uuid().safeParse(formData.get("stopId"));
   if (stopId.success) await removeUnavailableStopForUser({ userId: user.id, stopId: stopId.data });
-  revalidatePath("/plan");
+  revalidatePath("/", "layout"); // plan, Profile and Achievements all read this data
   redirect("/plan");
 }
 
@@ -113,6 +113,6 @@ export async function simulateScanAction(): Promise<void> {
   const user = await requireUser();
   if (!(await isTestFinishAllowed(user.id))) redirect("/plan");
   const result = await simulateScanForTesting(user.id);
-  revalidatePath("/plan");
+  revalidatePath("/", "layout"); // plan, Profile and Achievements all read this data
   redirect(result.ok ? `/plan/unlocked?stop=${result.stopId}` : "/plan");
 }

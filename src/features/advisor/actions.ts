@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/authorization";
 import { checkInStopWithGps, type CheckInResult } from "@/services/advisor/check-in";
 import { checkInStopWithQr, type QrCheckInResult } from "@/services/advisor/check-in-qr";
@@ -17,6 +18,15 @@ import { checkAttemptAllowed, recordFailedAttempt, reserveAttempt } from "@/db/q
 import { rateLimitedMessage } from "@/services/rate-limit/policy";
 import { gpsEvidenceMessage } from "@/services/advisor/gps-evidence";
 import { availableMinutesSchema, checkInArSchema, checkInGpsSchema, checkInQrSchema, directionsToStopSchema, removeStopSchema } from "./schema";
+
+/**
+ * A check-in changes the plan, the visits and the badges. Screens the guest visited recently are
+ * kept in the browser for a short time (next.config.ts, staleTimes), so drop them all: Profile,
+ * Achievements and My plan must show the new badge straight away, not up to 30 seconds later.
+ */
+function refreshGuestScreens() {
+  revalidatePath("/", "layout");
+}
 
 /**
  * Thin authentication/input boundary: `requireUser()` resolves the
@@ -63,6 +73,8 @@ export async function checkInGpsAction(
 
   if (!result.ok) {
     await recordFailedAttempt({ scope: "place_check_in", actorId: user.id, now: new Date() });
+  } else {
+    refreshGuestScreens();
   }
 
   return result;
@@ -98,6 +110,8 @@ export async function checkInQrAction(qrToken: string): Promise<QrCheckInResult>
 
   if (!result.ok) {
     await recordFailedAttempt({ scope: "place_check_in", actorId: user.id, now: new Date() });
+  } else {
+    refreshGuestScreens();
   }
 
   return result;
@@ -155,6 +169,8 @@ export async function checkInArAction(
 
   if (!result.ok) {
     await recordFailedAttempt({ scope: "place_check_in", actorId: user.id, now: new Date() });
+  } else {
+    refreshGuestScreens();
   }
 
   return result;
