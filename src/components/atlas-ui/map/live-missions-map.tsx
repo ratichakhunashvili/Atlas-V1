@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import { AtlasIcon } from "../asset";
 import { AtlasBottomBar } from "../bottom-bar";
 import { PlanSegment, StayHeader } from "../missions-chrome";
+import { DimensionSwitch } from "./dimension-switch";
 import type { MarkerImage } from "./markers";
 import { useMapScene, useSceneContext, type ScenePlace } from "./scene";
 import { useShortScreen, useWideLayout } from "../use-layout";
@@ -107,7 +108,10 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
   const collapsed = userCollapsed ?? short;
   const wide = useWideLayout();
   const swipe = useSheetSwipe({ collapsed, setCollapsed, openHeight: SHEET_HEIGHT, collapsedHeight: SHEET_COLLAPSED, enabled: !wide });
-  const { moveCamera, dimension, setDimension } = useSceneContext();
+  const { moveCamera } = useSceneContext();
+  // Phones only: "List" grows the sheet into a vertical list of the same places; "Map" shrinks it back.
+  const [listView, setListView] = useState(false);
+  const list = listView && !wide;
 
   const scenePlaces: ScenePlace[] = visible.map((place) => ({ id: place.id, marker: marker(place, place.id === selected), at: place.at }));
 
@@ -145,7 +149,7 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
   };
 
   const chips = (
-    <div role="toolbar" aria-label="Filter places" className="flex w-full flex-wrap items-start gap-[6px] px-[12px] wide:px-0">
+    <div role="toolbar" aria-label="Filter places" className="flex min-w-0 flex-1 flex-wrap items-start gap-[6px]">
       {(["All", "Hotel", "Partners"] as const).map((chip) => {
         const active = chip === filter;
         return (
@@ -173,14 +177,6 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
     <>
       <button
         type="button"
-        aria-label={dimension === "3D" ? "Show a flat 2D map" : "Show a tilted 3D map"}
-        onClick={() => setDimension(dimension === "3D" ? "2D" : "3D")}
-        className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] border border-atlas-beige bg-atlas-paper font-grotesk text-[13px] font-bold leading-[17px] text-atlas-teal"
-      >
-        {dimension === "3D" ? "2D" : "3D"}
-      </button>
-      <button
-        type="button"
         aria-label={`Show ${hotel.name}`}
         onClick={() => moveCamera("hotel")}
         className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] border border-atlas-beige bg-atlas-paper"
@@ -200,7 +196,10 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
           <div className="pointer-events-auto mx-[12px] mt-[6px] wide:mx-0 wide:mt-0">
             <PlanSegment active="explore" />
           </div>
-          <div className="pointer-events-auto mt-[8px] wide:mt-0">{chips}</div>
+          <div className="pointer-events-auto mt-[8px] flex w-full items-start gap-[6px] px-[12px] wide:mt-0 wide:px-0">
+            {chips}
+            <DimensionSwitch />
+          </div>
           <div className="pointer-events-auto mr-[12px] mt-[8px] flex flex-col items-start gap-[6px] self-end [@media(max-height:700px)]:flex-row wide:hidden">
             {controls}
           </div>
@@ -210,7 +209,7 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
           aria-label="Places"
           {...swipe.handlers}
           className={`pointer-events-auto absolute left-0 right-0 flex touch-pan-x flex-col items-center gap-[8px] overflow-hidden rounded-t-[22px] bg-atlas-paper pt-[8px] shadow-[0px_-4px_18px_0px_rgba(28,41,41,0.1)] ${swipe.dragging ? "" : "motion-safe:transition-[height] motion-safe:duration-200"} wide:touch-auto wide:static wide:h-auto! wide:min-h-0 wide:flex-1 wide:rounded-none wide:pt-0 wide:shadow-none`}
-          style={{ bottom: "var(--atlas-nav-h)", height: swipe.height }}
+          style={{ bottom: "var(--atlas-nav-h)", height: list ? "calc(100dvh - var(--atlas-nav-h) - 184px - env(safe-area-inset-top))" : swipe.height }}
         >
           <div aria-hidden className="h-[4px] w-[36px] shrink-0 rounded-[2px] bg-atlas-beige wide:hidden" />
           <button
@@ -226,11 +225,25 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
             <h2 className="font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal">
               {visible.length} {visible.length === 1 ? "place" : "places"} for you
             </h2>
+            <button
+              type="button"
+              aria-pressed={list}
+              onClick={() => {
+                setListView(!list);
+                setCollapsed(false);
+              }}
+              className="flex h-[44px] shrink-0 items-center gap-[6px] rounded-[22px] border border-atlas-beige px-[12px] font-manrope text-[13px] font-semibold leading-[18px] text-atlas-ink wide:hidden"
+            >
+              <AtlasIcon src={list ? "/atlas-ui/icon-map-teal.svg" : "/atlas-ui/icon-list-ink.svg"} size={16} />
+              {list ? "Map" : "List"}
+            </button>
           </div>
           <div
             id="live-place-cards"
-            hidden={collapsed && !swipe.dragging}
-            className="atlas-scroll-fade flex w-full snap-x items-start gap-[10px] overflow-x-auto scroll-px-[16px] px-[16px] pb-[6px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden wide:min-h-0 wide:flex-1 wide:snap-none wide:flex-col wide:overflow-y-auto wide:overflow-x-hidden wide:px-[4px] wide:[mask-image:none] wide:[scrollbar-width:thin]"
+            hidden={collapsed && !swipe.dragging && !list}
+            className={`flex w-full items-start gap-[10px] px-[16px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+              list ? "min-h-0 flex-1 flex-col overflow-y-auto pb-[12px] [&>*]:w-full" : "atlas-scroll-fade snap-x overflow-x-auto scroll-px-[16px] pb-[6px]"
+            } wide:min-h-0 wide:flex-1 wide:snap-none wide:flex-col wide:overflow-y-auto wide:overflow-x-hidden wide:px-[4px] wide:[mask-image:none] wide:[scrollbar-width:thin]`}
           >
             {visible.length === 0 ? (
               <p className="w-full font-manrope text-[14px] leading-[1.45] text-atlas-slate">
