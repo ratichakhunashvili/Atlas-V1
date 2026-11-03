@@ -6,7 +6,9 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
 async function main() {
-  const connectionString = process.env.DATABASE_URL;
+  // Migrations need a direct (non-pooled) connection: Neon's pooled endpoint runs PgBouncer in
+  // transaction mode, which drops the session state a migration relies on.
+  const connectionString = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error(
       "DATABASE_URL is not set. Copy .env.example to .env.local and fill it in."

@@ -14,7 +14,8 @@ export default defineConfig({
   out: "./src/db/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL,
+    // Direct connection for drizzle-kit (see src/db/migrate.ts).
+    url: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL,
   },
   strict: true,
   verbose: true,

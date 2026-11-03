@@ -43,3 +43,4 @@ next-env.d.ts
 
 # local-only test QR sheet (contains one-time check-in codes)
 *.local.html
+.neon
