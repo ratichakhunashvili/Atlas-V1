@@ -3,9 +3,11 @@
 import { useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
 /*
- * Swipe a bottom sheet down to minimise it and up to bring it back. While the finger is down the sheet follows it;
- * on release it settles open or minimised — past a short distance, or a quick flick, it changes state; otherwise it
- * springs back. Vertical only: the sheet uses `touch-action: pan-x`, so side-to-side card scrolling keeps working.
+ * Drag a bottom sheet between its heights (for example minimised, cards and full list). While the finger is down the
+ * sheet follows it; on release it settles on the nearest height — and past a short distance, or after a quick flick,
+ * it always moves at least one step that way, so a small swipe is never lost. Vertical only: the sheet uses
+ * `touch-action: pan-x`, so side-to-side card scrolling keeps working; a list inside it sets its own touch-action so it
+ * still scrolls, and hands a pull-down at its top to the sheet.
  * Phones only: callers pass `enabled = false` in the wide layout, where the sheet is a side panel.
  */
 
@@ -13,24 +15,25 @@ const SWITCH_DISTANCE = 48;
 const FLICK_SPEED = 0.5; // px per ms
 
 export function useSheetSwipe({
-  collapsed,
-  setCollapsed,
-  openHeight,
-  collapsedHeight,
+  level,
+  setLevel,
+  heights,
   enabled,
 }: {
-  collapsed: boolean;
-  setCollapsed: (collapsed: boolean) => void;
-  openHeight: number;
-  collapsedHeight: number;
+  /** Index into `heights`. */
+  level: number;
+  setLevel: (level: number) => void;
+  /** The heights the sheet can rest at, smallest first, in px. */
+  heights: readonly number[];
   enabled: boolean;
 }) {
   const start = useRef<{ x: number; y: number; t: number; id: number } | null>(null);
   const [offset, setOffset] = useState(0);
   const moved = useRef(false);
 
-  const base = collapsed ? collapsedHeight : openHeight;
-  const height = Math.min(openHeight, Math.max(collapsedHeight, base - offset));
+  const top = heights.length - 1;
+  const base = heights[Math.min(level, top)];
+  const height = Math.min(heights[top], Math.max(heights[0], base - offset));
 
   const onPointerDown = (event: PointerEvent<HTMLElement>) => {
     if (!enabled || (event.pointerType === "mouse" && event.button !== 0)) return;
@@ -61,8 +64,13 @@ export function useSheetSwipe({
     if (!s || !moved.current) return;
     const dy = event.clientY - s.y;
     const speed = dy / Math.max(1, event.timeStamp - s.t);
-    if (!collapsed && (dy > SWITCH_DISTANCE || speed > FLICK_SPEED)) setCollapsed(true);
-    else if (collapsed && (dy < -SWITCH_DISTANCE || speed < -FLICK_SPEED)) setCollapsed(false);
+    const released = base - dy;
+    let next = heights.reduce((best, h, i) => (Math.abs(h - released) < Math.abs(heights[best] - released) ? i : best), 0);
+    if (next === level) {
+      if (dy > SWITCH_DISTANCE || speed > FLICK_SPEED) next = level - 1;
+      else if (dy < -SWITCH_DISTANCE || speed < -FLICK_SPEED) next = level + 1;
+    }
+    setLevel(Math.min(top, Math.max(0, next)));
     setOffset(0);
   };
 

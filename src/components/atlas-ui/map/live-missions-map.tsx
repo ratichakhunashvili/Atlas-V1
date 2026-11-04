@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AtlasIcon } from "../asset";
 import { AtlasBottomBar } from "../bottom-bar";
 import { PlanSegment, StayHeader } from "../missions-chrome";
@@ -42,6 +42,31 @@ type Filter = "All" | "Hotel" | "Partners";
 
 const SHEET_HEIGHT = 196;
 const SHEET_COLLAPSED = 64;
+const MINIMISED = 0;
+const CARDS = 1;
+const LIST = 2;
+type SheetLevel = typeof MINIMISED | typeof CARDS | typeof LIST;
+/** The full list stops below the header, Explore / My plan and the filter row. */
+const LIST_TOP = "calc(184px + env(safe-area-inset-top) + var(--atlas-nav-h))";
+
+/** The list height in px for this screen, kept current on resize and rotation. */
+function useListHeight(): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const probe = document.createElement("div");
+    probe.style.cssText = `position:fixed;left:0;top:0;width:0;visibility:hidden;pointer-events:none;height:calc(100dvh - ${LIST_TOP})`;
+    document.body.appendChild(probe);
+    const update = () => setHeight(probe.offsetHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(probe);
+    return () => {
+      observer.disconnect();
+      probe.remove();
+    };
+  }, []);
+  return height;
+}
 const PRICE_LEVELS: Record<number, string> = { 1: "Budget", 2: "Moderate", 3: "Luxury" };
 const TOP = "top-[calc(var(--top)+env(safe-area-inset-top))]";
 
@@ -104,14 +129,18 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
   const visible = places.filter((place) => matches(filter, place));
   const [selected, setSelected] = useState<string | null>(places[0]?.id ?? null);
   const short = useShortScreen();
-  const [userCollapsed, setCollapsed] = useState<boolean | null>(null);
-  const collapsed = userCollapsed ?? short;
+  // The phone sheet rests minimised, as a row of cards, or as a full list ("List" button, or swipe up again).
+  const [userLevel, setLevel] = useState<SheetLevel | null>(null);
   const wide = useWideLayout();
-  const swipe = useSheetSwipe({ collapsed, setCollapsed, openHeight: SHEET_HEIGHT, collapsedHeight: SHEET_COLLAPSED, enabled: !wide });
+  const level: SheetLevel = wide ? CARDS : (userLevel ?? (short ? MINIMISED : CARDS));
+  const collapsed = level === MINIMISED;
+  const list = level === LIST;
+  const setCollapsed = (value: boolean) => setLevel(value ? MINIMISED : CARDS);
+  const listHeight = useListHeight();
+  const swipe = useSheetSwipe({ level, setLevel: (l) => setLevel(l as SheetLevel), heights: [SHEET_COLLAPSED, SHEET_HEIGHT, Math.max(SHEET_HEIGHT, listHeight)], enabled: !wide });
+  // At the top of the list a downward drag moves the sheet; once scrolled, the list scrolls both ways.
+  const [listAtTop, setListAtTop] = useState(true);
   const { moveCamera } = useSceneContext();
-  // Phones only: "List" grows the sheet into a vertical list of the same places; "Map" shrinks it back.
-  const [listView, setListView] = useState(false);
-  const list = listView && !wide;
 
   const scenePlaces: ScenePlace[] = visible.map((place) => ({ id: place.id, marker: marker(place, place.id === selected), at: place.at }));
 
@@ -209,7 +238,7 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
           aria-label="Places"
           {...swipe.handlers}
           className={`pointer-events-auto absolute left-0 right-0 flex touch-pan-x flex-col items-center gap-[8px] overflow-hidden rounded-t-[22px] bg-atlas-paper pt-[8px] shadow-[0px_-4px_18px_0px_rgba(28,41,41,0.1)] ${swipe.dragging ? "" : "motion-safe:transition-[height] motion-safe:duration-200"} wide:touch-auto wide:static wide:h-auto! wide:min-h-0 wide:flex-1 wide:rounded-none wide:pt-0 wide:shadow-none`}
-          style={{ bottom: "var(--atlas-nav-h)", height: list ? "calc(100dvh - var(--atlas-nav-h) - 184px - env(safe-area-inset-top))" : swipe.height }}
+          style={{ bottom: "var(--atlas-nav-h)", height: swipe.height }}
         >
           <div aria-hidden className="h-[4px] w-[36px] shrink-0 rounded-[2px] bg-atlas-beige wide:hidden" />
           <button
@@ -228,10 +257,7 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
             <button
               type="button"
               aria-pressed={list}
-              onClick={() => {
-                setListView(!list);
-                setCollapsed(false);
-              }}
+              onClick={() => setLevel(list ? CARDS : LIST)}
               className="flex h-[44px] shrink-0 items-center gap-[6px] rounded-[22px] border border-atlas-beige px-[12px] font-manrope text-[13px] font-semibold leading-[18px] text-atlas-ink wide:hidden"
             >
               <AtlasIcon src={list ? "/atlas-ui/icon-map-teal.svg" : "/atlas-ui/icon-list-ink.svg"} size={16} />
@@ -240,9 +266,10 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
           </div>
           <div
             id="live-place-cards"
-            hidden={collapsed && !swipe.dragging && !list}
+            hidden={collapsed && !swipe.dragging}
+            onScroll={list ? (event) => setListAtTop(event.currentTarget.scrollTop <= 0) : undefined}
             className={`flex w-full items-start gap-[10px] px-[16px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
-              list ? "min-h-0 flex-1 flex-col overflow-y-auto pb-[12px] [&>*]:w-full" : "atlas-scroll-fade snap-x overflow-x-auto scroll-px-[16px] pb-[6px]"
+              list || (swipe.dragging && swipe.height > SHEET_HEIGHT) ? `min-h-0 flex-1 flex-col overflow-y-auto pb-[12px] [&>*]:w-full ${listAtTop ? "touch-pan-down" : "touch-pan-y"}` : "atlas-scroll-fade snap-x overflow-x-auto scroll-px-[16px] pb-[6px]"
             } wide:min-h-0 wide:flex-1 wide:snap-none wide:flex-col wide:overflow-y-auto wide:overflow-x-hidden wide:px-[4px] wide:[mask-image:none] wide:[scrollbar-width:thin]`}
           >
             {visible.length === 0 ? (
