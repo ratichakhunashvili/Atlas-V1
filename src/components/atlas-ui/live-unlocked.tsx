@@ -32,7 +32,7 @@ export function LiveUnlocked({
         src="/atlas-ui/pattern-beige-wave-2.svg"
         width={390}
         height={139}
-        className="pointer-events-none absolute left-0 top-[36px] opacity-45 wide:hidden"
+        className="pointer-events-none absolute inset-x-0 top-[36px] h-auto w-full max-w-none opacity-45 wide:hidden"
       />
       <div
         aria-hidden

@@ -25,7 +25,7 @@ export function ConfirmationScreen({
           src="/atlas-ui/pattern-teal-wave.svg"
           width={390}
           height={139}
-          className={`pointer-events-none absolute left-0 max-w-none ${patternClassName}`}
+          className={`pointer-events-none absolute inset-x-0 h-auto w-full max-w-none ${patternClassName}`}
         />
         <div className="relative flex min-h-px w-full flex-1 flex-col items-center justify-center gap-[14px] text-center">
           <span className="flex size-[80px] shrink-0 items-center justify-center rounded-[40px] border-4 border-atlas-bronze/60 bg-atlas-teal">

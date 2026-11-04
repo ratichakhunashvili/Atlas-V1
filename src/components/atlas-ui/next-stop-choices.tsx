@@ -152,7 +152,7 @@ export function NextStopChoices() {
           ))}
         </div>
         <div aria-hidden className="relative h-[36px] w-full overflow-hidden">
-          <AtlasAsset src="/atlas-ui/pattern-teal-wave.svg" width={390} height={139} className="absolute left-[-16px] top-[-52px] max-w-none opacity-30" />
+          <AtlasAsset src="/atlas-ui/pattern-teal-wave.svg" width={390} height={139} className="absolute left-[-16px] top-[-52px] h-auto w-[calc(100%+32px)] max-w-none opacity-30" />
         </div>
         <div className="flex w-full flex-col items-start gap-[4px]">
           <h1 id="next-stop-title" className="font-grotesk text-[22px] font-bold leading-[1.2] text-atlas-teal">

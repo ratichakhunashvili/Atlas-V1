@@ -84,7 +84,7 @@ export function ArUnlockScreen() {
             src="/atlas-ui/ar-camera-view.svg"
             width={390}
             height={844}
-            className="pointer-events-none absolute left-0 top-0 max-w-none wide:size-full wide:object-cover"
+            className="pointer-events-none absolute inset-0 size-full max-w-none object-cover"
           />
           <CloseButton to="AttractionDetail" />
           <p className="absolute right-[16px] top-[calc(16px+env(safe-area-inset-top))] flex items-center gap-[8px] rounded-[18px] bg-atlas-ink/75 px-[14px] py-[8px] font-manrope text-[13px] leading-[18px] text-atlas-paper">

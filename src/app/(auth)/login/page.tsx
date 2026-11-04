@@ -16,7 +16,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           src="/atlas-ui/pattern-teal-wave.svg"
           width={390}
           height={139}
-          className="pointer-events-none absolute left-0 top-[calc(64px+env(safe-area-inset-top))] max-w-none opacity-12"
+          className="pointer-events-none absolute inset-x-0 top-[calc(64px+env(safe-area-inset-top))] h-auto w-full max-w-none opacity-12"
         />
         <div className="relative flex w-full items-center justify-end">
           <AtlasLogo tone="teal" width={38} height={44} />

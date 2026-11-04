@@ -257,8 +257,8 @@ function EmptyPlan() {
   return (
     <MissionsShell gap={14} paddingBottom={24}>
       <div className="flex min-h-px w-full max-w-[560px] flex-1 flex-col items-start justify-center gap-[16px] self-center">
-        <div className="w-full max-w-[366px] overflow-hidden">
-          <AtlasAsset src="/atlas-ui/pattern-teal-wave.svg" width={366} height={130} className="max-w-none" />
+        <div className="w-full overflow-hidden">
+          <AtlasAsset src="/atlas-ui/pattern-teal-wave.svg" width={366} height={130} className="h-auto w-full" />
         </div>
         <h1 className={`w-full ${type.title}`}>No plan for today yet</h1>
         <p className={`w-full ${type.body} text-atlas-slate`}>

@@ -19,7 +19,7 @@ export default function WelcomePage() {
         src="/atlas-ui/pattern-beige-wave.svg"
         width={390}
         height={139}
-        className="pointer-events-none absolute left-0 top-[196px] wide:hidden"
+        className="pointer-events-none absolute inset-x-0 top-[196px] h-auto w-full max-w-none wide:hidden"
       />
       {/* Wider screens repeat the same artwork across the width rather than stretching it. */}
       <div
