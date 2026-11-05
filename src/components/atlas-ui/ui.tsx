@@ -31,14 +31,18 @@ export function AtlasLink({
   className,
   children,
   label,
+  query = "",
 }: {
   to: ScreenKey;
   className?: string;
   children: ReactNode;
   /** Accessible name, for links whose content is only an icon. */
   label?: string;
+  /** A query string ("?…") to carry along, e.g. where to go after signing in. */
+  query?: string;
 }) {
-  const href = screenHref(to);
+  const base = screenHref(to);
+  const href = base ? `${base}${query}` : base;
   if (!href) {
     return (
       <span className={className} aria-label={label} aria-disabled="true">
@@ -140,10 +144,11 @@ export function AtlasTextLink({
 }
 
 /** 44px square back button with a beige outline (icon/back). */
-export function AtlasBackButton({ to, className = "" }: { to: ScreenKey; className?: string }) {
+export function AtlasBackButton({ to, className = "", query }: { to: ScreenKey; className?: string; query?: string }) {
   return (
     <AtlasLink
       to={to}
+      query={query}
       label="Back"
       className={`flex size-[44px] shrink-0 items-center justify-center rounded-[12px] border border-atlas-beige bg-atlas-paper ${className}`}
     >

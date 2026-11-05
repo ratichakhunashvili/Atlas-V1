@@ -11,7 +11,7 @@ const { auth } = NextAuth(authConfig);
 
 const PROTECTED_EXACT = ["/"];
 // /admin has its own rules (admin sign-in, Access denied): see adminRedirect.
-const PROTECTED_PREFIXES = ["/profile", "/hotels", "/experiences", "/collection", "/checkin"];
+const PROTECTED_PREFIXES = ["/profile", "/hotels", "/experiences", "/collection", "/checkin", "/unlock/"];
 
 function isProtectedPath(pathname: string) {
   return (
@@ -50,6 +50,7 @@ export const config = {
     "/collection/:path*",
     "/admin/:path*",
     "/checkin/:path*",
+    "/unlock/:path*",
     "/dev/:path*",
     "/demo/:path*",
     "/map-preview/:path*",

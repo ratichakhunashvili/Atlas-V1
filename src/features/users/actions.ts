@@ -12,6 +12,7 @@ import { preferencesSchema, signupSchema } from "./schema";
 import { isAuthAttemptAllowed, recordAuthAttempt } from "@/db/queries/auth-rate-limit";
 import { clientIp } from "@/lib/client-ip";
 import { authRateLimitKey, authRateLimitedMessage } from "@/services/rate-limit/auth-policy";
+import { safeCallback } from "@/auth/callback";
 
 /**
  * Create account (Figma SignUp, SignUpEmailUsed, SignUpWeak). Problems come back as form state —
@@ -70,7 +71,9 @@ export async function signupAction(_previous: SignUpState, formData: FormData): 
   }
 
   // Signed straight in, as the design continues from Create account into the app.
-  await signIn("credentials", { email: parsed.data.email, password: parsed.data.password, redirectTo: "/" });
+  // Straight on to wherever they were headed, e.g. the hotel code they scanned before having an account.
+  const redirectTo = safeCallback(formData.get("callbackUrl"), "/");
+  await signIn("credentials", { email: parsed.data.email, password: parsed.data.password, redirectTo });
   return {};
 }
 

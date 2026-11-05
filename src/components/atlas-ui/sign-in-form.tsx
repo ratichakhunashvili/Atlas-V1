@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { loginAction, type SignInState } from "@/auth/actions";
 import { AtlasIcon } from "./asset";
 import { AtlasButton, AtlasField, AtlasLink, Spacer, type } from "./ui";
+import { callbackQuery } from "@/auth/callback";
 
 /*
  * SignIn · Sign in / create account — Figma frame 1:722, "Sign in" variant of the Auth form set
@@ -43,7 +44,7 @@ export function AtlasSignInForm({ callbackUrl }: { callbackUrl?: string }) {
         <span aria-current="page" className={`${TAB} bg-atlas-teal text-atlas-paper`}>
           Sign in
         </span>
-        <AtlasLink to="SignUp" className={`${TAB} bg-atlas-paper text-atlas-teal`}>
+        <AtlasLink to="SignUp" query={callbackQuery(callbackUrl)} className={`${TAB} bg-atlas-paper text-atlas-teal`}>
           Create account
         </AtlasLink>
       </nav>

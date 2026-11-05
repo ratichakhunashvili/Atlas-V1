@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { callbackQuery } from "@/auth/callback";
 import { signupAction, type SignUpState } from "@/features/users/actions";
 import { ErrorBanner } from "./sign-in-form";
 import { AtlasButton, AtlasField, AtlasLink, Spacer, type } from "./ui";
@@ -14,12 +15,14 @@ import { AtlasButton, AtlasField, AtlasLink, Spacer, type } from "./ui";
 const PASSWORD_HINT = "At least 8 characters, with a letter and a number.";
 const LINK = "flex h-[44px] items-center font-manrope text-[14px] font-semibold leading-[19px] text-atlas-teal";
 
-export function AtlasSignUpForm() {
+export function AtlasSignUpForm({ callbackUrl }: { callbackUrl?: string }) {
   const [state, action, pending] = useActionState<SignUpState, FormData>(signupAction, {});
   const errors = state.fieldErrors ?? {};
 
   return (
     <form action={action} className="flex w-full min-h-0 flex-1 flex-col items-start gap-[16px]">
+      {/* Where to continue afterwards, e.g. the hotel code the guest scanned before having an account. */}
+      {callbackUrl ? <input type="hidden" name="callbackUrl" value={callbackUrl} /> : null}
       <div className="flex w-full flex-col items-start gap-[8px]">
         <h1 className={`w-full ${type.title}`}>Create your account</h1>
         <p className={`w-full ${type.body} text-atlas-slate`}>Your account keeps your plan and achievements for this stay.</p>
@@ -58,7 +61,7 @@ export function AtlasSignUpForm() {
         />
         {state.emailUsed ? (
           <div className="flex w-full flex-wrap items-center gap-x-[16px]">
-            <AtlasLink to="SignIn" className={LINK}>
+            <AtlasLink to="SignIn" query={callbackQuery(callbackUrl)} className={LINK}>
               Sign in instead
             </AtlasLink>
           </div>

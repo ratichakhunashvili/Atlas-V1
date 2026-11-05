@@ -6,6 +6,7 @@ import { loginSchema } from "@/features/users/schema";
 import { isAuthAttemptAllowed, recordAuthAttempt } from "@/db/queries/auth-rate-limit";
 import { clientIp } from "@/lib/client-ip";
 import { authRateLimitKey, authRateLimitedMessage } from "@/services/rate-limit/auth-policy";
+import { safeCallback } from "./callback";
 
 /*
  * Sign-in for the guest screen (/login) and the admin screen (/admin/sign-in). Both use the same
@@ -17,11 +18,6 @@ import { authRateLimitKey, authRateLimitedMessage } from "@/services/rate-limit/
  */
 
 export type SignInState = { error?: string; email?: string };
-
-/** Only same-site paths, never `//host` (protocol-relative), so a crafted link can't redirect off-site. */
-function safeCallback(value: FormDataEntryValue | null, fallback: string): string {
-  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") ? value : fallback;
-}
 
 export async function loginAction(_previous: SignInState, formData: FormData): Promise<SignInState> {
   const email = String(formData.get("email") ?? "");

@@ -3,6 +3,7 @@ import { Alert } from "@/components/shared/alert";
 import { Button } from "@/components/shared/button";
 import { Field } from "@/components/shared/field";
 import { Select } from "@/components/shared/select";
+import { PlaceLocationPicker } from "./place-location-picker";
 
 function sentence(value: string) {
   const words = value.replaceAll("_", " ");
@@ -38,24 +39,7 @@ export function PlaceForm({
         />
       </label>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field
-          label="Latitude"
-          name="latitude"
-          type="number"
-          step="any"
-          defaultValue={place?.latitude}
-          required
-        />
-        <Field
-          label="Longitude"
-          name="longitude"
-          type="number"
-          step="any"
-          defaultValue={place?.longitude}
-          required
-        />
-      </div>
+      <PlaceLocationPicker defaultLatitude={place?.latitude} defaultLongitude={place?.longitude} />
 
       <Select label="Category" name="category" defaultValue={place?.category ?? PLACE_CATEGORIES[0]}>
         {PLACE_CATEGORIES.map((category) => (
