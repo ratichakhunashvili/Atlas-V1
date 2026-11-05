@@ -176,6 +176,20 @@
       "when": 1793699596543,
       "tag": "0024_catalogue_contracts_and_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793900347249,
+      "tag": "0025_itinerary_days_per_stay",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793900471795,
+      "tag": "0026_users_email_case_insensitive",
+      "breakpoints": true
     }
   ]
 }

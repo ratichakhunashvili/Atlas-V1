@@ -2,11 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { signIn } from "@/auth";
+import { signIn, signOut } from "@/auth";
 import { hashPassword } from "@/auth/password";
 import { hasPgErrorCode, PG_UNIQUE_VIOLATION } from "@/db/errors";
 import { requireUser } from "@/lib/authorization";
-import { createUser, findUserByEmail } from "@/db/queries/users";
+import { createUser, deleteGuestAccount, findUserByEmail } from "@/db/queries/users";
 import { upsertPreferences } from "@/db/queries/preferences";
 import { preferencesSchema, signupSchema } from "./schema";
 import { isAuthAttemptAllowed, recordAuthAttempt } from "@/db/queries/auth-rate-limit";
@@ -98,4 +98,21 @@ export async function updatePreferencesAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/experiences");
   redirect("/profile?saved=1");
+}
+
+export type DeleteAccountState = { error?: string };
+
+/**
+ * "Delete my account" (Profile > Help and privacy). Deletes the signed-in guest's own account and personal data
+ * for real, then signs them out. Only ever the caller's own account: the id comes from the session, never the form.
+ */
+export async function deleteAccountAction(_previous: DeleteAccountState): Promise<DeleteAccountState> {
+  const user = await requireUser();
+  const result = await deleteGuestAccount(user.id);
+  if (!result.ok && result.reason === "admin_account") {
+    return { error: "Admin accounts can't be deleted here. Ask another admin to remove your admin role first." };
+  }
+  // "not_found" means it is already gone; either way the session must end.
+  await signOut({ redirectTo: "/account-deleted" });
+  return {};
 }

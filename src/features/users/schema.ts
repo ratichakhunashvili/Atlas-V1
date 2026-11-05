@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { ACTIVITY_LEVELS, BUDGET_LEVELS, PLACE_CATEGORIES } from "@/db/schema";
 
+/** Emails are compared case-insensitively: stored and looked up trimmed and lower-case, so "Nino@x" and "nino@x" are one account. */
+const normalisedEmail = (message: string) => z.string().trim().toLowerCase().pipe(z.email(message));
+
 export const loginSchema = z.object({
-  email: z.email("Enter a valid email"),
+  email: normalisedEmail("Enter a valid email"),
   password: z.string().min(1, "Password is required"),
 });
 
@@ -15,7 +18,7 @@ export const signupSchema = z.object({
     .trim()
     .max(60, "Keep your name under 60 characters")
     .transform((value) => value || null),
-  email: z.email("Enter a full email address, like name@example.com"),
+  email: normalisedEmail("Enter a full email address, like name@example.com"),
   password: z
     .string()
     .min(8, WEAK_PASSWORD_MESSAGE)

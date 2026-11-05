@@ -108,7 +108,7 @@ type ActiveStayLike = {
 export type CurrentItineraryDependencies = {
   /** Same resolution generateItineraryForUser itself uses (db/queries/hotel-stays.ts's findActiveStayForUser, i.e. checkOut IS NULL) — this read-only lookup must agree with what generation would resolve, or "today's itinerary" could silently point at the wrong stay. */
   findActiveStayForUser: (userId: string) => Promise<ActiveStayLike | null>;
-  findItineraryDay: (userId: string, hotelId: string, dayNumber: number) => Promise<ItineraryDay | null>;
+  findItineraryDay: (userId: string, hotelId: string, dayNumber: number, hotelStayId: string) => Promise<ItineraryDay | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
   /** Fresh eligibility context for the guest, used to flag unavailable pending stops. Read-only. */
   loadAvailabilityContext: AvailabilityContextLoader;
@@ -162,7 +162,7 @@ export async function getCurrentItineraryForUser(
     return { status: "no_active_stay" };
   }
 
-  const day = await d.findItineraryDay(userId, stay.hotel.id, dayNumberResult.dayNumber);
+  const day = await d.findItineraryDay(userId, stay.hotel.id, dayNumberResult.dayNumber, stay.id);
   if (!day) {
     return { status: "no_itinerary_yet", hotelName: stay.place.name };
   }

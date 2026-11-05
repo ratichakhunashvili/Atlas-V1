@@ -235,3 +235,19 @@ describe("featured partners are featured by one hotel only", () => {
     assert.deepEqual([entry.featured, entry.offerText], [false, null]);
   });
 });
+
+describe("another hotel never appears, even through a wrong relationship row", () => {
+  const hotelB = makeTestPlace({ id: "hotel-b-place", category: "hotel", kind: "hotel" });
+  const hotelWithOtherCategory = makeTestPlace({ id: "hotel-c-place", category: "restaurant", kind: "hotel" });
+  const unlinkedHotel = makeTestPlace({ id: "hotel-d-place", category: "hotel", kind: "business" });
+  const cafe = makeTestPlace({ id: "cafe", category: "restaurant" });
+
+  test("an active, confirmed partnership pointing at another hotel's Place is ignored", () => {
+    const rows = [hotelB, hotelWithOtherCategory, unlinkedHotel, cafe].map((place) => partnership({ hotelId: HOTEL_A, place }));
+    assert.deepEqual(eligibleIds({ hotelId: HOTEL_A, partnerships: rows }), ["cafe"]);
+  });
+
+  test("a facility row pointing at a hotel Place is ignored", () => {
+    assert.deepEqual(eligibleIds({ hotelId: HOTEL_A, facilities: [facilityRow({ hotelId: HOTEL_A, place: hotelB })] }), []);
+  });
+});

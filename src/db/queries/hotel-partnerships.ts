@@ -1,9 +1,9 @@
 import "server-only";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, notExists } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { PG_UNIQUE_VIOLATION, hasPgErrorCode } from "@/db/errors";
-import { hotelPartnerships, hotels, places, type HotelPartnership, type PartnershipStatus } from "@/db/schema";
+import { hotelFacilities, hotelPartnerships, hotels, places, type HotelPartnership, type PartnershipStatus } from "@/db/schema";
 import type { PartnershipRow } from "@/services/eligibility/rules";
 
 const PARTNERSHIP_ROW_COLUMNS = {
@@ -32,7 +32,19 @@ export async function listPartnershipRowsForHotel(hotelId: string): Promise<Part
     .select(PARTNERSHIP_ROW_COLUMNS)
     .from(hotelPartnerships)
     .innerJoin(places, eq(hotelPartnerships.placeId, places.id))
-    .where(eq(hotelPartnerships.hotelId, hotelId));
+    .where(
+      and(
+        eq(hotelPartnerships.hotelId, hotelId),
+        // Another hotel's own facility is never this hotel's partner (CLAUDE.md: other hotels' facilities must not
+        // appear), even if a partnership row points at it. Hotel Places themselves are excluded in rules.ts.
+        notExists(
+          db
+            .select({ id: hotelFacilities.id })
+            .from(hotelFacilities)
+            .where(and(eq(hotelFacilities.placeId, places.id), ne(hotelFacilities.hotelId, hotelId)))
+        )
+      )
+    );
 }
 
 /** Admin listing: full rows incl. confirmation metadata, newest first. */

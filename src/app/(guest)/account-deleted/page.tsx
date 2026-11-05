@@ -23,9 +23,6 @@ export default function AccountDeletedPage() {
             Your plans, achievements and preferences have been removed. You can create a new account any time.
           </p>
         </div>
-        <p className={`w-full text-center ${type.caption}`}>
-          Prototype: there are no accounts. Deleting reset the demo plan and achievements kept in this browser.
-        </p>
         <AtlasButton to="Welcome">Back to welcome</AtlasButton>
       </FlowScreen>
     </main>

@@ -35,7 +35,7 @@ export type PlanRepairDependencies = {
   findUserById: (id: string) => Promise<User | null>;
   findActiveStayForUser: (userId: string) => Promise<ActiveHotelStay | null>;
   findPreferencesForUser: (userId: string) => Promise<UserPreferences | null>;
-  findItineraryDay: (userId: string, hotelId: string, dayNumber: number) => Promise<ItineraryDay | null>;
+  findItineraryDay: (userId: string, hotelId: string, dayNumber: number, hotelStayId: string) => Promise<ItineraryDay | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
   findItineraryStopWithDay: (stopId: string) => Promise<{ stop: ItineraryStop; day: ItineraryDay } | null>;
   listEligiblePlacesForStay: (stay: Pick<ActiveHotelStay, "hotel" | "place">, now: Date) => Promise<EligiblePlace[]>;
@@ -100,7 +100,7 @@ async function resolvePlan(
   const dayNumber = calculateDayNumber(stay.checkIn, stayEndFor(stay), now);
   if (!dayNumber.ok) return { ok: false, reason: "outside_stay_period", message: dayNumber.message };
 
-  const day = await d.findItineraryDay(userId, stay.hotel.id, dayNumber.dayNumber);
+  const day = await d.findItineraryDay(userId, stay.hotel.id, dayNumber.dayNumber, stay.id);
   if (!day) return { ok: false, reason: "no_itinerary", message: "You don't have a route for today yet." };
 
   const stops = (await d.listItineraryStops(day.id)).slice().sort((a, b) => a.position - b.position);

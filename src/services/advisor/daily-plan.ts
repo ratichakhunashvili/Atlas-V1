@@ -56,7 +56,7 @@ export type DailyPlanDependencies = {
   resolveGuestHotelContext: (userId: string, now: Date) => Promise<GuestHotelContext>;
   findPreferencesForUser: (userId: string) => Promise<UserPreferences | null>;
   listEligiblePlacesForStay: (stay: GuestStay, now: Date) => Promise<EligiblePlace[]>;
-  findItineraryDay: (userId: string, hotelId: string, dayNumber: number) => Promise<ItineraryDay | null>;
+  findItineraryDay: (userId: string, hotelId: string, dayNumber: number, hotelStayId: string) => Promise<ItineraryDay | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
   getStopUsageHistory: (userId: string, hotelId: string) => Promise<Map<string, number>>;
   createEmptyItineraryDay: (input: {
@@ -167,7 +167,7 @@ export async function getDailyPlanForUser(userId: string, now: Date = new Date()
   const dayNumber = dayNumberFor(stay, now);
   if (dayNumber === null) return { status: "no_stay", reason: "outside_stay_period" };
 
-  const day = await d.findItineraryDay(userId, stay.hotel.id, dayNumber);
+  const day = await d.findItineraryDay(userId, stay.hotel.id, dayNumber, stay.id);
   if (!day) return { status: "not_started", hotelName: stay.place.name };
 
   const stops = (await d.listItineraryStops(day.id)).slice().sort((a, b) => a.position - b.position);
@@ -244,7 +244,7 @@ export async function startDayForUser(
   const dayNumber = dayNumberFor(stay, now);
   if (dayNumber === null) return { ok: false, reason: "outside_stay_period" };
 
-  if (await d.findItineraryDay(userId, stay.hotel.id, dayNumber)) return { ok: false, reason: "already_started" };
+  if (await d.findItineraryDay(userId, stay.hotel.id, dayNumber, stay.id)) return { ok: false, reason: "already_started" };
 
   const preferences = await d.findPreferencesForUser(userId);
   if (!preferences || preferences.categories.length === 0) return { ok: false, reason: "no_preferences" };

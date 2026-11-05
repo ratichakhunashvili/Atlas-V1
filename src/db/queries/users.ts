@@ -1,10 +1,16 @@
 import "server-only";
-import { eq, ilike } from "drizzle-orm";
+import { eq, ilike, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users, type User, type UserRole } from "@/db/schema";
+import { deleteGuestAccount as deleteGuestAccountOperation } from "@/db/operations/account-deletion";
 
+/** Case-insensitive: emails are stored lower-case, and the lookup lower-cases its input too. */
 export async function findUserByEmail(email: string) {
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(sql`lower(${users.email})`, email.trim().toLowerCase()))
+    .limit(1);
   return user ?? null;
 }
 
@@ -25,7 +31,7 @@ export async function setUserRole(email: string, role: UserRole) {
   const [user] = await db
     .update(users)
     .set({ role, updatedAt: new Date() })
-    .where(eq(users.email, email))
+    .where(eq(sql`lower(${users.email})`, email.trim().toLowerCase()))
     .returning();
   return user ?? null;
 }
@@ -39,4 +45,9 @@ export async function listUsersByEmailPrefix(prefix: string): Promise<User[]> {
 /** Cascades to hotel_stays/itinerary_days(->itinerary_stops)/user_preferences via their FK onDelete rules — see db/schema/* for each. Used by the Advisor test-scenario tool's cleanup; not exposed anywhere else (no guest-facing or admin-CRUD account deletion exists yet). */
 export async function deleteUser(id: string) {
   await db.delete(users).where(eq(users.id, id));
+}
+
+/** A guest deleting their own account; see db/operations/account-deletion.ts. */
+export async function deleteGuestAccount(userId: string) {
+  return deleteGuestAccountOperation(db, userId);
 }

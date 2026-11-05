@@ -38,7 +38,7 @@ export default async function AdvisorTestScenarioPage({ params }: { params: Prom
   // is the only thing that calls generateItineraryForUser.
   const now = new Date();
   const dayNumberResult = calculateDayNumber(scenario.checkIn, scenario.checkOut, now);
-  const day = dayNumberResult.ok ? await findItineraryDay(scenario.user.id, scenario.hotelId, dayNumberResult.dayNumber) : null;
+  const day = dayNumberResult.ok ? await findItineraryDay(scenario.user.id, scenario.hotelId, dayNumberResult.dayNumber, scenario.hotelStayId) : null;
   const stops = day ? await listItineraryStops(day.id) : [];
   const inspectorStops = day ? await inspectItineraryStops(stops, scenario.partnerPlaceIds) : [];
 

@@ -10,7 +10,7 @@ type ActiveStayLike = { id: string; checkIn: Date; checkOut: Date | null; hotel:
 
 export type RetryRouteGeometryDependencies = {
   findActiveStayForUser: (userId: string) => Promise<ActiveStayLike | null>;
-  findItineraryDay: (userId: string, hotelId: string, dayNumber: number) => Promise<ItineraryDay | null>;
+  findItineraryDay: (userId: string, hotelId: string, dayNumber: number, hotelStayId: string) => Promise<ItineraryDay | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
   getWalkingRouteInOrder: typeof getWalkingRouteInOrder;
   /** Writes ONLY the geometry of a day the user owns. Never stops, order, durations or completion. */
@@ -49,7 +49,7 @@ export async function retryRouteGeometryForUser(
     return { ok: false, reason: "no_active_plan", message: "There is no active plan to draw." };
   }
 
-  const day = await d.findItineraryDay(userId, stay.hotel.id, dayNumber.dayNumber);
+  const day = await d.findItineraryDay(userId, stay.hotel.id, dayNumber.dayNumber, stay.id);
   if (!day) {
     return { ok: false, reason: "no_active_plan", message: "There is no active plan to draw." };
   }

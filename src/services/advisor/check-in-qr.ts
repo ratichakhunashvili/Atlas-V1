@@ -52,7 +52,7 @@ export type QrCheckInDependencies = {
    */
   findPlaceByCheckInCredential: (scanned: string, now: Date) => Promise<Place | null>;
   findActiveStayForUser: (userId: string) => Promise<ActiveHotelStay | null>;
-  findItineraryDay: (userId: string, hotelId: string, dayNumber: number) => Promise<ItineraryDay | null>;
+  findItineraryDay: (userId: string, hotelId: string, dayNumber: number, hotelStayId: string) => Promise<ItineraryDay | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
   /** Records the visit only. The stop's saved checkInMethod is the requirement and is never rewritten by a check-in. */
   markStopVisited: (stopId: string, dayId: string) => Promise<{ stop: ItineraryStop; dayCompleted: boolean } | null>;
@@ -135,7 +135,7 @@ export async function checkInStopWithQr(
     return { ok: false, reason: "no_active_itinerary", message: "You don't have an active itinerary to check in against." };
   }
 
-  const day = await d.findItineraryDay(input.userId, stay.hotel.id, dayNumberResult.dayNumber);
+  const day = await d.findItineraryDay(input.userId, stay.hotel.id, dayNumberResult.dayNumber, stay.id);
   if (!day) {
     return { ok: false, reason: "no_active_itinerary", message: "You don't have an active itinerary to check in against." };
   }

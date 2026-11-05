@@ -75,6 +75,15 @@ export function isFacilityEligible(row: FacilityRow, hotelId: string): boolean {
   return true;
 }
 
+/**
+ * A hotel is never a destination for another hotel's guests (CLAUDE.md: other hotels must not appear), even if a
+ * partnership or facility row wrongly points at one. Hotel anchor Places are kind "hotel" (set when the hotel is
+ * created, and by migration 0024); the category check also catches a hotel Place not yet linked to a hotel.
+ */
+export function isHotelPlace(place: Pick<Place, "kind" | "category">): boolean {
+  return place.kind === "hotel" || place.category === "hotel";
+}
+
 export type BuildEligiblePlacesInput = {
   hotelId: string;
   /** The hotel's own Place: never an external partner/destination of itself. */
@@ -97,13 +106,13 @@ export function buildEligiblePlaces(input: BuildEligiblePlacesInput): EligiblePl
   // Facilities first so a Place that is (wrongly) in both tables is reported
   // as the hotel's own facility, once.
   for (const row of facilities) {
-    if (!isFacilityEligible(row, hotelId) || seen.has(row.place.id)) continue;
+    if (!isFacilityEligible(row, hotelId) || isHotelPlace(row.place) || seen.has(row.place.id)) continue;
     seen.add(row.place.id);
     result.push({ place: row.place, source: "facility", relationId: row.id, priority: null, facilityType: row.facilityType, featured: false, offerText: null });
   }
 
   for (const row of partnerships) {
-    if (!isPartnershipEligible(row, hotelId, now) || seen.has(row.place.id)) continue;
+    if (!isPartnershipEligible(row, hotelId, now) || isHotelPlace(row.place) || seen.has(row.place.id)) continue;
     seen.add(row.place.id);
     result.push({ place: row.place, source: "partner", relationId: row.id, priority: row.priority,
       facilityType: null,

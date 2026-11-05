@@ -11,22 +11,38 @@ import {
 } from "@/db/schema";
 import { computeDayCompletedAt } from "@/services/advisor/plan-state";
 
-export async function findItineraryDay(userId: string, hotelId: string, dayNumber: number) {
+/**
+ * Day numbers restart with each stay, so a day belongs to one stay: a guest who comes back to the
+ * same hotel starts again at Day 1 instead of meeting the previous stay's Day 1.
+ */
+export async function findItineraryDay(userId: string, hotelId: string, dayNumber: number, hotelStayId: string) {
   const [row] = await db
     .select()
     .from(itineraryDays)
-    .where(and(eq(itineraryDays.userId, userId), eq(itineraryDays.hotelId, hotelId), eq(itineraryDays.dayNumber, dayNumber)))
+    .where(
+      and(
+        eq(itineraryDays.userId, userId),
+        eq(itineraryDays.hotelId, hotelId),
+        eq(itineraryDays.hotelStayId, hotelStayId),
+        eq(itineraryDays.dayNumber, dayNumber)
+      )
+    )
     .limit(1);
   return row ?? null;
 }
 
 /** The most recent day strictly before `beforeDayNumber` — "the previous day" for the difficulty ratchet, regardless of gaps left by skipped calendar days. */
-export async function findLatestItineraryDayBefore(userId: string, hotelId: string, beforeDayNumber: number) {
+export async function findLatestItineraryDayBefore(userId: string, hotelId: string, beforeDayNumber: number, hotelStayId: string) {
   const [row] = await db
     .select()
     .from(itineraryDays)
     .where(
-      and(eq(itineraryDays.userId, userId), eq(itineraryDays.hotelId, hotelId), lt(itineraryDays.dayNumber, beforeDayNumber))
+      and(
+        eq(itineraryDays.userId, userId),
+        eq(itineraryDays.hotelId, hotelId),
+        eq(itineraryDays.hotelStayId, hotelStayId),
+        lt(itineraryDays.dayNumber, beforeDayNumber)
+      )
     )
     .orderBy(desc(itineraryDays.dayNumber))
     .limit(1);
@@ -229,7 +245,7 @@ class ConcurrentChange extends Error {}
 
 /**
  * Creates (or explicitly rebuilds in place) one itinerary_days row plus its itinerary_stops, atomically.
- * A new-day insert that loses the (userId, hotelId, dayNumber) race returns { status: "conflict" } instead
+ * A new-day insert that loses the (userId, hotelStayId, dayNumber) race returns { status: "conflict" } instead
  * of throwing — the caller re-fetches and returns the winner's itinerary. An in-place rebuild is an UPDATE
  * of an already-resolved row id, so it is not subject to that race; it never deletes or supersedes a
  * completed stop (see PersistItineraryInput.existingDayId).

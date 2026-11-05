@@ -20,8 +20,8 @@ export const itineraryDays = pgTable(
     hotelId: uuid("hotel_id")
       .notNull()
       .references(() => hotels.id, { onDelete: "restrict" }),
-    // Traceability only (which stay this plan was generated during) — not
-    // load-bearing for itinerary logic, which keys off userId+hotelId.
+    // The stay this day belongs to. Day numbers restart with each stay, so days are unique per
+    // stay (below), not per hotel: a returning guest gets a fresh Day 1.
     hotelStayId: uuid("hotel_stay_id").references(() => hotelStays.id, { onDelete: "set null" }),
     dayNumber: integer("day_number").notNull(),
     stopCount: integer("stop_count").notNull(),
@@ -47,7 +47,7 @@ export const itineraryDays = pgTable(
       .defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
   },
-  (table) => [unique().on(table.userId, table.hotelId, table.dayNumber)]
+  (table) => [unique("itinerary_days_user_stay_day_unique").on(table.userId, table.hotelStayId, table.dayNumber)]
 );
 
 export type ItineraryDay = typeof itineraryDays.$inferSelect;

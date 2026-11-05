@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useActionState, useState, type ReactNode } from "react";
+import { deleteAccountAction } from "@/features/users/actions";
+import { PendingSubmit } from "./pending-submit";
 import { AtlasIcon } from "./asset";
-import { resetDemo } from "./demo/demo-store";
 import { AtlasDialog } from "./dialog";
 import { DemoAction, FRONT_DESK_NOTICE } from "./navigation";
 import { screenHref, type ScreenKey } from "./screen-hrefs";
@@ -15,9 +16,8 @@ import { AtlasBackButton, AtlasPoints, AtlasTextLink } from "./ui";
  * the delete confirmation open. The document rows jump to the placeholder texts at the bottom of
  * the page, which stay placeholders until approved terms and a privacy notice exist.
  *
- * Nothing here talks to a server: there are no accounts in this prototype. Calling, emailing and
- * data requests say they are not connected; "Delete account" resets this browser's demo data —
- * the only data there is — and says so.
+ * Calling, emailing and data requests say they are not connected yet. "Delete account" is real: it
+ * deletes the signed-in account and its data on the server (deleteAccountAction), then signs out.
  */
 
 const ROW = "flex min-h-[48px] w-full items-center justify-between gap-[8px] text-left";
@@ -96,6 +96,8 @@ function Screen({ back, children }: { back: ScreenKey; children: ReactNode }) {
 export function PrivacyScreen({ confirmDelete = false }: { confirmDelete?: boolean }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(confirmDelete);
+  // Deletes the signed-in account on the server, then signs out to /account-deleted.
+  const [deleteState, deleteAction] = useActionState(deleteAccountAction, {});
 
   const close = () => {
     setConfirming(false);
@@ -150,17 +152,19 @@ export function PrivacyScreen({ confirmDelete = false }: { confirmDelete?: boole
             <p id="delete-body" className="w-full font-manrope text-[15px] leading-[23px] text-atlas-ink">
               Your plans and achievements will be removed. This cannot be undone. Your hotel booking is not affected.
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                resetDemo();
-                const href = screenHref("AccountDeleted");
-                if (href) router.push(href);
-              }}
-              className="flex h-[52px] w-full items-center justify-center rounded-[14px] bg-atlas-danger font-manrope text-[16px] font-semibold leading-[22px] text-white"
-            >
-              Delete account
-            </button>
+            <form action={deleteAction} className="flex w-full flex-col gap-[8px]">
+              {deleteState.error ? (
+                <p role="alert" className="w-full rounded-[10px] bg-atlas-sand px-[10px] py-[8px] font-manrope text-[14px] leading-[20px] text-atlas-ink">
+                  {deleteState.error}
+                </p>
+              ) : null}
+              <PendingSubmit
+                pendingLabel="Deleting…"
+                className="flex h-[52px] w-full items-center justify-center rounded-[14px] bg-atlas-danger font-manrope text-[16px] font-semibold leading-[22px] text-white"
+              >
+                Delete account
+              </PendingSubmit>
+            </form>
             <AtlasTextLink onClick={close}>Keep my account</AtlasTextLink>
         </>
       </AtlasDialog>

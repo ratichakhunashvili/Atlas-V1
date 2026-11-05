@@ -319,7 +319,7 @@ test("no eligible experiences returns a clear no_eligible_experiences result, pe
     assert.match(result.message, new RegExp(hotelPlace.name));
     assert.match(result.message, /approved facilities or partners/);
   }
-  assert.equal(await store.findItineraryDay(user.id, "hotel-1", 1), null, "no empty day is saved");
+  assert.equal(await store.findItineraryDay(user.id, "hotel-1", 1, "stay-1"), null, "no empty day is saved");
   assert.equal(getRouteCallCount(), 0, "no routing call is made for an empty plan");
 });
 
@@ -440,7 +440,7 @@ test("routing failure fails the whole generation instead of persisting a fake ro
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.reason, "routing_failed");
-  assert.equal(await store.findItineraryDay(user.id, "hotel-1", 1), null);
+  assert.equal(await store.findItineraryDay(user.id, "hotel-1", 1, "stay-1"), null);
 });
 
 test("a malformed route order (length mismatch) fails instead of persisting undefined stops", async () => {

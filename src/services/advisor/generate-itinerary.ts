@@ -74,8 +74,8 @@ export type GenerateItineraryDependencies = {
   findPreferencesForUser: (userId: string) => Promise<UserPreferences | null>;
   /** The ONLY source of candidate Places: the hotel's own active facilities + its active, confirmed partners (services/eligibility). The hotelId passed in is always the one from the guest's own active stay. */
   listEligiblePlacesForStay: (stay: Pick<ActiveHotelStay, "hotel" | "place">, now: Date) => Promise<EligiblePlace[]>;
-  findItineraryDay: (userId: string, hotelId: string, dayNumber: number) => Promise<ItineraryDay | null>;
-  findLatestItineraryDayBefore: (userId: string, hotelId: string, beforeDayNumber: number) => Promise<ItineraryDay | null>;
+  findItineraryDay: (userId: string, hotelId: string, dayNumber: number, hotelStayId: string) => Promise<ItineraryDay | null>;
+  findLatestItineraryDayBefore: (userId: string, hotelId: string, beforeDayNumber: number, hotelStayId: string) => Promise<ItineraryDay | null>;
   listItineraryStops: (dayId: string) => Promise<ItineraryStop[]>;
   getStopUsageHistory: (userId: string, hotelId: string) => Promise<Map<string, number>>;
   persistItinerary: (input: PersistItineraryInput) => Promise<PersistItineraryResult>;
@@ -456,9 +456,10 @@ async function buildPreviousDayOutcome(
   deps: Pick<GenerateItineraryDependencies, "findLatestItineraryDayBefore" | "listItineraryStops">,
   userId: string,
   hotelId: string,
-  currentDayNumber: number
+  currentDayNumber: number,
+  hotelStayId: string
 ): Promise<PreviousDayOutcome | null> {
-  const previous = await deps.findLatestItineraryDayBefore(userId, hotelId, currentDayNumber);
+  const previous = await deps.findLatestItineraryDayBefore(userId, hotelId, currentDayNumber, hotelStayId);
   if (!previous) return null;
 
   const stops = await deps.listItineraryStops(previous.id);
@@ -517,7 +518,7 @@ export async function generateItineraryForUser(
   }
   const dayNumber = dayNumberResult.dayNumber;
 
-  const existingDay = await d.findItineraryDay(userId, stay.hotel.id, dayNumber);
+  const existingDay = await d.findItineraryDay(userId, stay.hotel.id, dayNumber, stay.id);
   if (existingDay) {
     const hoursSinceGeneration = (now.getTime() - existingDay.generatedAt.getTime()) / 3600000;
     // Admins bypass the cooldown (preserved from the original's `if (previousDay && !isAdmin)`)
@@ -559,7 +560,7 @@ export async function generateItineraryForUser(
   const completedPlaceIds = new Set(completedStops.flatMap((stop) => (stop.placeId ? [stop.placeId] : [])));
 
   const usageHistory: UsageHistory = await d.getStopUsageHistory(userId, stay.hotel.id);
-  const previousDayOutcome = await buildPreviousDayOutcome(d, userId, stay.hotel.id, dayNumber);
+  const previousDayOutcome = await buildPreviousDayOutcome(d, userId, stay.hotel.id, dayNumber, stay.id);
   // The ratchet sets how many stops the guest has earned; their pace can only trim that, never add to it.
   const targetStopCount = applyPaceToStopCount(calculateNextStopCount(previousDayOutcome), preferences?.activityLevel ?? null);
   const neededNewStops = Math.max(0, targetStopCount - completedStops.length);
@@ -684,7 +685,7 @@ export async function generateItineraryForUser(
   if (persistResult.status === "conflict") {
     // Lost a race with a concurrent generation request for this same new
     // day — report the day that won instead of failing.
-    const winningDay = await d.findItineraryDay(userId, stay.hotel.id, dayNumber);
+    const winningDay = await d.findItineraryDay(userId, stay.hotel.id, dayNumber, stay.id);
     if (!winningDay) {
       return { ok: false, reason: "persistence_failed", message: "Could not save the itinerary right now. Please try again." };
     }

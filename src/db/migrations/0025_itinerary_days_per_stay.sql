@@ -1,0 +1,2 @@
+ALTER TABLE "itinerary_days" DROP CONSTRAINT "itinerary_days_user_id_hotel_id_day_number_unique";--> statement-breakpoint
+ALTER TABLE "itinerary_days" ADD CONSTRAINT "itinerary_days_user_stay_day_unique" UNIQUE("user_id","hotel_stay_id","day_number");

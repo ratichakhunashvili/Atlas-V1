@@ -1,4 +1,5 @@
-import { check, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { enumCheck } from "./sql-helpers";
 
 export const USER_ROLES = ["user", "admin"] as const;
@@ -20,7 +21,12 @@ export const users = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [check("users_role_check", enumCheck(table.role, USER_ROLES))]
+  (table) => [
+    check("users_role_check", enumCheck(table.role, USER_ROLES)),
+    // One account per address whatever its letter case; the app stores emails trimmed and lower-case.
+    uniqueIndex("users_email_lower_unique").on(sql`lower(${table.email})`),
+    check("users_email_lowercase_check", sql`${table.email} = lower(trim(${table.email}))`),
+  ]
 );
 
 export type User = typeof users.$inferSelect;
