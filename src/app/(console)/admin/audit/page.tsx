@@ -14,6 +14,8 @@ function describeState(state: unknown): string {
  * model settings, staff roles, support lookups). The database refuses edits and deletes of these rows. Snapshots hold
  * only the fields that changed — never a token, hash, password or private reference.
  */
+export const metadata = { title: "Audit log" };
+
 export default async function AuditLogPage() {
   const events = await listAuditLogWithActors(100);
 

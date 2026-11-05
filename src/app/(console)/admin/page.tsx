@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { AdminTable, MutedCell, RowAction } from "@/components/admin/data-table";
-import { AdminHeaderAction, AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
+import { AdminTable, MutedCell, RowAction, RowTitleLink } from "@/components/admin/data-table";
+import { AdminFlash, AdminHeaderAction, AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
 import { StatusPill, type AdminStatus } from "@/components/admin/status-pill";
 import { listHotelsForAdminOverview } from "@/db/queries/hotels";
 
@@ -19,8 +19,8 @@ function hotelStatus(row: { archivedAt: Date | null; publicationStatus: string }
   return row.publicationStatus === "published" ? "Active" : "Inactive";
 }
 
-export default async function AdminHotelsPage() {
-  const hotels = await listHotelsForAdminOverview(new Date());
+export default async function AdminHotelsPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
+  const [{ ok, error }, hotels] = await Promise.all([searchParams, listHotelsForAdminOverview(new Date())]);
 
   return (
     <>
@@ -29,8 +29,9 @@ export default async function AdminHotelsPage() {
         description="Hotels that guests can join with a hotel code."
         action={<AdminHeaderAction href="/admin/hotels/new">New hotel</AdminHeaderAction>}
       />
+      <AdminFlash ok={ok} error={error} />
       {hotels.length === 0 ? (
-        <AdminNote>No hotels yet. Create one to start adding facilities, partners and a hotel code.</AdminNote>
+        <AdminNote>No hotels yet. Create one, then add its facilities, partnerships and hotel code.</AdminNote>
       ) : (
         <AdminTable
           caption="Hotels"
@@ -45,7 +46,9 @@ export default async function AdminHotelsPage() {
           rows={hotels.map((hotel) => ({
             key: hotel.id,
             cells: [
-              hotel.name,
+              <RowTitleLink key="name" href={`/admin/hotels/${hotel.id}`}>
+                {hotel.name}
+              </RowTitleLink>,
               hotel.address ?? <MutedCell>Not set</MutedCell>,
               hotel.facilities,
               hotel.activePartners,
@@ -57,7 +60,7 @@ export default async function AdminHotelsPage() {
           }))}
         />
       )}
-      <AdminNote>Active partners counts partnerships that are active today. A partner also has to be published and verified before a guest sees it.</AdminNote>
+      <AdminNote>Active partners counts hotel partnerships that are active today. A partner also has to be published and verified before a guest sees it.</AdminNote>
     </>
   );
 }

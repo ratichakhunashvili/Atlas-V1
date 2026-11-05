@@ -1,6 +1,8 @@
 import { SUPPORT_REASONS } from "@/db/operations/guest-support";
 import { SupportLookupForm } from "./support-lookup-form";
 
+export const metadata = { title: "Guest support" };
+
 export default function SupportPage() {
   return (
     <div className="max-w-xl space-y-4">

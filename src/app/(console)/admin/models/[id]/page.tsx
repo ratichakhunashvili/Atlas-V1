@@ -6,6 +6,7 @@ import { findModelById } from "@/db/queries/place-models";
 import { findPlaceById } from "@/db/queries/places";
 import { SUPPORTED_MODEL_REGION } from "@/db/schema";
 import { updateModelSettingsAction } from "@/features/place-models/actions";
+import { uuidOrNotFound } from "@/lib/route-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,8 @@ export const dynamic = "force-dynamic";
  * The Place is fixed. Everything here is display placement: moving the model never changes the Place's canonical
  * coordinates, its eligibility for any hotel, the route destination, check-in coordinates or the achievement.
  */
+export const metadata = { title: "Model placement" };
+
 export default async function ModelPlacementPage({
   params,
   searchParams,
@@ -23,7 +26,7 @@ export default async function ModelPlacementPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
-  const { id } = await params;
+  const id = uuidOrNotFound((await params).id);
   const { error, ok } = await searchParams;
 
   const model = await findModelById(id);

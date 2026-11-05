@@ -8,8 +8,10 @@ import { createPendingPartnership, findPartnershipById, transitionPartnership, u
 import { findFacilityByPlaceId } from "@/db/queries/hotel-facilities";
 import { findHotelById } from "@/db/queries/hotels";
 import { findPlaceById } from "@/db/queries/places";
+import { db } from "@/db";
+import { loadContractFacts } from "@/db/operations/atlas-contracts";
 import type { AdminAuditAction, PartnershipStatus } from "@/db/schema";
-import { addPartnershipSchema, confirmPartnershipSchema, partnershipIdSchema, promotionSchema } from "./schema";
+import { addPartnershipSchema, confirmPartnershipSchema, hotelIdSchema, partnershipIdSchema, promotionSchema } from "./schema";
 import { statusesThatCanTransitionTo, validateConfirmationWindow, validatePartnerCandidate } from "./rules";
 
 /**
@@ -33,7 +35,7 @@ function finish(hotelId: string, outcome: { error: string } | { ok: string }): n
 export async function addPartnershipAction(hotelId: string, formData: FormData) {
   const admin = await requireAdmin();
 
-  const hotelIdParsed = partnershipIdSchema.safeParse(hotelId);
+  const hotelIdParsed = hotelIdSchema.safeParse(hotelId);
   if (!hotelIdParsed.success) redirect("/admin/hotels");
   const hotel = await findHotelById(hotelIdParsed.data);
   if (!hotel) redirect("/admin/hotels");
@@ -49,6 +51,7 @@ export async function addPartnershipAction(hotelId: string, formData: FormData) 
     hotelPlaceId: hotel.placeId,
     place,
     isHotelFacility: facility !== null,
+    isHotelAnchor: (await loadContractFacts(db, place.id)).isHotelAnchor,
   });
   if (problem) finish(hotel.id, { error: problem });
 
@@ -91,7 +94,12 @@ export async function confirmPartnershipAction(partnershipId: string, formData: 
   const hotel = await findHotelById(existing.hotelId);
   if (!place || !hotel) finish(existing.hotelId, { error: "The hotel or place no longer exists." });
   const facility = await findFacilityByPlaceId(place.id);
-  const candidateProblem = validatePartnerCandidate({ hotelPlaceId: hotel.placeId, place, isHotelFacility: facility !== null });
+  const candidateProblem = validatePartnerCandidate({
+    hotelPlaceId: hotel.placeId,
+    place,
+    isHotelFacility: facility !== null,
+    isHotelAnchor: (await loadContractFacts(db, place.id)).isHotelAnchor,
+  });
   if (candidateProblem) finish(existing.hotelId, { error: candidateProblem });
 
   const updated = await transitionPartnership(existing.id, statusesThatCanTransitionTo("active"), {

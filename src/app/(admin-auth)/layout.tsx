@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
  */
 export default function AdminAuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="atlas-app flex min-h-dvh w-full flex-1 items-center justify-center bg-atlas-sand px-[16px] py-[32px]">
+    <main className="atlas-app atlas-console flex min-h-dvh w-full flex-1 items-center justify-center bg-atlas-sand px-[16px] py-[32px]">
       {children}
     </main>
   );

@@ -4,6 +4,11 @@ import { Button } from "@/components/shared/button";
 import { Field } from "@/components/shared/field";
 import { Select } from "@/components/shared/select";
 
+function sentence(value: string) {
+  const words = value.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function PlaceForm({
   action,
   place,
@@ -55,7 +60,7 @@ export function PlaceForm({
       <Select label="Category" name="category" defaultValue={place?.category ?? PLACE_CATEGORIES[0]}>
         {PLACE_CATEGORIES.map((category) => (
           <option key={category} value={category}>
-            {category}
+            {sentence(category)}
           </option>
         ))}
       </Select>
@@ -98,14 +103,14 @@ export function PlaceForm({
         <Select label="Publication" name="publicationStatus" defaultValue={place?.publicationStatus ?? "draft"}>
           {PUBLICATION_STATUSES.map((status) => (
             <option key={status} value={status}>
-              {status}
+              {sentence(status)}
             </option>
           ))}
         </Select>
         <Select label="Verification" name="verificationStatus" defaultValue={place?.verificationStatus ?? "unverified"}>
           {VERIFICATION_STATUSES.map((status) => (
             <option key={status} value={status}>
-              {status}
+              {sentence(status)}
             </option>
           ))}
         </Select>

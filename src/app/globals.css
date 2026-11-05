@@ -353,3 +353,38 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
     grid-area: list;
   }
 }
+
+/*
+ * The admin console. It is always light: without this, a computer in dark mode turns the default text
+ * light grey on the console's paper background. The older admin pages are written with Tailwind's
+ * slate/red/green utilities; inside the console those colours are remapped to the Atlas palette, so
+ * every admin page reads as one product. Guest screens never render inside `.atlas-console`.
+ */
+.atlas-console {
+  color-scheme: light;
+  color: var(--color-atlas-ink);
+  font-family: var(--font-atlas-manrope), Arial, Helvetica, sans-serif;
+  --color-white: #fffdf8;
+  --color-slate-50: var(--color-atlas-paper);
+  --color-slate-100: var(--color-atlas-sand);
+  --color-slate-200: var(--color-atlas-linen);
+  --color-slate-300: var(--color-atlas-sand-deep);
+  --color-slate-400: var(--color-atlas-umber);
+  --color-slate-500: var(--color-atlas-slate);
+  --color-slate-600: var(--color-atlas-slate);
+  --color-slate-700: var(--color-atlas-ink);
+  --color-slate-800: var(--color-atlas-teal-soft);
+  --color-slate-900: var(--color-atlas-teal);
+  --color-red-50: var(--color-atlas-danger-soft);
+  --color-red-200: #e8c9c0;
+  --color-red-500: #a24a3a;
+  --color-red-600: var(--color-atlas-danger);
+  --color-red-700: var(--color-atlas-danger);
+  --color-red-800: var(--color-atlas-danger);
+  --color-green-50: #e7f0ed;
+  --color-green-200: var(--color-atlas-water);
+  --color-green-700: var(--color-atlas-lagoon);
+  --color-green-800: var(--color-atlas-lagoon);
+}
+.atlas-console :where(input, select, textarea) { background-color: #fffdf8; color: var(--color-atlas-ink); }
+.atlas-console :where(h1) { color: var(--color-atlas-teal); }

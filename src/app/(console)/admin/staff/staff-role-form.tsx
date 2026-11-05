@@ -31,7 +31,20 @@ export function StaffRoleForm() {
         You can&apos;t change your own role, and the last administrator can&apos;t be removed. Every change is recorded in the
         audit log.
       </p>
-      <Button type="submit" disabled={pending}>
+      <Button
+        type="submit"
+        disabled={pending}
+        onClick={(event) => {
+          // Granting or removing admin access is the most powerful change in the console: ask once before it posts.
+          const form = event.currentTarget.form;
+          const email = (form?.elements.namedItem("email") as HTMLInputElement | null)?.value.trim();
+          const role = (form?.elements.namedItem("role") as HTMLSelectElement | null)?.value;
+          if (!email || !form?.checkValidity()) return;
+          const question =
+            role === "admin" ? `Make ${email} a platform administrator? They get full access to this console.` : `Remove administrator access from ${email}?`;
+          if (!window.confirm(question)) event.preventDefault();
+        }}
+      >
         {pending ? "Saving…" : "Apply"}
       </Button>
       {state && (

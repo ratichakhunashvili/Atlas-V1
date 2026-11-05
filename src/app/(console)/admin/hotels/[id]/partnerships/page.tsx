@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Alert } from "@/components/shared/alert";
+import { ConfirmSubmit } from "@/components/admin/confirm-submit";
 import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -17,6 +18,7 @@ import {
   suspendPartnershipAction,
   updatePartnershipPromotionAction,
 } from "@/features/partnerships/actions";
+import { uuidOrNotFound } from "@/lib/route-ids";
 
 /** Prefills the confirm form with the row's saved value so a blank field is a deliberate "clear", never an accidental wipe (e.g. of a migrated legacy priority or a saved end date). */
 function dateInputValue(date: Date | null) {
@@ -27,13 +29,17 @@ function formatDate(date: Date | null) {
   return date ? date.toISOString().slice(0, 10) : "—";
 }
 
+const STATUS_LABEL = { pending_review: "Pending review", active: "Active", suspended: "Suspended", revoked: "Revoked" } as const;
+
 /** "active" in the database can still be outside its window; show what guests actually get. */
-function effectiveLabel(status: string, startsAt: Date | null, endsAt: Date | null, now: Date) {
-  if (status !== "active") return status.replace("_", " ");
-  if (endsAt && endsAt.getTime() <= now.getTime()) return "active (expired)";
-  if (startsAt && startsAt.getTime() > now.getTime()) return "active (scheduled)";
-  return "active";
+function effectiveLabel(status: keyof typeof STATUS_LABEL, startsAt: Date | null, endsAt: Date | null, now: Date) {
+  if (status !== "active") return STATUS_LABEL[status];
+  if (endsAt && endsAt.getTime() <= now.getTime()) return "Active (expired)";
+  if (startsAt && startsAt.getTime() > now.getTime()) return "Active (scheduled)";
+  return "Active";
 }
+
+export const metadata = { title: "Hotel partnerships" };
 
 export default async function HotelPartnershipsPage({
   params,
@@ -42,7 +48,7 @@ export default async function HotelPartnershipsPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
-  const { id } = await params;
+  const id = uuidOrNotFound((await params).id);
   const { error, ok } = await searchParams;
   const hotel = await findHotelById(id);
   if (!hotel) notFound();
@@ -50,7 +56,8 @@ export default async function HotelPartnershipsPage({
   const [rows, places] = await Promise.all([listPartnershipsForAdmin(hotel.id), listPlaces()]);
   const existingPlaceIds = new Set(rows.map((row) => row.place.id));
   const proposable = places.filter(
-    (place) => place.archivedAt === null && place.id !== hotel.placeId && !existingPlaceIds.has(place.id)
+    // Another hotel is never a partner (the server refuses it too); facilities are managed on their own page.
+    (place) => place.archivedAt === null && place.kind !== "hotel" && !existingPlaceIds.has(place.id)
   );
   const now = new Date();
 
@@ -60,10 +67,10 @@ export default async function HotelPartnershipsPage({
         <Link href={`/admin/hotels/${hotel.id}`} className="atlas-hit inline-block text-sm text-slate-600 underline">
           ← {hotel.place.name}
         </Link>
-        <h1 className="mt-2 text-xl font-semibold">External partners — {hotel.place.name}</h1>
+        <h1 className="mt-2 text-xl font-semibold">Hotel partnerships — {hotel.place.name}</h1>
         <p className="text-sm text-slate-500">
-          Only partners you confirm here (status &quot;active&quot;, inside their dates) are ever shown to this hotel&apos;s guests.
-          A partnership with another hotel never carries over. Hotel-owned facilities are managed separately.
+          Only partners you confirm here (active, inside their dates) are shown to this hotel&apos;s guests. A partnership with
+          another hotel never carries over. The hotel&apos;s own facilities are managed on their own page.
         </p>
       </div>
 
@@ -72,6 +79,7 @@ export default async function HotelPartnershipsPage({
 
       <Card className="space-y-3">
         <h2 className="font-medium">Propose a partner</h2>
+        <p className="text-xs text-slate-500">Hotels are not listed: a hotel can&apos;t be another hotel&apos;s partner.</p>
         <form action={addPartnershipAction.bind(null, hotel.id)} className="flex flex-wrap items-end gap-2">
           <div className="w-full sm:w-auto sm:min-w-[16rem] sm:flex-1">
             <Select label="Place" name="placeId" defaultValue="" required>
@@ -80,7 +88,7 @@ export default async function HotelPartnershipsPage({
               </option>
               {proposable.map((place) => (
                 <option key={place.id} value={place.id}>
-                  {place.name} ({place.category})
+                  {place.name} ({place.category.replaceAll("_", " ")})
                 </option>
               ))}
             </Select>
@@ -109,6 +117,8 @@ export default async function HotelPartnershipsPage({
                 {partnership.priority ?? "—"} · Confirmed {formatDate(partnership.confirmedAt)}
               </p>
 
+              {(partnership.status === "active" || partnership.status === "pending_review") && (
+              <>
               <form
                 action={updatePartnershipPromotionAction.bind(null, partnership.id)}
                 className="flex flex-wrap items-end gap-3 rounded border border-slate-200 p-3"
@@ -135,29 +145,31 @@ export default async function HotelPartnershipsPage({
                 A featured partner always takes one of a guest&apos;s three options when it fits their time and interests, and is
                 shown larger with a &quot;Featured&quot; label. It only applies while the partnership is active.
               </p>
+              </>
+              )}
 
               {(partnership.status === "pending_review" || partnership.status === "suspended") && (
                 <form action={confirmPartnershipAction.bind(null, partnership.id)} className="flex flex-wrap items-end gap-2">
                   <Field label="Starts (UTC date, optional)" name="startsAt" id={`startsAt-${partnership.id}`} type="date" defaultValue={dateInputValue(partnership.startsAt)} />
                   <Field label="Ends (UTC date, optional)" name="endsAt" id={`endsAt-${partnership.id}`} type="date" defaultValue={dateInputValue(partnership.endsAt)} />
                   <Field label="Priority (optional)" name="priority" id={`priority-${partnership.id}`} type="number" min={1} max={1000} defaultValue={partnership.priority ?? ""} />
-                  <Button type="submit">Confirm — make eligible</Button>
+                  <Button type="submit">{partnership.status === "suspended" ? "Resume partnership" : "Confirm partnership"}</Button>
                 </form>
               )}
 
               <div className="flex flex-wrap gap-2">
                 {partnership.status === "active" && (
                   <form action={suspendPartnershipAction.bind(null, partnership.id)}>
-                    <Button variant="secondary" type="submit">
+                    <ConfirmSubmit variant="secondary" confirm={`Suspend the partnership with ${place.name}? This hotel's guests stop seeing it until you resume it.`}>
                       Suspend
-                    </Button>
+                    </ConfirmSubmit>
                   </form>
                 )}
                 {partnership.status !== "revoked" && (
                   <form action={revokePartnershipAction.bind(null, partnership.id)}>
-                    <Button variant="danger" type="submit">
+                    <ConfirmSubmit confirm={`Revoke the partnership with ${place.name}? It can only come back as a new pending review.`}>
                       Revoke
-                    </Button>
+                    </ConfirmSubmit>
                   </form>
                 )}
                 {partnership.status === "revoked" && (

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { ConfirmSubmit } from "@/components/admin/confirm-submit";
 import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
 import {
@@ -229,15 +230,15 @@ export function ScenarioTestPanel({
             </Button>
           </form>
           <form action={() => startTransition(() => deleteAdvisorTestScenarioAction(tag))}>
-            <Button type="submit" variant="danger" disabled={pending}>
-              Delete Scenario
-            </Button>
+            <ConfirmSubmit disabled={pending} confirm="Delete this test scenario and every row it created (its user, hotel, places, stay and plans)?">
+              Delete scenario
+            </ConfirmSubmit>
           </form>
         </div>
       </Card>
 
       <Card className="space-y-2">
-        <h2 className="font-medium">Test Places ({scenario.places.length})</h2>
+        <h2 className="font-medium">Test places ({scenario.places.length})</h2>
         <ul className="space-y-1 text-xs">
           {scenario.places.map((p) => (
             <li key={p.id} className="rounded border border-slate-200 px-2 py-1">

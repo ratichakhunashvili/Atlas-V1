@@ -33,7 +33,7 @@ export function CreateScenarioForm({ labels }: { labels: Record<string, string> 
         </Select>
       </div>
       <Button type="submit" disabled={pending}>
-        {pending ? "Creating…" : "Create Test Scenario"}
+        {pending ? "Creating…" : "Create test scenario"}
       </Button>
     </form>
   );

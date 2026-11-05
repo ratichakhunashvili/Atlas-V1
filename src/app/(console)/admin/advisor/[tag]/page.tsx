@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { developmentToolsBlocked } from "@/services/deployment/environment";
 import { Alert } from "@/components/shared/alert";
 import {
   findAdvisorTestScenario,
@@ -10,7 +12,10 @@ import { calculateDayNumber } from "@/services/advisor/stay-day";
 import { findItineraryDay, listItineraryStops } from "@/db/queries/itinerary";
 import { ScenarioTestPanel } from "./scenario-test-panel";
 
+export const metadata = { title: "Advisor test scenario" };
+
 export default async function AdvisorTestScenarioPage({ params }: { params: Promise<{ tag: string }> }) {
+  if (developmentToolsBlocked(process.env.NODE_ENV, process.env.ATLAS_DEPLOYMENT_ENV)) redirect("/admin/advisor");
   const { tag } = await params;
   const scenario = await findAdvisorTestScenario(tag);
 
@@ -22,7 +27,7 @@ export default async function AdvisorTestScenarioPage({ params }: { params: Prom
           No test scenario found for <code>{tag}</code>. It may already have been deleted.
         </Alert>
         <Link href="/admin/advisor" className="text-sm text-slate-600 underline">
-          Back to Advisor Testing
+          Back to Advisor testing
         </Link>
       </div>
     );
@@ -50,7 +55,7 @@ export default async function AdvisorTestScenarioPage({ params }: { params: Prom
       </Alert>
 
       <Link href="/admin/advisor" className="atlas-hit inline-block text-sm text-slate-600 underline">
-        ← Back to Advisor Testing
+        ← Back to Advisor testing
       </Link>
 
       <ScenarioTestPanel

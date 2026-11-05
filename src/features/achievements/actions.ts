@@ -14,7 +14,7 @@ import { findPlaceById } from "@/db/queries/places";
 import { achievementIdSchema, createAchievementSchema, updateAchievementSchema } from "./schema";
 
 /**
- * Badge administration.
+ * Achievement administration (shown to guests as badges).
  *
  * Every action authorizes itself — a Server Function answers a direct POST, so the
  * admin layout's guard protects the screen and not the mutation. Every id and
@@ -32,31 +32,33 @@ function back(outcome: { error: string } | { ok: string }): never {
   redirect(`${LIST_PATH}?${query}`);
 }
 
+const CREATE_FIELDS = ["placeId", "name", "description", "badgeImageUrl"] as const;
+
 export async function createAchievementAction(formData: FormData) {
   await requireAdmin();
 
-  const parsed = createAchievementSchema.safeParse({
-    placeId: formData.get("placeId") ?? "",
-    name: formData.get("name") ?? "",
-    description: formData.get("description") ?? "",
-    badgeImageUrl: formData.get("badgeImageUrl") ?? "",
-  });
+  const values = Object.fromEntries(CREATE_FIELDS.map((field) => [field, String(formData.get(field) ?? "")]));
+  // A refused create goes back to the form with what was typed, not to the list.
+  function retry(error: string): never {
+    redirect(`${LIST_PATH}/new?${new URLSearchParams({ ...values, error }).toString()}`);
+  }
 
-  if (!parsed.success) back({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
+  const parsed = createAchievementSchema.safeParse(values);
+  if (!parsed.success) retry(parsed.error.issues[0]?.message ?? "Invalid input");
 
   // The Place must exist. Read it rather than trusting the id that arrived.
   const place = await findPlaceById(parsed.data.placeId);
-  if (!place) back({ error: "That place no longer exists." });
+  if (!place) retry("That place no longer exists.");
 
-  // A hotel is the origin of a route, not somewhere a guest checks in to earn a badge.
-  if (place.category === "hotel") {
-    back({ error: "A hotel's own Place can't carry a badge. Choose an experience instead." });
+  // A hotel is the origin of a route, not somewhere a guest checks in to earn an achievement.
+  if (place.category === "hotel" || place.kind === "hotel") {
+    retry("A hotel's own place can't have an achievement. Choose another place.");
   }
 
-  // One badge per Place. The unique constraint enforces it too; this is the
+  // One achievement per Place. The unique constraint enforces it too; this is the
   // sentence the admin gets instead of a constraint error.
   const existing = await findAchievementForPlace(place.id);
-  if (existing) back({ error: `${place.name} already has a badge. Edit the existing one instead.` });
+  if (existing) retry(`${place.name} already has an achievement. Edit that one instead.`);
 
   await createAchievement({
     placeId: place.id,
@@ -66,17 +68,17 @@ export async function createAchievementAction(formData: FormData) {
   });
 
   revalidatePath(LIST_PATH);
-  back({ ok: `Badge created for ${place.name}.` });
+  back({ ok: `Achievement created for ${place.name}.` });
 }
 
 export async function updateAchievementAction(achievementId: string, formData: FormData) {
   await requireAdmin();
 
   const id = achievementIdSchema.safeParse(achievementId);
-  if (!id.success) back({ error: "Badge not found." });
+  if (!id.success) back({ error: "Achievement not found." });
 
   const existing = await findAchievement(id.data);
-  if (!existing) back({ error: "Badge not found." });
+  if (!existing) back({ error: "Achievement not found." });
 
   const parsed = updateAchievementSchema.safeParse({
     name: formData.get("name") ?? "",
@@ -101,14 +103,14 @@ export async function updateAchievementAction(achievementId: string, formData: F
 
   revalidatePath(LIST_PATH);
   revalidatePath(`${LIST_PATH}/${existing.id}`);
-  back({ ok: "Badge updated." });
+  back({ ok: "Achievement saved." });
 }
 
 export async function deleteAchievementAction(formData: FormData) {
   await requireAdmin();
 
   const id = achievementIdSchema.safeParse(formData.get("id") ?? "");
-  if (!id.success) back({ error: "Badge not found." });
+  if (!id.success) back({ error: "Achievement not found." });
 
   /*
    * Refused once anybody has earned it. An unlock is a guest's record of something
@@ -122,13 +124,13 @@ export async function deleteAchievementAction(formData: FormData) {
    */
   const result = await deleteAchievementIfUnearned(id.data);
 
-  if (result.status === "not_found") back({ error: "Badge not found." });
+  if (result.status === "not_found") back({ error: "Achievement not found." });
   if (result.status === "has_unlocks") {
     back({
-      error: `This badge has been earned by ${result.unlocks} guest${result.unlocks === 1 ? "" : "s"} and can't be deleted. Their record of earning it stays.`,
+      error: `This achievement has been earned by ${result.unlocks} guest${result.unlocks === 1 ? "" : "s"} and can't be deleted. Their record of earning it stays.`,
     });
   }
 
   revalidatePath(LIST_PATH);
-  back({ ok: "Badge deleted." });
+  back({ ok: "Achievement deleted." });
 }

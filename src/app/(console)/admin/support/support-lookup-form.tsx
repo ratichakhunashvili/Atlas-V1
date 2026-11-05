@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/shared/button";
 import { lookupGuestAction, type SupportLookupState } from "@/features/support/actions";
 
@@ -12,10 +12,17 @@ function date(value: string) {
 
 export function SupportLookupForm({ reasons }: { reasons: readonly Reason[] }) {
   const [state, formAction, pending] = useActionState<SupportLookupState, FormData>(lookupGuestAction, null);
+  // The form clears after each lookup, so the summary says whose it is.
+  const [lookedUp, setLookedUp] = useState("");
 
   return (
     <div className="space-y-6">
-      <form action={formAction} className="space-y-3 rounded-lg border border-slate-200 bg-white p-4" aria-label="Find a guest">
+      <form
+        action={(formData) => {
+          setLookedUp(String(formData.get("email") ?? "").trim());
+          formAction(formData);
+        }}
+        className="space-y-3 rounded-lg border border-slate-200 bg-white p-4" aria-label="Find a guest">
         <label className="block space-y-1">
           <span className="text-sm font-medium text-slate-700">Guest&apos;s exact email</span>
           <input name="email" type="email" required autoComplete="off" className="block min-h-11 w-full rounded-md border border-slate-300 px-3 text-sm" />
@@ -53,8 +60,9 @@ export function SupportLookupForm({ reasons }: { reasons: readonly Reason[] }) {
 
       {state?.ok && (
         <section aria-label="Guest summary" className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+          <h2 className="font-medium text-slate-900">{lookedUp}</h2>
           <p className="text-xs text-slate-500">
-            Account created {date(state.account.createdAt)} · role: {state.account.role}
+            Account created {date(state.account.createdAt)} · {state.account.role === "admin" ? "Administrator" : "Guest"}
           </p>
 
           <div>

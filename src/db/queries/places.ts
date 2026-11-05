@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, ilike, lte, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, gte, ilike, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { achievementUnlocks, achievements, hotelFacilities, hotelPartnerships, places, type Place, type PlaceCategory, type PublicationStatus, type VerificationStatus } from "@/db/schema";
 import type { DuplicateCandidate } from "@/services/catalog/duplicates";
@@ -231,7 +231,8 @@ export async function setPlaceArchived(id: string, archived: boolean) {
 
 /**
  * The experiences catalog: every Place that is not a hotel, with how many hotels
- * have approved it and how many own it as a facility.
+ * have an ACTIVE, in-window partnership with it and how many own it as an ACTIVE
+ * facility — the relationships that let a guest see it today.
  *
  * A VIEW over the canonical Place model. "Attraction" is not a separate entity —
  * it is a Place that guests might visit, so this is the Places table filtered and
@@ -248,6 +249,13 @@ export async function listExperiencePlacesForAdmin() {
       total: sql<number>`count(*)::int`.as("partnership_total"),
     })
     .from(hotelPartnerships)
+    .where(
+      and(
+        eq(hotelPartnerships.status, "active"),
+        or(isNull(hotelPartnerships.startsAt), lte(hotelPartnerships.startsAt, sql`now()`)),
+        or(isNull(hotelPartnerships.endsAt), gt(hotelPartnerships.endsAt, sql`now()`))
+      )
+    )
     .groupBy(hotelPartnerships.placeId)
     .as("partnership_counts");
 
@@ -257,6 +265,7 @@ export async function listExperiencePlacesForAdmin() {
       total: sql<number>`count(*)::int`.as("facility_total"),
     })
     .from(hotelFacilities)
+    .where(eq(hotelFacilities.status, "active"))
     .groupBy(hotelFacilities.placeId)
     .as("facility_counts");
 
@@ -270,7 +279,7 @@ export async function listExperiencePlacesForAdmin() {
     .leftJoin(partnershipCount, eq(partnershipCount.placeId, places.id))
     .leftJoin(facilityCount, eq(facilityCount.placeId, places.id))
     // Hotels are administered in their own section; this is the catalog of things to visit.
-    .where(ne(places.category, "hotel"))
+    .where(and(ne(places.category, "hotel"), ne(places.kind, "hotel")))
     .orderBy(places.name);
 }
 

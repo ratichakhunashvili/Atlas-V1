@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AdminTable, RowAction } from "@/components/admin/data-table";
+import { AdminTable, RowAction, RowTitleLink } from "@/components/admin/data-table";
 import { AdminFlash, AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
 import { StatusPill, type AdminStatus } from "@/components/admin/status-pill";
 import { listAllPartnershipsForAdmin } from "@/db/queries/hotel-partnerships";
@@ -15,7 +15,7 @@ import { listAllPartnershipsForAdmin } from "@/db/queries/hotel-partnerships";
  * to do it.
  */
 
-export const metadata: Metadata = { title: "Hotel partners" };
+export const metadata: Metadata = { title: "Hotel partnerships" };
 export const dynamic = "force-dynamic";
 
 const DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -40,15 +40,15 @@ export default async function AdminPartnershipsPage({ searchParams }: { searchPa
   return (
     <>
       <AdminPageHeader
-        title="Hotel partners"
-        description="Which places each hotel has approved. A partnership applies to that hotel only."
+        title="Hotel partnerships"
+        description="Which places each hotel has partnered with. A partnership applies to that hotel only."
       />
       <AdminFlash error={error} />
       {rows.length === 0 ? (
         <AdminNote>No partnerships yet.</AdminNote>
       ) : (
         <AdminTable
-          caption="Hotel partners"
+          caption="Hotel partnerships"
           columns={[
             { label: "Hotel", width: 160 },
             { label: "Place", width: 220 },
@@ -61,8 +61,12 @@ export default async function AdminPartnershipsPage({ searchParams }: { searchPa
           rows={rows.map(({ partnership, place, hotelId, hotelName }) => ({
             key: partnership.id,
             cells: [
-              hotelName,
-              place.name,
+              <RowTitleLink key="hotel" href={`/admin/hotels/${hotelId}/partnerships`}>
+                {hotelName}
+              </RowTitleLink>,
+              <RowTitleLink key="place" href={`/admin/places/${place.id}`}>
+                {place.name}
+              </RowTitleLink>,
               <StatusPill key="status" status={partnershipStatus(partnership.status, partnership.endsAt, now)} />,
               formatWindow(partnership.startsAt, partnership.endsAt),
               partnership.featured ? (partnership.offerText ? "Yes · offer" : "Yes") : "—",
@@ -70,16 +74,16 @@ export default async function AdminPartnershipsPage({ searchParams }: { searchPa
               <RowAction
                 key="edit"
                 href={`/admin/hotels/${hotelId}/partnerships`}
-                label={`Edit ${hotelName} partnership with ${place.name}`}
+                label={`Manage ${hotelName} partnership with ${place.name}`}
               >
-                Edit
+                Manage
               </RowAction>,
             ],
           }))}
         />
       )}
       <AdminNote>Guests only see a partner place while its status is Active and today is inside its window.</AdminNote>
-      <AdminNote>To link a place, open the hotel from Hotels and use its partners page.</AdminNote>
+      <AdminNote>To add a partnership, open the hotel from Hotels and choose Hotel partnerships.</AdminNote>
     </>
   );
 }

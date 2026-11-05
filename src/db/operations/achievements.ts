@@ -1,4 +1,4 @@
-import { count, eq } from "drizzle-orm";
+import { count, eq, sql } from "drizzle-orm";
 import { achievementUnlocks, achievements, type Achievement } from "@/db/schema";
 import type { AtlasDatabase } from "./types";
 
@@ -61,12 +61,13 @@ export async function listAchievementsWithUsage(db: AtlasDatabase) {
       achievement: achievements,
       placeName: places.name,
       placeArchivedAt: places.archivedAt,
+      placePublished: sql<boolean>`${places.publicationStatus} = 'published' and ${places.verificationStatus} = 'verified'`,
       unlocks: count(achievementUnlocks.id),
     })
     .from(achievements)
     .innerJoin(places, eq(achievements.placeId, places.id))
     .leftJoin(achievementUnlocks, eq(achievementUnlocks.achievementId, achievements.id))
-    .groupBy(achievements.id, places.name, places.archivedAt)
+    .groupBy(achievements.id, places.name, places.archivedAt, places.publicationStatus, places.verificationStatus)
     .orderBy(places.name);
 }
 

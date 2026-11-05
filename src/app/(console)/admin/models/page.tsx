@@ -9,6 +9,7 @@ import { listPlaces } from "@/db/queries/places";
 import { storageService } from "@/services/storage";
 import { MAX_MODEL_BYTES } from "@/services/map3d";
 import { deletePlaceModelAction, uploadPlaceModelAction } from "@/features/place-models/actions";
+import { ConfirmSubmit } from "@/components/admin/confirm-submit";
 
 /**
  * 3D models attached to Places.
@@ -16,6 +17,8 @@ import { deletePlaceModelAction, uploadPlaceModelAction } from "@/features/place
  * If no object store is configured, that is stated up front and the upload form is
  * not offered — an admin should find out before choosing a file, not after.
  */
+export const metadata = { title: "3D models" };
+
 export default async function AdminModelsPage({
   searchParams,
 }: {
@@ -116,9 +119,9 @@ export default async function AdminModelsPage({
                     </Link>
                     <form action={deletePlaceModelAction}>
                       <input type="hidden" name="id" value={model.id} />
-                      <Button type="submit" variant="secondary">
+                      <ConfirmSubmit variant="secondary" confirm="Remove this 3D model? Guests stop seeing it on the map.">
                         Remove
-                      </Button>
+                      </ConfirmSubmit>
                     </form>
                   </div>
                 </div>

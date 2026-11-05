@@ -30,27 +30,40 @@ const CONTRACTS_PATH = "/admin/contracts";
 
 const KIND_LABEL = { business: "a business", attraction: "an attraction", hotel: "a hotel" } as const;
 
-function finish(outcome: { error: string } | { ok: string }): never {
+/**
+ * These controls appear on /admin/contracts and on each Place's page; the admin goes back to whichever one they used.
+ * Only those two shapes are accepted, so a posted value can never redirect anywhere else.
+ */
+const RETURN_PATH = /^\/admin\/places\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function returnPathFrom(formData: FormData | undefined): string {
+  const value = formData?.get("returnTo");
+  return typeof value === "string" && RETURN_PATH.test(value) ? value : CONTRACTS_PATH;
+}
+
+function finish(outcome: { error: string } | { ok: string }, returnTo: string = CONTRACTS_PATH): never {
   revalidatePath(CONTRACTS_PATH);
+  if (returnTo !== CONTRACTS_PATH) revalidatePath(returnTo);
   const query = "error" in outcome ? `error=${encodeURIComponent(outcome.error)}` : `ok=${encodeURIComponent(outcome.ok)}`;
-  redirect(`${CONTRACTS_PATH}?${query}`);
+  redirect(`${returnTo}?${query}`);
 }
 
 /** Propose a contract for a business. It always starts pending_review. */
-export async function proposeContractAction(placeId: string) {
+export async function proposeContractAction(placeId: string, formData?: FormData) {
   const admin = await requireAdmin();
+  const back = returnPathFrom(formData);
 
   const id = placeIdSchema.safeParse(placeId);
-  if (!id.success) finish({ error: "Invalid place." });
+  if (!id.success) finish({ error: "Invalid place." }, back);
   const place = await findPlaceById(id.data);
-  if (!place) finish({ error: "That place no longer exists." });
+  if (!place) finish({ error: "That place no longer exists." }, back);
 
   const facts = await loadContractFacts(db, place.id);
   const problem = validateContractCandidate({ place, ...facts });
-  if (problem) finish({ error: problem });
+  if (problem) finish({ error: problem }, back);
 
   const created = await proposeContract(db, place.id);
-  if (!created) finish({ error: "This place already has a contract waiting for review." });
+  if (!created) finish({ error: "This place already has a contract waiting for review." }, back);
 
   await recordAdminAudit({
     actorUserId: admin.id,
@@ -60,29 +73,30 @@ export async function proposeContractAction(placeId: string) {
     after: { status: "pending_review", placeId: place.id },
   });
 
-  finish({ ok: `Contract for ${place.name} added as pending review.` });
+  finish({ ok: `Contract for ${place.name} added as pending review.` }, back);
 }
 
 /** The explicit admin confirmation: the ONLY path to `active` (from pending_review, or resuming a suspended one). */
 export async function confirmContractAction(contractId: string, formData: FormData) {
   const admin = await requireAdmin();
+  const back = returnPathFrom(formData);
 
   const id = contractIdSchema.safeParse(contractId);
-  if (!id.success) finish({ error: "Invalid contract." });
+  if (!id.success) finish({ error: "Invalid contract." }, back);
   const existing = await findContractById(db, id.data);
-  if (!existing) finish({ error: "That contract no longer exists." });
+  if (!existing) finish({ error: "That contract no longer exists." }, back);
 
   const parsed = confirmContractSchema.safeParse({ startsAt: formData.get("startsAt") ?? "", endsAt: formData.get("endsAt") ?? "" });
-  if (!parsed.success) finish({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
+  if (!parsed.success) finish({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, back);
 
   const now = new Date();
   const windowProblem = validateConfirmationWindow({ ...parsed.data, now });
-  if (windowProblem) finish({ error: windowProblem });
+  if (windowProblem) finish({ error: windowProblem }, back);
 
   const place = await findPlaceById(existing.placeId);
-  if (!place) finish({ error: "That place no longer exists." });
-  if (place.archivedAt !== null) finish({ error: "This place is archived. Unarchive it before confirming its contract." });
-  if (place.kind !== "business") finish({ error: "Only a business can have an active Atlas contract." });
+  if (!place) finish({ error: "That place no longer exists." }, back);
+  if (place.archivedAt !== null) finish({ error: "This place is archived. Unarchive it before confirming its contract." }, back);
+  if (place.kind !== "business") finish({ error: "Only a business can have an active Atlas contract." }, back);
 
   const updated = await transitionContract(db, existing.id, contractStatusesThatCanTransitionTo("active"), {
     status: "active",
@@ -91,7 +105,7 @@ export async function confirmContractAction(contractId: string, formData: FormDa
     confirmedBy: admin.id,
     confirmedAt: now,
   }, now);
-  if (!updated) finish({ error: "This contract can't be confirmed: it changed status, or the place already has an active contract." });
+  if (!updated) finish({ error: "This contract can't be confirmed: it changed status, or the place already has an active contract." }, back);
 
   await recordAdminAudit({
     actorUserId: admin.id,
@@ -106,7 +120,7 @@ export async function confirmContractAction(contractId: string, formData: FormDa
     },
   });
 
-  finish({ ok: `Contract for ${place.name} confirmed.` });
+  finish({ ok: `Contract for ${place.name} confirmed.` }, back);
 }
 
 const AUDIT_FOR_TARGET = {
@@ -114,18 +128,19 @@ const AUDIT_FOR_TARGET = {
   ended: "contract.ended",
 } as const satisfies Partial<Record<AtlasContractStatus, AdminAuditAction>>;
 
-async function simpleTransition(contractId: string, to: keyof typeof AUDIT_FOR_TARGET, okMessage: string) {
+async function simpleTransition(contractId: string, to: keyof typeof AUDIT_FOR_TARGET, okMessage: string, formData?: FormData) {
   const admin = await requireAdmin();
+  const back = returnPathFrom(formData);
 
   const id = contractIdSchema.safeParse(contractId);
-  if (!id.success) finish({ error: "Invalid contract." });
+  if (!id.success) finish({ error: "Invalid contract." }, back);
   const existing = await findContractById(db, id.data);
-  if (!existing) finish({ error: "That contract no longer exists." });
+  if (!existing) finish({ error: "That contract no longer exists." }, back);
 
   const now = new Date();
   const patch = to === "ended" ? { status: to, endedAt: now } : { status: to };
   const updated = await transitionContract(db, existing.id, contractStatusesThatCanTransitionTo(to), patch, now);
-  if (!updated) finish({ error: `This contract can't move to "${to}" from its current status.` });
+  if (!updated) finish({ error: `This contract can't be ${to === "ended" ? "ended" : "suspended"} from its current status.` }, back);
 
   await recordAdminAudit({
     actorUserId: admin.id,
@@ -136,35 +151,36 @@ async function simpleTransition(contractId: string, to: keyof typeof AUDIT_FOR_T
     after: { status: to },
   });
 
-  finish({ ok: okMessage });
+  finish({ ok: okMessage }, back);
 }
 
-export async function suspendContractAction(contractId: string) {
-  return simpleTransition(contractId, "suspended", "Contract suspended.");
+export async function suspendContractAction(contractId: string, formData?: FormData) {
+  return simpleTransition(contractId, "suspended", "Contract suspended.", formData);
 }
 
-export async function endContractAction(contractId: string) {
-  return simpleTransition(contractId, "ended", "Contract ended. It stays in the history.");
+export async function endContractAction(contractId: string, formData?: FormData) {
+  return simpleTransition(contractId, "ended", "Contract ended. It stays in the history.", formData);
 }
 
 /** Sets a Place's kind as an explicit admin decision, which also confirms a backfilled suggestion. */
 export async function setPlaceKindAction(placeId: string, formData: FormData) {
   const admin = await requireAdmin();
+  const back = returnPathFrom(formData);
 
   const id = placeIdSchema.safeParse(placeId);
-  if (!id.success) finish({ error: "Invalid place." });
+  if (!id.success) finish({ error: "Invalid place." }, back);
   const place = await findPlaceById(id.data);
-  if (!place) finish({ error: "That place no longer exists." });
+  if (!place) finish({ error: "That place no longer exists." }, back);
 
   const parsed = placeKindSchema.safeParse({ kind: formData.get("kind") ?? "" });
-  if (!parsed.success) finish({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
+  if (!parsed.success) finish({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, back);
 
   const facts = await loadContractFacts(db, place.id);
   const problem = validateKindChange({ to: parsed.data.kind, ...facts });
-  if (problem) finish({ error: problem });
+  if (problem) finish({ error: problem }, back);
 
   const updated = await setPlaceKind(db, place.id, parsed.data.kind);
-  if (!updated) finish({ error: "That place no longer exists." });
+  if (!updated) finish({ error: "That place no longer exists." }, back);
 
   await recordAdminAudit({
     actorUserId: admin.id,
@@ -175,5 +191,5 @@ export async function setPlaceKindAction(placeId: string, formData: FormData) {
     after: { kind: parsed.data.kind, kindConfirmed: true },
   });
 
-  finish({ ok: `${place.name} is now marked as ${KIND_LABEL[parsed.data.kind]}.` });
+  finish({ ok: `${place.name} is now marked as ${KIND_LABEL[parsed.data.kind]}.` }, back);
 }

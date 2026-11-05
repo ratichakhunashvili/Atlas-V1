@@ -15,24 +15,10 @@ import {
 } from "@/db/queries/places";
 import type { AdminAuditAction, Place } from "@/db/schema";
 import { findLikelyDuplicates } from "@/services/catalog/duplicates";
+import { isUuid } from "@/lib/route-ids";
+import { placeFormQuery } from "./prefill";
 import { placeSchema } from "./schema";
 
-const PLACE_FORM_FIELDS = [
-  "name",
-  "description",
-  "latitude",
-  "longitude",
-  "category",
-  "address",
-  "imageUrl",
-  "website",
-  "phone",
-  "visitDurationMinutes",
-  "priceLevel",
-  "priceLevelSource",
-  "publicationStatus",
-  "verificationStatus",
-] as const;
 
 function parsePlaceForm(formData: FormData) {
   return placeSchema.safeParse({
@@ -111,9 +97,7 @@ export async function createPlaceAction(formData: FormData) {
 
   const parsed = parsePlaceForm(formData);
   if (!parsed.success) {
-    redirect(
-      `/admin/places/new?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`
-    );
+    redirect(`/admin/places/new?${placeFormQuery(formData, { error: parsed.error.issues[0]?.message ?? "Invalid input" })}`);
   }
 
   /*
@@ -132,18 +116,13 @@ export async function createPlaceAction(formData: FormData) {
       })
     );
     if (matches.length > 0) {
-      const params = new URLSearchParams({ duplicates: "1" });
-      for (const key of PLACE_FORM_FIELDS) {
-        const value = formData.get(key);
-        if (typeof value === "string" && value !== "") params.set(key, value);
-      }
-      redirect(`/admin/places/new?${params.toString()}`);
+      redirect(`/admin/places/new?${placeFormQuery(formData, { duplicates: "1" })}`);
     }
   }
 
   const evidence = priceEvidence(parsed.data, null, new Date());
   if ("error" in evidence) {
-    redirect(`/admin/places/new?error=${encodeURIComponent(evidence.error)}`);
+    redirect(`/admin/places/new?${placeFormQuery(formData, { error: evidence.error })}`);
   }
 
   const created = await createPlace({
@@ -176,23 +155,23 @@ export async function createPlaceAction(formData: FormData) {
   await auditStatusChanges(admin.id, { publicationStatus: "draft", verificationStatus: "unverified", archivedAt: null }, created);
 
   revalidatePath("/admin/places");
-  redirect("/admin/places");
+  redirect(`/admin/places/${created.id}?ok=${encodeURIComponent(`${created.name} created. Next, confirm its kind below.`)}`);
 }
 
 export async function updatePlaceAction(id: string, formData: FormData) {
   const admin = await requireAdmin();
+  if (!isUuid(id)) redirect("/admin/places");
 
   const parsed = parsePlaceForm(formData);
   if (!parsed.success) {
-    redirect(
-      `/admin/places/${id}?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`
-    );
+    redirect(`/admin/places/${id}?${placeFormQuery(formData, { error: parsed.error.issues[0]?.message ?? "Invalid input" })}`);
   }
 
   const before = await findPlaceById(id);
+  if (!before) redirect(`/admin/places?error=${encodeURIComponent("That place no longer exists.")}`);
   const evidence = priceEvidence(parsed.data, before, new Date());
   if ("error" in evidence) {
-    redirect(`/admin/places/${id}?error=${encodeURIComponent(evidence.error)}`);
+    redirect(`/admin/places/${id}?${placeFormQuery(formData, { error: evidence.error })}`);
   }
 
   let after: Place | null = null;
@@ -218,16 +197,17 @@ export async function updatePlaceAction(id: string, formData: FormData) {
     // places_archived_not_published_check: an archived place can't be published.
     if (hasPgErrorCode(error, PG_CHECK_VIOLATION)) {
       redirect(
-        `/admin/places/${id}?error=${encodeURIComponent("This place is archived, so it can't be published. Unarchive it first, then publish.")}`
+        `/admin/places/${id}?${placeFormQuery(formData, { error: "This place is archived, so it can't be published. Unarchive it first, then publish." })}`
       );
     }
     throw error;
   }
 
-  if (before && after) await auditStatusChanges(admin.id, before, after);
+  if (after) await auditStatusChanges(admin.id, before, after);
 
   revalidatePath("/admin/places");
-  redirect("/admin/places");
+  revalidatePath(`/admin/places/${id}`);
+  redirect(`/admin/places/${id}?ok=${encodeURIComponent("Place saved.")}`);
 }
 
 /**
@@ -239,15 +219,16 @@ export async function deletePlaceAction(formData: FormData) {
   const admin = await requireAdmin();
 
   const id = formData.get("id");
-  if (typeof id === "string" && id) {
+  if (typeof id === "string" && isUuid(id)) {
     const before = await findPlaceById(id);
     try {
       await deletePlace(id);
     } catch (error) {
-      if (hasPgErrorCode(error, PG_FOREIGN_KEY_VIOLATION)) {
+      // RESTRICT foreign keys report 23503 or 23001 (restrict_violation): either way, history is in the way.
+      if (hasPgErrorCode(error, PG_FOREIGN_KEY_VIOLATION) || hasPgErrorCode(error, "23001")) {
         redirect(
-          `/admin/places?error=${encodeURIComponent(
-            "This place has partnership, facility, or hotel records and can't be deleted. Archive it instead."
+          `/admin/places/${id}?error=${encodeURIComponent(
+            "This place has history (a hotel, partnership, facility, contract, achievement or visits), so it can't be deleted. Archive it instead."
           )}`
         );
       }
@@ -265,28 +246,28 @@ export async function deletePlaceAction(formData: FormData) {
   }
 
   revalidatePath("/admin/places");
-  redirect("/admin/places");
+  redirect(`/admin/places?ok=${encodeURIComponent("Place deleted.")}`);
 }
 
 async function archiveChange(formData: FormData, archived: boolean) {
   const admin = await requireAdmin();
   const id = formData.get("id");
-  if (typeof id === "string" && id) {
-    const before = await findPlaceById(id);
-    const after = await setPlaceArchived(id, archived);
-    if (before && after) {
-      await recordAdminAudit({
-        actorUserId: admin.id,
-        action: archived ? "place.archived" : "place.unarchived",
-        targetType: "place",
-        targetId: id,
-        before: statusSnapshot(before),
-        after: statusSnapshot(after),
-      });
-    }
-  }
+  if (typeof id !== "string" || !isUuid(id)) redirect("/admin/places");
+  const before = await findPlaceById(id);
+  const after = await setPlaceArchived(id, archived);
+  if (!before || !after) redirect(`/admin/places?error=${encodeURIComponent("That place no longer exists.")}`);
+  await recordAdminAudit({
+    actorUserId: admin.id,
+    action: archived ? "place.archived" : "place.unarchived",
+    targetType: "place",
+    targetId: id,
+    before: statusSnapshot(before),
+    after: statusSnapshot(after),
+  });
   revalidatePath("/admin/places");
-  redirect("/admin/places");
+  revalidatePath(`/admin/places/${id}`);
+  const message = archived ? "Place archived. Guests no longer see it." : "Place unarchived. It stays a draft until you publish it again.";
+  redirect(`/admin/places/${id}?ok=${encodeURIComponent(message)}`);
 }
 
 export async function archivePlaceAction(formData: FormData) {

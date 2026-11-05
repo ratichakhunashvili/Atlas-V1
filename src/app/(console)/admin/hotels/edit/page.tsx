@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { HOTEL_STATUSES, TIME_ZONES } from "@/components/admin/fixtures";
 import { AdminFormCard, AdminInput, AdminSelect, FormActions, FormRow } from "@/components/admin/form-parts";
 import { AdminPageHeader } from "@/components/admin/page-parts";
+import { sampleScreenOrRedirect } from "@/components/admin/sample-screen";
 
 /* AdminHotelForm · Hotel: create or edit — Figma frame 70:900. */
 
 export const metadata: Metadata = { title: "Admin · Hotel details" };
 
 export default function AdminHotelFormPage() {
+  sampleScreenOrRedirect("/admin/hotels/new");
   return (
     <>
       <AdminPageHeader form title="Hotel details" description="Create a new hotel or edit an existing one." />

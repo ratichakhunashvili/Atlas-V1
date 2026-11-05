@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Alert } from "@/components/shared/alert";
+import { ConfirmSubmit } from "@/components/admin/confirm-submit";
 import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -10,6 +11,14 @@ import { findHotelById } from "@/db/queries/hotels";
 import { listPlaces } from "@/db/queries/places";
 import { FACILITY_TYPES } from "@/db/schema";
 import { activateFacilityAction, addFacilityAction, deactivateFacilityAction } from "@/features/facilities/actions";
+import { uuidOrNotFound } from "@/lib/route-ids";
+
+export const metadata = { title: "Hotel facilities" };
+
+function sentence(value: string) {
+  const words = value.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 export default async function HotelFacilitiesPage({
   params,
@@ -18,14 +27,14 @@ export default async function HotelFacilitiesPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
-  const { id } = await params;
+  const id = uuidOrNotFound((await params).id);
   const { error, ok } = await searchParams;
   const hotel = await findHotelById(id);
   if (!hotel) notFound();
 
   const [rows, places] = await Promise.all([listFacilitiesForAdmin(hotel.id), listPlaces()]);
   const taken = new Set(rows.map((row) => row.place.id));
-  const registrable = places.filter((place) => place.archivedAt === null && place.id !== hotel.placeId && !taken.has(place.id));
+  const registrable = places.filter((place) => place.archivedAt === null && place.kind !== "hotel" && !taken.has(place.id));
 
   return (
     <div className="space-y-6">
@@ -33,10 +42,10 @@ export default async function HotelFacilitiesPage({
         <Link href={`/admin/hotels/${hotel.id}`} className="atlas-hit inline-block text-sm text-slate-600 underline">
           ← {hotel.place.name}
         </Link>
-        <h1 className="mt-2 text-xl font-semibold">Hotel-owned facilities — {hotel.place.name}</h1>
+        <h1 className="mt-2 text-xl font-semibold">Hotel facilities — {hotel.place.name}</h1>
         <p className="text-sm text-slate-500">
-          Facilities the hotel itself owns (pool, spa, restaurant…). Eligible for this hotel&apos;s guests only, with no external
-          partnership. External businesses belong under &quot;External partners&quot; instead.
+          What the hotel itself owns (pool, spa, restaurant…). Shown to this hotel&apos;s guests only, with no partnership needed.
+          Outside businesses belong under Hotel partnerships instead.
         </p>
       </div>
 
@@ -53,7 +62,7 @@ export default async function HotelFacilitiesPage({
               </option>
               {registrable.map((place) => (
                 <option key={place.id} value={place.id}>
-                  {place.name} ({place.category})
+                  {place.name} ({sentence(place.category)})
                 </option>
               ))}
             </Select>
@@ -65,7 +74,7 @@ export default async function HotelFacilitiesPage({
               </option>
               {FACILITY_TYPES.map((type) => (
                 <option key={type} value={type}>
-                  {type.replace("_", " ")}
+                  {sentence(type)}
                 </option>
               ))}
             </Select>
@@ -83,15 +92,15 @@ export default async function HotelFacilitiesPage({
               <div>
                 <p className="font-medium text-slate-900">{place.name}</p>
                 <p className="text-xs text-slate-500">
-                  {facility.facilityType.replace("_", " ")} · {facility.status}
+                  {sentence(facility.facilityType)} · {facility.status === "active" ? "Active" : "Inactive"}
                   {place.archivedAt ? " · place archived" : ""}
                 </p>
               </div>
               {facility.status === "active" ? (
                 <form action={deactivateFacilityAction.bind(null, facility.id)}>
-                  <Button variant="secondary" type="submit">
+                  <ConfirmSubmit variant="secondary" confirm={`Deactivate ${place.name}? This hotel's guests stop seeing it.`}>
                     Deactivate
-                  </Button>
+                  </ConfirmSubmit>
                 </form>
               ) : (
                 <form action={activateFacilityAction.bind(null, facility.id)}>

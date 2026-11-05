@@ -34,7 +34,7 @@ test("dev check-in pages are admin-only, read existing itineraries, and never ge
 });
 
 test("database-held QR credentials are not rendered or serialized into view props", () => {
-  const hotelTable = read("src/components/hotel/hotel-table.tsx");
+  const hotelList = read("src/app/(console)/admin/page.tsx");
   const hotelDetail = read("src/app/(console)/admin/hotels/[id]/page.tsx");
   const hotelForm = read("src/components/hotel/hotel-form.tsx");
   const qrDevPage = read("src/app/(app)/dev/advisor-qr-check-in/page.tsx");
@@ -42,10 +42,10 @@ test("database-held QR credentials are not rendered or serialized into view prop
   const scenarioPage = read("src/app/(console)/admin/advisor/[tag]/page.tsx");
   const scenarioPanel = read("src/app/(console)/admin/advisor/[tag]/scenario-test-panel.tsx");
 
-  assert.doesNotMatch(hotelTable, /\{\s*hotel\.qrToken\s*\}/);
+  assert.doesNotMatch(hotelList, /qrToken|tokenHash/);
   assert.doesNotMatch(hotelDetail, /\{\s*hotel\.qrToken\s*\}/);
   assert.match(hotelForm, /Pick<Place, "id" \| "name">/);
-  assert.match(hotelDetail, /places\.map\(\(\{ id, name \}\) => \(\{ id, name \}\)\)/);
+  assert.match(hotelDetail, /\w+\.map\(\(\{ id, name \}\) => \(\{ id, name \}\)\)/);
 
   assert.doesNotMatch(qrDevPage, /\.qrToken|stopsWithTokens/);
   assert.doesNotMatch(qrDevForm, /stopsWithTokens|stop\.qrToken|qrToken:\s*string/);

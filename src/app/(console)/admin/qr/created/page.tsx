@@ -3,12 +3,14 @@ import { AtlasIcon } from "@/components/atlas-ui/asset";
 import { SAMPLE_QR_CODE, SAMPLE_QR_LINK } from "@/components/admin/fixtures";
 import { AdminHeaderAction, AdminPageHeader } from "@/components/admin/page-parts";
 import { QrCodeActions } from "@/components/admin/qr-code-actions";
+import { sampleScreenOrRedirect } from "@/components/admin/sample-screen";
 
 /* AdminQRCreated · Code created — Figma frame 70:1730. Below 768px the details move under the code. */
 
 export const metadata: Metadata = { title: "Admin · Code created" };
 
 export default function AdminQrCreatedPage() {
+  sampleScreenOrRedirect("/admin/qr");
   const details = [
     { label: "Purpose", value: SAMPLE_QR_CODE.purpose },
     { label: "Target", value: SAMPLE_QR_CODE.target },

@@ -11,6 +11,8 @@ const PERIODS = [7, 30, 90] as const;
  * trail. Everything shown is a count of rows Atlas recorded; what it does not record is listed at the bottom rather
  * than filled with an estimate.
  */
+export const metadata = { title: "Analytics" };
+
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const { days } = await searchParams;
   const period = (PERIODS as readonly number[]).includes(Number(days)) ? Number(days) : 30;

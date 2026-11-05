@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { ACHIEVEMENT_PLACES, PUBLISH_STATUSES, UNLOCK_METHODS } from "@/components/admin/fixtures";
 import { AdminFormCard, AdminInput, AdminSelect, AdminTextarea, FormActions, FormRow } from "@/components/admin/form-parts";
 import { AdminPageHeader } from "@/components/admin/page-parts";
+import { sampleScreenOrRedirect } from "@/components/admin/sample-screen";
 
 /* AdminAchievementForm · Achievement: create or edit — Figma frame 70:2027. */
 
 export const metadata: Metadata = { title: "Admin · Achievement details" };
 
 export default function AdminAchievementFormPage() {
+  sampleScreenOrRedirect("/admin/achievements/new");
   return (
     <>
       <AdminPageHeader form title="Achievement details" description="Create a new achievement or edit an existing one." />

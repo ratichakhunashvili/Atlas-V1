@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { FACILITY_TYPES, HOTEL_NAMES, PUBLISH_STATUSES } from "@/components/admin/fixtures";
 import { AdminFormCard, AdminInput, AdminSelect, AdminTextarea, FormActions, FormRow } from "@/components/admin/form-parts";
 import { AdminPageHeader } from "@/components/admin/page-parts";
+import { sampleScreenOrRedirect } from "@/components/admin/sample-screen";
 
 /* AdminFacilityForm · Facility: create or edit — Figma frame 70:1471. */
 
 export const metadata: Metadata = { title: "Admin · Facility details" };
 
 export default function AdminFacilityFormPage() {
+  sampleScreenOrRedirect("/admin/facilities");
   return (
     <>
       <AdminPageHeader form title="Facility details" description="Create a new facility or edit an existing one." />

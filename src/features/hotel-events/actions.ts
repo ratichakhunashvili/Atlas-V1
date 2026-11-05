@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/authorization";
 import { cancelHotelEvent, createHotelEvent } from "@/db/queries/hotel-events";
 import { findHotelById } from "@/db/queries/hotels";
 import { listEligiblePlacesForStay } from "@/services/eligibility";
+import { isUuid } from "@/lib/route-ids";
 import { hotelEventSchema } from "./schema";
 import { isVenueEligibleForEvent, lastMomentOf } from "./venue";
 
@@ -18,25 +19,27 @@ import { isVenueEligibleForEvent, lastMomentOf } from "./venue";
  * server-side eligibility service the Advisor uses, so an event cannot become a
  * way to put an unapproved Place in front of a guest.
  */
+const FORM_FIELDS = ["venuePlaceId", "title", "description", "startsAt", "endsAt"] as const;
+
+function eventsPath(hotelId: string, query: Record<string, string>) {
+  return `/admin/hotels/${hotelId}/events?${new URLSearchParams(query).toString()}`;
+}
+
 export async function createHotelEventAction(hotelId: string, formData: FormData) {
   await requireAdmin();
 
+  if (!isUuid(hotelId)) redirect("/admin");
   const hotel = await findHotelById(hotelId);
-  if (!hotel) redirect("/admin/hotels");
+  if (!hotel) redirect("/admin");
 
-  const parsed = hotelEventSchema.safeParse({
-    venuePlaceId: formData.get("venuePlaceId") ?? "",
-    title: formData.get("title") ?? "",
-    description: formData.get("description") ?? "",
-    startsAt: formData.get("startsAt") ?? "",
-    endsAt: formData.get("endsAt") ?? "",
-  });
-
-  if (!parsed.success) {
-    redirect(
-      `/admin/hotels/${hotelId}/events?error=${encodeURIComponent(parsed.error.issues[0]?.message ?? "Invalid input")}`
-    );
+  const values = Object.fromEntries(FORM_FIELDS.map((field) => [field, String(formData.get(field) ?? "")]));
+  // On an error the admin's typed values go back into the form (event details, nothing personal).
+  function fail(message: string): never {
+    redirect(eventsPath(hotelId, { ...values, error: message }));
   }
+
+  const parsed = hotelEventSchema.safeParse(values);
+  if (!parsed.success) fail(parsed.error.issues[0]?.message ?? "Invalid input.");
 
   /*
    * Eligibility is judged AT THE EVENT'S OWN TIME, at both its start and its last moment — not now. A partnership
@@ -53,10 +56,8 @@ export async function createHotelEventAction(hotelId: string, formData: FormData
   });
 
   if (!venueIsEligible) {
-    redirect(
-      `/admin/hotels/${hotelId}/events?error=${encodeURIComponent(
-        "That venue is not an eligible Place for this hotel at the time of the event. Add it as a facility, or confirm a partnership that covers the whole event."
-      )}`
+    fail(
+      "That venue isn't available to this hotel's guests at the time of the event. Add it as a facility, or confirm a partnership that covers the whole event."
     );
   }
 
@@ -70,15 +71,18 @@ export async function createHotelEventAction(hotelId: string, formData: FormData
   });
 
   revalidatePath(`/admin/hotels/${hotelId}/events`);
-  redirect(`/admin/hotels/${hotelId}/events`);
+  redirect(eventsPath(hotel.id, { ok: `"${parsed.data.title}" is scheduled.` }));
 }
 
 /** Cancels rather than deletes: a guest may already have this event in a saved plan, and that plan is history. */
 export async function cancelHotelEventAction(hotelId: string, eventId: string) {
   await requireAdmin();
 
-  await cancelHotelEvent(eventId, hotelId);
+  if (!isUuid(hotelId) || !isUuid(eventId)) redirect("/admin");
+  const cancelled = await cancelHotelEvent(eventId, hotelId);
 
   revalidatePath(`/admin/hotels/${hotelId}/events`);
-  redirect(`/admin/hotels/${hotelId}/events`);
+  redirect(
+    eventsPath(hotelId, cancelled ? { ok: `"${cancelled.title}" was cancelled.` } : { error: "That event was already cancelled or no longer exists." })
+  );
 }

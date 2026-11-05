@@ -7,6 +7,7 @@ import {
   createAdvisorTestScenario,
   deleteAdvisorTestScenario,
   findAdvisorTestScenario,
+  isSafeScenarioTag,
   seedPreviousDayHistory,
   type ScenarioType,
 } from "@/services/advisor-testing/scenario";
@@ -16,6 +17,8 @@ import { checkInStopWithQr, type QrCheckInResult } from "@/services/advisor/chec
 import { findActiveQrCredentialForPlace, issueQrCredential } from "@/db/queries/qr-credentials";
 import { generateRawQrToken, hashQrToken } from "@/services/qr";
 import { setUserRole } from "@/db/queries/users";
+import { recordAdminAudit } from "@/db/queries/admin-audit";
+import { developmentToolsBlocked } from "@/services/deployment/environment";
 import { scenarioTypeSchema, testUserRoleSchema, historyOutcomeSchema } from "./schema";
 
 export type ScenarioNotFound = { ok: false; reason: "scenario_not_found"; message: string };
@@ -37,15 +40,28 @@ const SCENARIO_NOT_FOUND: ScenarioNotFound = {
  * a real guest. See services/advisor-testing/scenario.ts for how a
  * scenario's records are created/found/deleted.
  */
+/** Scenario tools write real rows, so they only run where development tools are allowed (never on the live site). */
+function refuseOutsideDevelopment(): void {
+  if (developmentToolsBlocked(process.env.NODE_ENV, process.env.ATLAS_DEPLOYMENT_ENV)) {
+    redirect(`/admin/advisor?error=${encodeURIComponent("Advisor testing is turned off on this deployment.")}`);
+  }
+}
+
+/** A scenario's page. The tag is checked against its fixed shape, so it can't steer a redirect anywhere else. */
+function scenarioPath(tag: string): string {
+  return isSafeScenarioTag(tag) ? `/admin/advisor/${tag}` : "/admin/advisor";
+}
+
 export async function createAdvisorTestScenarioAction(type: string, role: string): Promise<void> {
   // The admin id (used to attribute the scenario's partnership confirmations) comes from the
   // authenticated session, never from a form value. The service itself also refuses to run in production.
   const admin = await requireAdmin();
+  refuseOutsideDevelopment();
 
   const parsedType = scenarioTypeSchema.safeParse(type);
   const parsedRole = testUserRoleSchema.safeParse(role);
   if (!parsedType.success || !parsedRole.success) {
-    redirect("/admin/advisor?error=Invalid+scenario+type+or+role");
+    redirect(`/admin/advisor?error=${encodeURIComponent("Choose a valid scenario type and role.")}`);
   }
 
   const scenario = await createAdvisorTestScenario(parsedType.data as ScenarioType, parsedRole.data, { adminId: admin.id });
@@ -55,17 +71,32 @@ export async function createAdvisorTestScenarioAction(type: string, role: string
 
 export async function deleteAdvisorTestScenarioAction(tag: string): Promise<void> {
   await requireAdmin();
+  refuseOutsideDevelopment();
+  if (!isSafeScenarioTag(tag)) redirect("/admin/advisor");
   await deleteAdvisorTestScenario(tag);
   revalidatePath("/admin/advisor");
   redirect("/admin/advisor");
 }
 
 export async function promoteTestUserToAdminAction(tag: string): Promise<void> {
-  await requireAdmin();
-  const scenario = await findAdvisorTestScenario(tag);
-  if (scenario) await setUserRole(scenario.user.email, "admin");
-  revalidatePath(`/admin/advisor/${tag}`);
-  redirect(`/admin/advisor/${tag}`);
+  const admin = await requireAdmin();
+  refuseOutsideDevelopment();
+  const scenario = isSafeScenarioTag(tag) ? await findAdvisorTestScenario(tag) : null;
+  if (scenario && scenario.user.role !== "admin") {
+    await setUserRole(scenario.user.email, "admin");
+    // Granting admin is always audited, even to a throwaway test account.
+    await recordAdminAudit({
+      actorUserId: admin.id,
+      action: "staff.role_changed",
+      targetType: "user",
+      targetId: scenario.user.id,
+      before: { role: scenario.user.role },
+      after: { role: "admin" },
+      reason: `advisor test scenario ${tag}`,
+    });
+  }
+  revalidatePath(scenarioPath(tag));
+  redirect(scenarioPath(tag));
 }
 
 export async function generateTestItineraryAction(tag: string): Promise<GenerateItineraryResult | ScenarioNotFound> {
@@ -155,10 +186,11 @@ export async function testScenarioQrCheckInAction(
 
 export async function seedPreviousDayHistoryAction(tag: string, outcome: string): Promise<void> {
   await requireAdmin();
+  refuseOutsideDevelopment();
   const parsed = historyOutcomeSchema.safeParse(outcome);
   if (parsed.success) {
     await seedPreviousDayHistory(tag, parsed.data);
   }
-  revalidatePath(`/admin/advisor/${tag}`);
-  redirect(`/admin/advisor/${tag}`);
+  revalidatePath(scenarioPath(tag));
+  redirect(scenarioPath(tag));
 }

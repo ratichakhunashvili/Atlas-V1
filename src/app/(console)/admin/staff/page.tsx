@@ -4,6 +4,8 @@ import { StaffRoleForm } from "./staff-role-form";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = { title: "Staff access" };
+
 export default async function StaffPage() {
   const me = await requireAdmin();
   const admins = await listStaffAccounts();

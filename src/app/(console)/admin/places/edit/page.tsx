@@ -3,12 +3,14 @@ import { AdminSwitch } from "@/components/admin/admin-switch";
 import { PLACE_CATEGORIES, PRICE_LEVELS, PUBLISH_STATUSES } from "@/components/admin/fixtures";
 import { AdminFormCard, AdminInput, AdminSelect, AdminTextarea, FormActions, FormRow } from "@/components/admin/form-parts";
 import { AdminPageHeader } from "@/components/admin/page-parts";
+import { sampleScreenOrRedirect } from "@/components/admin/sample-screen";
 
 /* AdminPlaceForm · Place: create or edit — Figma frame 70:1100. The one form the design draws without a section title. */
 
 export const metadata: Metadata = { title: "Admin · Place details" };
 
 export default function AdminPlaceFormPage() {
+  sampleScreenOrRedirect("/admin/places/new");
   return (
     <>
       <AdminPageHeader form title="Place details" description="Create a new place or edit an existing one." />

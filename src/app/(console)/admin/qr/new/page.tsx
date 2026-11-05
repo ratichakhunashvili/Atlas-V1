@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { PLACE_NAMES, QR_PURPOSES } from "@/components/admin/fixtures";
 import { AdminFormCard, AdminInput, AdminSelect, FormActions, FormRow } from "@/components/admin/form-parts";
 import { AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
+import { sampleScreenOrRedirect } from "@/components/admin/sample-screen";
 
 /* AdminQRCreate · Create a code — Figma frame 70:1664. */
 
 export const metadata: Metadata = { title: "Admin · Create a code" };
 
 export default function AdminQrCreatePage() {
+  sampleScreenOrRedirect("/admin/qr");
   return (
     <>
       <AdminPageHeader form title="Create a code" description="Choose what the code is for. You can print it right after." />

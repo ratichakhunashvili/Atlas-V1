@@ -1,3 +1,4 @@
+import { ConfirmSubmit } from "@/components/admin/confirm-submit";
 import { Button } from "@/components/shared/button";
 import { Field } from "@/components/shared/field";
 import { Select } from "@/components/shared/select";
@@ -42,12 +43,30 @@ export function contractLabel(contract: AtlasPartnerContract, now: Date): string
   return "Ended";
 }
 
-export function PlaceKindForm({ placeId, kind, confirmed }: { placeId: string; kind: PlaceKind; confirmed: boolean }) {
+/** Set on a Place's own page, so the actions bring the admin back there instead of to /admin/contracts. */
+function ReturnTo({ path }: { path?: string }) {
+  return path ? <input type="hidden" name="returnTo" value={path} /> : null;
+}
+
+export function PlaceKindForm({
+  placeId,
+  kind,
+  confirmed,
+  returnTo,
+}: {
+  placeId: string;
+  kind: PlaceKind;
+  confirmed: boolean;
+  returnTo?: string;
+}) {
+  // "Hotel" is only for a hotel's own place, which Hotels creates; offering it elsewhere would always be refused.
+  const options = kind === "hotel" ? KIND_OPTIONS : KIND_OPTIONS.filter((option) => option.value !== "hotel");
   return (
     <form action={setPlaceKindAction.bind(null, placeId)} className="flex flex-wrap items-end gap-2">
+      <ReturnTo path={returnTo} />
       <div className="min-w-[14rem] flex-1">
         <Select label={confirmed ? "Kind" : "Kind (suggested, not confirmed yet)"} name="kind" id={`kind-${placeId}`} defaultValue={kind}>
-          {KIND_OPTIONS.map((option) => (
+          {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -66,11 +85,15 @@ export function ContractControls({
   kind,
   contracts,
   now,
+  placeName,
+  returnTo,
 }: {
   placeId: string;
   kind: PlaceKind;
   contracts: AtlasPartnerContract[];
   now: Date;
+  placeName: string;
+  returnTo?: string;
 }) {
   const hasOpen = contracts.some((contract) => contract.status === "pending_review" || contract.status === "active");
 
@@ -89,6 +112,7 @@ export function ContractControls({
 
           {(contract.status === "pending_review" || contract.status === "suspended") && (
             <form action={confirmContractAction.bind(null, contract.id)} className="flex flex-wrap items-end gap-2">
+              <ReturnTo path={returnTo} />
               <Field label="Starts (UTC date, optional)" name="startsAt" id={`startsAt-${contract.id}`} type="date" defaultValue={isoDate(contract.startsAt)} />
               <Field label="Ends (UTC date, optional)" name="endsAt" id={`endsAt-${contract.id}`} type="date" defaultValue={isoDate(contract.endsAt)} />
               <Button type="submit">{contract.status === "suspended" ? "Resume contract" : "Confirm contract"}</Button>
@@ -98,16 +122,18 @@ export function ContractControls({
           <div className="flex flex-wrap gap-2">
             {contract.status === "active" && (
               <form action={suspendContractAction.bind(null, contract.id)}>
-                <Button variant="secondary" type="submit">
+                <ReturnTo path={returnTo} />
+                <ConfirmSubmit variant="secondary" confirm={`Suspend the Atlas contract with ${placeName}? You can resume it later.`}>
                   Suspend
-                </Button>
+                </ConfirmSubmit>
               </form>
             )}
             {contract.status !== "ended" && (
               <form action={endContractAction.bind(null, contract.id)}>
-                <Button variant="danger" type="submit">
+                <ReturnTo path={returnTo} />
+                <ConfirmSubmit confirm={`End the Atlas contract with ${placeName}? An ended contract can't be resumed; a new one would need review.`}>
                   End contract
-                </Button>
+                </ConfirmSubmit>
               </form>
             )}
           </div>
@@ -116,6 +142,7 @@ export function ContractControls({
 
       {kind === "business" && !hasOpen && (
         <form action={proposeContractAction.bind(null, placeId)}>
+          <ReturnTo path={returnTo} />
           <Button variant="secondary" type="submit">
             {contracts.length === 0 ? "Propose an Atlas contract" : "Propose a new contract"}
           </Button>

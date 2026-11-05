@@ -1,7 +1,8 @@
 import "server-only";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { qrCredentials, type QrCredential, type QrPurpose } from "@/db/schema";
+import { hotels, places, qrCredentials, type QrCredential, type QrPurpose } from "@/db/schema";
 
 /** Resolution is by hash only — the raw token is never stored, so there is nothing else to look up by. */
 export async function findQrCredentialByHash(tokenHash: string): Promise<QrCredential | null> {
@@ -79,4 +80,29 @@ export async function revokeQrCredential(credentialId: string): Promise<QrCreden
     .where(and(eq(qrCredentials.id, credentialId), isNull(qrCredentials.revokedAt)))
     .returning();
   return row ?? null;
+}
+
+/**
+ * Every live code with what it opens, for the admin QR list. Never the token: only its hash exists. A hotel
+ * code names the hotel (through its place); a check-in code names its place.
+ */
+export async function listActiveQrCredentialsForAdmin() {
+  const hotelPlace = alias(places, "hotel_place");
+  return db
+    .select({
+      id: qrCredentials.id,
+      purpose: qrCredentials.purpose,
+      hotelId: qrCredentials.hotelId,
+      placeId: qrCredentials.placeId,
+      createdAt: qrCredentials.createdAt,
+      expiresAt: qrCredentials.expiresAt,
+      hotelName: hotelPlace.name,
+      placeName: places.name,
+    })
+    .from(qrCredentials)
+    .leftJoin(hotels, eq(qrCredentials.hotelId, hotels.id))
+    .leftJoin(hotelPlace, eq(hotels.placeId, hotelPlace.id))
+    .leftJoin(places, eq(qrCredentials.placeId, places.id))
+    .where(isNull(qrCredentials.revokedAt))
+    .orderBy(desc(qrCredentials.createdAt));
 }

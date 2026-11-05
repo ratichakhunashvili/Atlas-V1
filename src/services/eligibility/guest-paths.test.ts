@@ -105,6 +105,12 @@ describe("no guest-facing code can read Places without eligibility", () => {
        * decides no eligibility (services/eligibility does not read contracts or kinds in phase C1).
        */
       "db/operations/atlas-contracts.ts",
+      /*
+       * ADMIN QR list: joins places for the NAME of what each live code opens (a hotel's place, or a check-in
+       * place). Admin-only, behind requireAdmin(); returns no Place to a guest, decides no eligibility, and never
+       * selects the token hash (pinned by services/qr/secret-handling.test.ts).
+       */
+      "db/queries/qr-credentials.ts",
     ]);
     const users = files.filter((f) => /\.(from|innerJoin|leftJoin)\(places\b/.test(f.text) && !f.path.endsWith(".test.ts"));
     for (const f of users) assert.ok(allowed.has(f.path), `${f.path} reads the places table directly; route guest reads through services/eligibility`);

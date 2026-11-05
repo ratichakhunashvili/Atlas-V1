@@ -3,7 +3,10 @@ import { Alert } from "@/components/shared/alert";
 import { Card } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { listAdvisorTestScenarios, SCENARIO_LABELS, type ScenarioType } from "@/services/advisor-testing/scenario";
+import { developmentToolsBlocked } from "@/services/deployment/environment";
 import { CreateScenarioForm } from "./create-scenario-form";
+
+export const metadata = { title: "Advisor testing" };
 
 export default async function AdvisorTestingDashboardPage({
   searchParams,
@@ -11,6 +14,17 @@ export default async function AdvisorTestingDashboardPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+
+  // Scenario tools write real rows, so on the live site this page only says so (the actions refuse too).
+  if (developmentToolsBlocked(process.env.NODE_ENV, process.env.ATLAS_DEPLOYMENT_ENV)) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-semibold">Advisor testing</h1>
+        <p className="text-sm text-slate-500">Advisor testing is turned off on this deployment. It runs on local and development builds only.</p>
+      </div>
+    );
+  }
+
   const scenarios = await listAdvisorTestScenarios();
 
   return (
@@ -21,9 +35,9 @@ export default async function AdvisorTestingDashboardPage({
         the guest-facing product.
       </Alert>
 
-      <h1 className="text-2xl font-semibold">Advisor Testing</h1>
+      <h1 className="text-xl font-semibold">Advisor testing</h1>
 
-      {error && <Alert>{decodeURIComponent(error)}</Alert>}
+      {error && <Alert>{error}</Alert>}
 
       <Card className="space-y-1 text-sm">
         <h2 className="font-medium">System status</h2>

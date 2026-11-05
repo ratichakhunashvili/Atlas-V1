@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { HOTEL_NAMES, PARTNERSHIP_STATUSES, PLACE_NAMES } from "@/components/admin/fixtures";
 import { AdminFormCard, AdminInput, AdminSelect, AdminTextarea, FormActions, FormRow } from "@/components/admin/form-parts";
 import { AdminPageHeader } from "@/components/admin/page-parts";
+import { sampleScreenOrRedirect } from "@/components/admin/sample-screen";
 
 /* AdminPartnershipForm · Partnership: link or edit — Figma frame 70:1311. */
 
 export const metadata: Metadata = { title: "Admin · Link a place to a hotel" };
 
 export default function AdminPartnershipFormPage() {
+  sampleScreenOrRedirect("/admin/partners");
   return (
     <>
       <AdminPageHeader

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ContractControls, PlaceKindForm, contractLabel } from "@/components/admin/contract-controls";
+import { ContractControls, PlaceKindForm } from "@/components/admin/contract-controls";
 import { AdminFlash, AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
 import { Card } from "@/components/shared/card";
 import { listCatalogueForAdmin } from "@/db/queries/atlas-contracts";
@@ -12,6 +12,10 @@ import { listCatalogueForAdmin } from "@/db/queries/atlas-contracts";
  * Phase C1 changes no guest behaviour. Guests still see only their hotel's facilities and confirmed hotel partners;
  * contracts and kinds start deciding visibility in phase C2.
  */
+
+function categoryLabel(category: string) {
+  return category.charAt(0).toUpperCase() + category.slice(1).replaceAll("_", " ");
+}
 
 export const metadata: Metadata = { title: "Atlas contracts" };
 export const dynamic = "force-dynamic";
@@ -46,7 +50,7 @@ export default async function AdminContractsPage({ searchParams }: { searchParam
                 <Link href={`/admin/places/${place.id}`} className="underline">
                   {place.name}
                 </Link>{" "}
-                <span className="text-xs font-normal text-slate-500">({place.category})</span>
+                <span className="text-xs font-normal text-slate-500">({categoryLabel(place.category)})</span>
               </p>
               <PlaceKindForm placeId={place.id} kind={place.kind} confirmed={false} />
             </Card>
@@ -59,16 +63,13 @@ export default async function AdminContractsPage({ searchParams }: { searchParam
         {businesses.length === 0 ? <p className="text-sm text-slate-500">No businesses yet.</p> : null}
         {businesses.map(({ place, contracts }) => (
           <Card key={place.id} className="space-y-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="font-medium text-slate-900">
-                <Link href={`/admin/places/${place.id}`} className="underline">
-                  {place.name}
-                </Link>{" "}
-                <span className="text-xs font-normal text-slate-500">({place.category})</span>
-              </p>
-              <p className="text-xs text-slate-500">{contracts[0] ? contractLabel(contracts[0], now) : "No contract"}</p>
-            </div>
-            <ContractControls placeId={place.id} kind={place.kind} contracts={contracts} now={now} />
+            <p className="font-medium text-slate-900">
+              <Link href={`/admin/places/${place.id}`} className="underline">
+                {place.name}
+              </Link>{" "}
+              <span className="text-xs font-normal text-slate-500">({categoryLabel(place.category)})</span>
+            </p>
+            <ContractControls placeId={place.id} placeName={place.name} kind={place.kind} contracts={contracts} now={now} />
           </Card>
         ))}
       </section>

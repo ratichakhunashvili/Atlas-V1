@@ -1,8 +1,9 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { PG_UNIQUE_VIOLATION, hasPgErrorCode } from "@/db/errors";
-import { hotelFacilities, places, type FacilityStatus, type FacilityType, type HotelFacility } from "@/db/schema";
+import { hotelFacilities, hotels, places, type FacilityStatus, type FacilityType, type HotelFacility } from "@/db/schema";
 import type { FacilityRow } from "@/services/eligibility/rules";
 
 /** Every facility row (all statuses) owned by ONE hotel, with its Place — rules.ts decides eligibility. */
@@ -30,6 +31,18 @@ export async function listFacilitiesForAdmin(hotelId: string) {
     .orderBy(desc(hotelFacilities.createdAt));
 }
 export type AdminFacilityRow = Awaited<ReturnType<typeof listFacilitiesForAdmin>>[number];
+
+/** Every facility of every hotel, with the hotel's name, for the cross-hotel admin list. */
+export async function listAllFacilitiesForAdmin() {
+  const hotelPlace = alias(places, "hotel_place");
+  return db
+    .select({ facility: hotelFacilities, place: places, hotelId: hotels.id, hotelName: hotelPlace.name })
+    .from(hotelFacilities)
+    .innerJoin(places, eq(hotelFacilities.placeId, places.id))
+    .innerJoin(hotels, eq(hotelFacilities.hotelId, hotels.id))
+    .innerJoin(hotelPlace, eq(hotels.placeId, hotelPlace.id))
+    .orderBy(asc(hotelPlace.name), asc(places.name));
+}
 
 export async function findFacilityById(id: string): Promise<HotelFacility | null> {
   const [row] = await db.select().from(hotelFacilities).where(eq(hotelFacilities.id, id)).limit(1);

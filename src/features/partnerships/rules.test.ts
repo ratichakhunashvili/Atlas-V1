@@ -57,22 +57,31 @@ describe("confirmPartnershipSchema", () => {
 });
 
 describe("partner / facility candidate validation keeps the two concepts distinct", () => {
-  const place = { id: "p", archivedAt: null };
+  const place = { id: "p", archivedAt: null, kind: "business" as const };
+  const facts = { isHotelAnchor: false };
 
   test("a normal external Place can be proposed as a partner", () => {
-    assert.equal(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: false }), null);
+    assert.equal(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: false, ...facts }), null);
   });
 
   test("an archived Place, the hotel itself, or a hotel-owned facility can't be an external partner", () => {
-    assert.ok(validatePartnerCandidate({ hotelPlaceId: "hotel", place: { ...place, archivedAt: NOW }, isHotelFacility: false }));
-    assert.ok(validatePartnerCandidate({ hotelPlaceId: "p", place, isHotelFacility: false }));
-    assert.ok(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: true }));
+    assert.ok(validatePartnerCandidate({ hotelPlaceId: "hotel", place: { ...place, archivedAt: NOW }, isHotelFacility: false, ...facts }));
+    assert.ok(validatePartnerCandidate({ hotelPlaceId: "p", place, isHotelFacility: false, ...facts }));
+    assert.ok(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: true, ...facts }));
   });
 
   test("a Place with partnership records, an archived Place, or the hotel itself can't be a hotel-owned facility", () => {
-    assert.equal(validateFacilityCandidate({ hotelPlaceId: "hotel", place, hasPartnershipRows: false }), null);
-    assert.ok(validateFacilityCandidate({ hotelPlaceId: "hotel", place, hasPartnershipRows: true }));
-    assert.ok(validateFacilityCandidate({ hotelPlaceId: "hotel", place: { ...place, archivedAt: NOW }, hasPartnershipRows: false }));
-    assert.ok(validateFacilityCandidate({ hotelPlaceId: "p", place, hasPartnershipRows: false }));
+    assert.equal(validateFacilityCandidate({ hotelPlaceId: "hotel", place, hasPartnershipRows: false, ...facts }), null);
+    assert.ok(validateFacilityCandidate({ hotelPlaceId: "hotel", place, hasPartnershipRows: true, ...facts }));
+    assert.ok(validateFacilityCandidate({ hotelPlaceId: "hotel", place: { ...place, archivedAt: NOW }, hasPartnershipRows: false, ...facts }));
+    assert.ok(validateFacilityCandidate({ hotelPlaceId: "p", place, hasPartnershipRows: false, ...facts }));
+  });
+
+  test("another hotel is never a partner or a facility, whether marked by its kind or as a hotel's own place", () => {
+    const hotelKind = { ...place, kind: "hotel" as const };
+    assert.match(validatePartnerCandidate({ hotelPlaceId: "hotel", place: hotelKind, isHotelFacility: false, isHotelAnchor: false }) ?? "", /hotel/);
+    assert.match(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: false, isHotelAnchor: true }) ?? "", /hotel/);
+    assert.match(validateFacilityCandidate({ hotelPlaceId: "hotel", place: hotelKind, hasPartnershipRows: false, isHotelAnchor: false }) ?? "", /hotel/);
+    assert.match(validateFacilityCandidate({ hotelPlaceId: "hotel", place, hasPartnershipRows: false, isHotelAnchor: true }) ?? "", /hotel/);
   });
 });

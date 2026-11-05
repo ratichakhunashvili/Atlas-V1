@@ -2,27 +2,19 @@ import Link from "next/link";
 import { PlaceForm } from "@/components/places/place-form";
 import { Alert } from "@/components/shared/alert";
 import { adminListDuplicateCandidates } from "@/db/queries/places";
-import { PLACE_CATEGORIES, PUBLICATION_STATUSES, VERIFICATION_STATUSES, type Place } from "@/db/schema";
 import { createPlaceAction } from "@/features/places/actions";
+import { placePrefill } from "@/features/places/prefill";
 import { findLikelyDuplicates, type DuplicateMatch } from "@/services/catalog/duplicates";
 
 type SearchParams = Record<string, string | undefined>;
-
-function oneOf<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {
-  return value !== undefined && (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
-}
-
-function number(value: string | undefined): number | undefined {
-  if (value === undefined || value === "") return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
 
 const REASON_LABEL: Record<DuplicateMatch["reasons"][number], string> = {
   same_name: "same name",
   similar_name: "very similar name",
   nearby: "very close by",
 };
+
+export const metadata = { title: "New place" };
 
 /**
  * The create page. After a duplicate warning the admin lands back here with their values pre-filled (carried in
@@ -32,22 +24,7 @@ const REASON_LABEL: Record<DuplicateMatch["reasons"][number], string> = {
 export default async function NewPlacePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
 
-  const prefill: Partial<Place> = {
-    name: params.name,
-    description: params.description ?? null,
-    latitude: number(params.latitude),
-    longitude: number(params.longitude),
-    category: oneOf(params.category, PLACE_CATEGORIES),
-    address: params.address ?? null,
-    imageUrl: params.imageUrl ?? null,
-    website: params.website ?? null,
-    phone: params.phone ?? null,
-    visitDurationMinutes: number(params.visitDurationMinutes) ?? null,
-    priceLevel: number(params.priceLevel) ?? null,
-    priceLevelSource: params.priceLevelSource ?? null,
-    publicationStatus: oneOf(params.publicationStatus, PUBLICATION_STATUSES),
-    verificationStatus: oneOf(params.verificationStatus, VERIFICATION_STATUSES),
-  };
+  const prefill = placePrefill(params);
 
   const warned = params.duplicates === "1" && prefill.name && prefill.latitude !== undefined && prefill.longitude !== undefined;
   const matches = warned
@@ -59,7 +36,12 @@ export default async function NewPlacePage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="max-w-xl space-y-6">
-      <h1 className="text-xl font-semibold">New place</h1>
+      <div>
+        <Link href="/admin/places" className="atlas-hit inline-block text-sm text-slate-600 underline">
+          ← Places
+        </Link>
+        <h1 className="mt-2 text-xl font-semibold">New place</h1>
+      </div>
 
       {matches.length > 0 && (
         <section aria-labelledby="duplicates-title" className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4">

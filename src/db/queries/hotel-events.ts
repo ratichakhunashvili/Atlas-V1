@@ -69,7 +69,8 @@ export async function cancelHotelEvent(eventId: string, hotelId: string): Promis
   const [updated] = await db
     .update(hotelEvents)
     .set({ status: "cancelled", updatedAt: new Date() })
-    .where(and(eq(hotelEvents.id, eventId), eq(hotelEvents.hotelId, hotelId)))
+    // Compare-and-set: only a still-scheduled event is cancelled, so a stale page or a double click changes nothing.
+    .where(and(eq(hotelEvents.id, eventId), eq(hotelEvents.hotelId, hotelId), eq(hotelEvents.status, "scheduled")))
     .returning();
   return updated ?? null;
 }

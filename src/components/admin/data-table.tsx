@@ -113,3 +113,12 @@ export function RowAction({
     </AtlasLink>
   );
 }
+
+/** A row's name as a link to its editor, so the teal row title does what it looks like it does. */
+export function RowTitleLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className="atlas-hit underline-offset-[3px] hover:underline">
+      {children}
+    </Link>
+  );
+}

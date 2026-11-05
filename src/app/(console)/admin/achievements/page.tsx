@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AdminTable, RowAction } from "@/components/admin/data-table";
+import { AdminTable, RowAction, RowTitleLink } from "@/components/admin/data-table";
 import { AdminFlash, AdminHeaderAction, AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
 import { StatusPill } from "@/components/admin/status-pill";
 import { listAchievementsWithUsage } from "@/db/queries/achievements";
@@ -43,13 +43,16 @@ export default async function AdminAchievementsPage({
             { label: "Unlocks", width: 90 },
             { label: "Actions", hidden: true },
           ]}
-          rows={rows.map(({ achievement, placeName, placeArchivedAt, unlocks }) => ({
+          rows={rows.map(({ achievement, placeName, placeArchivedAt, placePublished, unlocks }) => ({
             key: achievement.id,
             cells: [
-              achievement.name,
+              <RowTitleLink key="name" href={`/admin/achievements/${achievement.id}`}>
+                {achievement.name}
+              </RowTitleLink>,
               placeName,
               "Verified check-in",
-              <StatusPill key="status" status={placeArchivedAt ? "Archived" : "Active"} />,
+              // Guests can only earn it at a place they can see: archived, or not yet published and verified, means not live.
+              <StatusPill key="status" status={placeArchivedAt ? "Archived" : placePublished ? "Active" : "Inactive"} />,
               unlocks,
               <RowAction key="edit" href={`/admin/achievements/${achievement.id}`} label={`Edit ${achievement.name}`}>
                 Edit
@@ -58,7 +61,9 @@ export default async function AdminAchievementsPage({
           }))}
         />
       )}
-      <AdminNote>{"Camera view unlock is still a prototype, so it isn't offered here."}</AdminNote>
+      <AdminNote>
+        {"Inactive means the place isn't published and verified yet, so no guest can earn it. Camera view unlock is still a prototype, so it isn't offered here."}
+      </AdminNote>
     </>
   );
 }

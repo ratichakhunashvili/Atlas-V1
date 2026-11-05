@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AdminTable, MutedCell, RowAction } from "@/components/admin/data-table";
+import { AdminTable, MutedCell, RowAction, RowTitleLink } from "@/components/admin/data-table";
 import { AdminFlash, AdminHeaderAction, AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
 import { StatusPill, type AdminStatus } from "@/components/admin/status-pill";
 import { listPlaces } from "@/db/queries/places";
@@ -24,17 +24,19 @@ function placeStatus(place: { archivedAt: Date | null; publicationStatus: string
   return place.publicationStatus === "published" ? "Published" : "Draft";
 }
 
-export default async function AdminPlacesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const [{ error }, places] = await Promise.all([searchParams, listPlaces()]);
+const KIND_LABEL = { business: "Business", attraction: "Attraction", hotel: "Hotel" } as const;
+
+export default async function AdminPlacesPage({ searchParams }: { searchParams: Promise<{ error?: string; ok?: string }> }) {
+  const [{ error, ok }, places] = await Promise.all([searchParams, listPlaces()]);
 
   return (
     <>
       <AdminPageHeader
         title="Places"
-        description="The places Atlas knows about. A hotel only shows one it has a partnership with."
+        description="Every place Atlas knows about. Today a guest sees a place only when it is published, verified, and their hotel's own facility or confirmed partner."
         action={<AdminHeaderAction href="/admin/places/new">New place</AdminHeaderAction>}
       />
-      <AdminFlash error={error} />
+      <AdminFlash ok={ok} error={error} />
       {places.length === 0 ? (
         <AdminNote>No places yet.</AdminNote>
       ) : (
@@ -42,6 +44,7 @@ export default async function AdminPlacesPage({ searchParams }: { searchParams: 
           caption="Places"
           columns={[
             { label: "Name", width: 230 },
+            { label: "Kind", width: 110 },
             { label: "Category", width: 140 },
             { label: "Price level", width: 120 },
             { label: "Verified", width: 120 },
@@ -51,7 +54,10 @@ export default async function AdminPlacesPage({ searchParams }: { searchParams: 
           rows={places.map((place) => ({
             key: place.id,
             cells: [
-              place.name,
+              <RowTitleLink key="name" href={`/admin/places/${place.id}`}>
+                {place.name}
+              </RowTitleLink>,
+              place.kindConfirmedAt ? KIND_LABEL[place.kind] : <MutedCell>{KIND_LABEL[place.kind]}?</MutedCell>,
               label(place.category),
               place.priceLevel ? PRICE_LEVELS[place.priceLevel] : <MutedCell>Not set</MutedCell>,
               place.verificationStatus === "verified" ? <StatusPill status="Verified" /> : <MutedCell>Not verified</MutedCell>,

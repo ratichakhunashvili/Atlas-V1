@@ -7,6 +7,8 @@ import { createFacility, findFacilityById, setFacilityStatus } from "@/db/querie
 import { findHotelById } from "@/db/queries/hotels";
 import { placeHasPartnershipRows } from "@/db/queries/hotel-partnerships";
 import { findPlaceById } from "@/db/queries/places";
+import { db } from "@/db";
+import { loadContractFacts } from "@/db/operations/atlas-contracts";
 import type { FacilityStatus } from "@/db/schema";
 import { validateFacilityCandidate } from "@/features/partnerships/rules";
 import { addFacilitySchema, facilityIdSchema, hotelIdSchema } from "./schema";
@@ -46,6 +48,7 @@ export async function addFacilityAction(hotelId: string, formData: FormData) {
     hotelPlaceId: hotel.placeId,
     place,
     hasPartnershipRows: await placeHasPartnershipRows(place.id),
+    isHotelAnchor: (await loadContractFacts(db, place.id)).isHotelAnchor,
   });
   if (problem) finish(hotel.id, { error: problem });
 

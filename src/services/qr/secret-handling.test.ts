@@ -98,8 +98,12 @@ test("admin screens report only whether a credential exists", () => {
     assert.doesNotMatch(source, /tokenHash/, `${page} must never pass a credential hash to the client`);
   }
 
-  const table = read("src/components/hotel/hotel-table.tsx");
-  assert.doesNotMatch(table, /hotel\.qrToken/, "the hotel list must not render a raw token");
+  // The cross-hotel QR list names what each code opens, never the code or its hash.
+  const list = read("src/app/(console)/admin/qr/page.tsx");
+  assert.doesNotMatch(list, /tokenHash|qrToken/, "the QR list must not render a token or a hash");
+  const listQuery = read("src/db/queries/qr-credentials.ts");
+  const listFunction = listQuery.slice(listQuery.indexOf("export async function listActiveQrCredentialsForAdmin"));
+  assert.doesNotMatch(listFunction, /tokenHash/, "the QR list query must not select the hash");
 });
 
 test("the one-time reveal keeps the raw token in client memory only", () => {

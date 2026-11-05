@@ -99,11 +99,27 @@ export function QrCredentialPanel({
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" disabled={pending} onClick={() => run(issue)}>
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={() => {
+            // Replacing a code stops the printed one at once, so that case asks first.
+            if (hasActiveCredential && !window.confirm("Issue a new code? The current printed code stops working immediately.")) return;
+            run(issue);
+          }}
+        >
           {hasActiveCredential ? "Issue new code (revokes current)" : "Issue code"}
         </Button>
         {hasActiveCredential && (
-          <Button type="button" variant="secondary" disabled={pending} onClick={() => run(revoke)}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() => {
+              if (!window.confirm("Revoke this code? The printed code stops working immediately.")) return;
+              run(revoke);
+            }}
+          >
             Revoke
           </Button>
         )}

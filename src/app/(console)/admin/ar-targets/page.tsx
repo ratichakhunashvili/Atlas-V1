@@ -1,11 +1,11 @@
 import { Alert } from "@/components/shared/alert";
-import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { listArTargetsForAdmin } from "@/db/queries/place-ar-targets";
 import { listPlaces } from "@/db/queries/places";
 import { deleteArTargetAction } from "@/features/ar-targets/actions";
 import { ArTargetForm } from "./ar-target-form";
+import { ConfirmSubmit } from "@/components/admin/confirm-submit";
 
 /**
  * Camera references for AR check-in.
@@ -15,6 +15,8 @@ import { ArTargetForm } from "./ar-target-form";
  * open is never holding something a guest could submit as a match. The admin sees
  * the fingerprint of an image only at the moment their own browser computes it.
  */
+export const metadata = { title: "Camera references" };
+
 export default async function AdminArTargetsPage({
   searchParams,
 }: {
@@ -76,9 +78,9 @@ export default async function AdminArTargetsPage({
                 </div>
                 <form action={deleteArTargetAction}>
                   <input type="hidden" name="id" value={row.id} />
-                  <Button type="submit" variant="secondary">
+                  <ConfirmSubmit variant="secondary" confirm="Remove this camera reference? Guests at that place can no longer check in with the camera.">
                     Remove
-                  </Button>
+                  </ConfirmSubmit>
                 </form>
               </li>
             ))}

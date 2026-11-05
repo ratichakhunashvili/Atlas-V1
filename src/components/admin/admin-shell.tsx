@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { AtlasLogo } from "@/components/atlas-ui/asset";
 import { adminLogoutAction } from "@/auth/actions";
+import { developmentToolsBlocked } from "@/services/deployment/environment";
 import { AdminNav } from "./admin-nav";
 
 /*
  * Admin shell — the 240px Deep Teal sidebar shared by every admin frame from AdminHotels (70:811)
- * to AdminAchievementForm (70:2027): brand, six sections, then the signed-in email and
+ * to AdminAchievementForm (70:2027): brand, the grouped sections, then the signed-in email and
  * Sign out (ends the session, then admin sign-in) at the bottom.
  *
  * From 1024px it is the sidebar as drawn. Below that the same pieces become a top bar: brand and
@@ -14,7 +15,7 @@ import { AdminNav } from "./admin-nav";
  */
 export function AdminShell({ email, children }: { email: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh w-full flex-col bg-atlas-paper lg:flex-row">
+    <div className="atlas-console flex min-h-dvh w-full flex-col bg-atlas-paper lg:flex-row">
       <aside className="atlas-dark flex shrink-0 flex-wrap items-center gap-x-[12px] gap-y-[4px] bg-atlas-teal px-[12px] pb-[8px] pt-[calc(8px+env(safe-area-inset-top))] lg:sticky lg:top-0 lg:h-dvh lg:w-[240px] lg:overflow-y-auto lg:flex-col lg:flex-nowrap lg:items-stretch lg:gap-[4px] lg:pb-[20px] lg:pt-[24px]">
         <div className="order-1 flex items-center gap-[10px] px-[8px] lg:pb-[16px]">
           <AtlasLogo tone="light" width={32} height={36} />
@@ -23,7 +24,10 @@ export function AdminShell({ email, children }: { email: string; children: React
             <p className="font-manrope text-[12px] leading-[16px] text-atlas-beige">Admin</p>
           </div>
         </div>
-        <AdminNav className="order-3 w-full lg:order-2" />
+        <AdminNav
+          className="order-3 w-full lg:order-2"
+          showDevTools={!developmentToolsBlocked(process.env.NODE_ENV, process.env.ATLAS_DEPLOYMENT_ENV)}
+        />
         <div aria-hidden className="hidden lg:order-3 lg:block lg:min-h-px lg:flex-1" />
         <div className="order-2 ml-auto flex items-center gap-[12px] px-[8px] lg:order-4 lg:ml-0 lg:flex-col lg:items-start lg:gap-[2px] lg:py-[12px]">
           <p className="hidden whitespace-nowrap font-manrope text-[12px] leading-[16px] text-atlas-beige sm:block">{email}</p>
