@@ -189,7 +189,7 @@ export async function getDailyPlanForUser(userId: string, now: Date = new Date()
   const eligible = await d.listEligiblePlacesForStay(stay, now);
 
   if (pending) {
-    // Still eligible through THIS hotel? A partnership revoked after the pick makes the stop unavailable.
+    // Still in this hotel's catalogue? A lapsed contract makes the stop unavailable; a lost partnership does not.
     const currentAvailable = pending.placeId !== null && eligible.some((entry) => entry.place.id === pending.placeId);
     return { ...base, status: "in_progress", current: toStopView(pending), currentAvailable };
   }

@@ -14,8 +14,9 @@ import { resolveVisitDuration } from "./visit-duration";
  * and walk back to the hotel inside the time they have left. Fewer than three fit -> fewer are offered; nothing
  * is ever added from outside the eligible pool.
  *
- * A partner this hotel has FEATURED gets one guaranteed slot when it fits. Featuring is ranking only: it never
- * makes a Place eligible, and a featured partner that does not fit the time or interests is not offered.
+ * At most one option is promoted by the hotel. A partner this hotel has FEATURED gets that slot when it fits.
+ * Promotion is ranking only: it never makes a Place eligible, and a promoted partner that does not fit the time
+ * or interests is not offered.
  */
 
 export const CHOICES_PER_STEP = 3;
@@ -89,7 +90,12 @@ function fits(candidate: AdvisorCandidate, origin: LatLng, hotelLocation: LatLng
   return needed <= remainingMinutes;
 }
 
-/** Up to three options, the featured one (if any) first, then the rest in ranking order. */
+/**
+ * Up to three options, at most ONE of them promoted by the hotel (decision 4 of docs/catalogue-model-plan.md):
+ * the featured partner first if it fits; otherwise a promoted option appears only where its bounded ranking puts
+ * it. The other slots go to unpromoted candidates in ranking order. A second promoted option is offered only when
+ * no unpromoted candidate is left to fill the slot — never in place of one.
+ */
 export function buildDailyChoices(input: BuildDailyChoicesInput): DailyChoice[] {
   const entryById = new Map(input.eligiblePlaces.map((entry) => [entry.place.id, entry]));
 
@@ -105,10 +111,17 @@ export function buildDailyChoices(input: BuildDailyChoicesInput): DailyChoice[] 
   );
 
   const ranked = rankCandidates(candidates, input.usageHistory, { budget: input.budget });
+  const isPromoted = (candidate: AdvisorCandidate) => entryById.get(candidate.place.id)?.promotion != null;
 
   const chosen: AdvisorCandidate[] = [];
   const featured = ranked.find((candidate) => entryById.get(candidate.place.id)?.promotion?.featured === true);
   if (featured) chosen.push(featured);
+  for (const candidate of ranked) {
+    if (chosen.length >= CHOICES_PER_STEP) break;
+    if (chosen.includes(candidate) || (isPromoted(candidate) && chosen.some(isPromoted))) continue;
+    chosen.push(candidate);
+  }
+  // Only when the unpromoted pool ran out: a further promoted option rather than an empty slot.
   for (const candidate of ranked) {
     if (chosen.length >= CHOICES_PER_STEP) break;
     if (!chosen.includes(candidate)) chosen.push(candidate);

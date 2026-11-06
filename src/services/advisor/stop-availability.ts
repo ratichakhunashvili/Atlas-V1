@@ -19,9 +19,13 @@ import { calculateDayNumber, stayEndFor } from "./stay-day";
  *  - the guest has a valid active stay (open, started, not ended);
  *  - the stop's day belongs to THAT stay and hotel, and is the stay's CURRENT day;
  *  - the stop still points at a Place (it was not deleted);
- *  - that Place is in the eligible set of the stay's hotel (services/eligibility): active
- *    facility or active, confirmed, in-window partnership, with the Place published,
- *    verified and not archived.
+ *  - that Place is in the Atlas catalogue for the stay's hotel (services/eligibility): an
+ *    attraction, a business with an active, confirmed, in-window Atlas contract, or an active
+ *    facility of that hotel, with the Place published, verified and not archived.
+ *
+ * The causes are the catalogue's (docs/catalogue-model-plan.md §4): a lapsed contract, an
+ * unpublished attraction or an inactive facility makes a stop unavailable. Losing a hotel
+ * PARTNERSHIP only removes the promotion; the stop stays available.
  *
  * Completed stops are NEVER re-evaluated: history and completed visits are untouched.
  */
