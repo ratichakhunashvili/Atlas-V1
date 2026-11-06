@@ -158,12 +158,12 @@ export function GuestAppShell({
               {hotelName ? (
                 <>
                   <p className="atlas-panel-copy">
-                    Recommendations come from this hotel&apos;s facilities and its approved local partners.
+                    Recommendations come from this hotel&apos;s facilities, attractions and Atlas partner places.
                   </p>
                   {checkIn && <p className="atlas-panel-meta">Checked in {formatDate(checkIn)}</p>}
                   {stayDates && <StayDatesForm stay={stayDates} />}
                   <Link className="atlas-panel-link" href="/experiences" onClick={() => setPanel(null)}>
-                    Browse approved experiences <Icon name="arrow" />
+                    Browse experiences <Icon name="arrow" />
                   </Link>
                 </>
               ) : (

@@ -50,7 +50,7 @@ function Building({ hotelName }: { hotelName: string }) {
       <AtlasAsset src="/atlas-ui/spinner-plan.svg" width={120} height={120} className="motion-safe:animate-[spin_1.6s_linear_infinite]" />
       <h1 className={`w-full max-w-[480px] text-center ${type.title}`}>Planning your time…</h1>
       <p className={`w-full max-w-[480px] text-center ${type.body} text-atlas-slate`}>
-        Checking {hotelName}&apos;s approved places, walk times and your way back.
+        Checking places around {hotelName}, walk times and your way back.
       </p>
     </div>
   );
@@ -104,7 +104,7 @@ export function PreferencesForm({
             <p className={`w-full ${type.body} text-atlas-slate`}>
               {editing
                 ? "Changes apply to your next plan. Today's plan stays as it is."
-                : `First, tell us about today. We'll offer you three things to do at a time, from ${hotelName} and the places it has approved — up to four a day.`}
+                : `First, tell us about today. We'll offer you three things to do at a time, from ${hotelName} and the places around it — up to four a day.`}
             </p>
           </div>
 

@@ -120,7 +120,7 @@ const GROUPS: readonly IndexGroup[] = [
       { title: "My plan, Partner Place 4 added", subtitle: "Runs over: the time warning", screen: "MyPlanAddedP4" },
       { title: "Remove a stop", subtitle: "The confirmation dialog", screen: "RepairConfirm" },
       { title: "Delete account", subtitle: "The confirmation dialog", screen: "PrivacyDelete" },
-      { title: "Terms and privacy, signed out", subtitle: "Placeholders until approved text exists", screen: "PrivacyPublic" },
+      { title: "Terms and privacy, signed out", subtitle: "Placeholders until the final text exists", screen: "PrivacyPublic" },
     ],
   },
   {

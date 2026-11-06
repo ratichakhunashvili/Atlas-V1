@@ -18,7 +18,7 @@ export default function StayConfirmedPage() {
       <p className="w-full font-manrope text-[16px] leading-[25px] text-atlas-ink">You&apos;re staying until [check-out date].</p>
       <StayCard title="Hotel A" dates="[check-in] – [check-out] · Night 1 of 3" />
       <p className="w-full font-manrope text-[13px] leading-[20px] text-atlas-slate">
-        Atlas will show Hotel A&apos;s own facilities and the places it has approved.
+        Atlas will show Hotel A&apos;s own facilities and the places around it.
       </p>
     </ConfirmationScreen>
   );

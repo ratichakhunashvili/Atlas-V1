@@ -624,8 +624,8 @@ export async function generateItineraryForUser(
       reason: "no_eligible_experiences",
       message:
         eligiblePlaces.length === 0
-          ? `${stay.place.name} doesn't have any approved facilities or partners available yet.`
-          : "None of your hotel's approved experiences match your interests within walking distance. Try different interests.",
+          ? `${stay.place.name} has nothing available nearby yet.`
+          : "None of the places within walking distance match your interests. Try different interests.",
     };
   }
 

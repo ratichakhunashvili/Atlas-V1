@@ -127,7 +127,7 @@ export function unavailableMessage(reason: StopUnavailableReason): string {
       return "This stop belongs to a different day's route.";
     case "place_removed":
     case "not_eligible":
-      return "This stop is no longer available through your hotel.";
+      return "This stop is no longer available.";
   }
 }
 

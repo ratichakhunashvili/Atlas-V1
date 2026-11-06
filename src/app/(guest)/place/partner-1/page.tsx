@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { DetailActions, LivePlanChip, PartnerAchievementLive, PlanAction } from "@/components/atlas-ui/detail-live";
 import {
-  ApprovalRow,
+  RecommendedRow,
   DetailBody,
   DetailHero,
   DetailScreen,
@@ -29,7 +29,7 @@ export default function PartnerPlace1Page() {
     >
       <DetailBody variant="partner">
         <DetailTitle eyebrow="Partner · Food" name="Partner Place 1" gap={4}>
-          <ApprovalRow chip={<LivePlanChip place="partner-1" />} />
+          <RecommendedRow chip={<LivePlanChip place="partner-1" />} />
         </DetailTitle>
         <FactStrip
           facts={[

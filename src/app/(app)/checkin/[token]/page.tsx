@@ -63,7 +63,7 @@ export default async function CheckInPage({
               This code is for <span className="font-medium">{preview.hotel.name}</span>.
             </p>
             <p className="text-slate-600">
-              Starting your stay lets Atlas show you what {preview.hotel.name} has approved for its guests.
+              Starting your stay lets Atlas show you what to do around {preview.hotel.name}.
             </p>
             <form action={enterHotelFormAction.bind(null, token)}>
               <Button type="submit">Start my stay at {preview.hotel.name}</Button>

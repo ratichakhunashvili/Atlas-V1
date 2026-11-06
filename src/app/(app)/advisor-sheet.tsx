@@ -382,7 +382,7 @@ export function AdvisorSheet({
           ) : (
             <div className="mt-2 space-y-2">
               <p className="text-xs text-amber-900">
-                We&apos;ll replace only the unavailable stops with other approved experiences. Your completed stops and your other
+                We&apos;ll replace only the unavailable stops with other experiences. Your completed stops and your other
                 stops stay exactly as they are.
               </p>
               <div className="flex gap-2">

@@ -317,7 +317,7 @@ test("no eligible experiences returns a clear no_eligible_experiences result, pe
   if (!result.ok) {
     assert.equal(result.reason, "no_eligible_experiences");
     assert.match(result.message, new RegExp(hotelPlace.name));
-    assert.match(result.message, /approved facilities or partners/);
+    assert.match(result.message, /has nothing available nearby/);
   }
   assert.equal(await store.findItineraryDay(user.id, "hotel-1", 1, "stay-1"), null, "no empty day is saved");
   assert.equal(getRouteCallCount(), 0, "no routing call is made for an empty plan");

@@ -4,23 +4,19 @@ This document is a practical handoff summary of Atlas's product rules, architect
 
 ## Product in one paragraph
 
-Atlas is a mobile-first, hotel-anchored experience platform for people staying at a hotel. The hotel is the guest's context: Atlas may show that hotel's own eligible facilities and external experiences explicitly partnered with that same hotel. It is not a hotel-search engine, review site, generic tourism directory, or unrestricted nearby-places recommender. Its promise is: **“Tell us when you’re free. We’ll figure out what you can do.”** Georgia is the initial geographic focus.
+Atlas is a mobile-first, hotel-anchored experience platform for people staying at a hotel. The hotel is the guest's context and base: Atlas shows that hotel's own facilities, attractions, and businesses with an active Atlas contract, with the hotel's own partners promoted. It is not a hotel-search engine, review site, generic tourism directory, or unrestricted nearby-places recommender. Its promise is: **“Tell us when you’re free. We’ll figure out what you can do.”** Georgia is the initial geographic focus.
 
-> **Superseded product rule (2026-11-03).** The approved target model is the Atlas catalogue in
-> [`catalogue-model-plan.md`](catalogue-model-plan.md): every business with an active Atlas contract plus attractions are
-> discoverable by any hotel's guests, hotel facilities only by their own hotel, and hotel partnerships only add promotion.
-> The section below describes what the **code still enforces** until that plan's phases are implemented.
+## Guest eligibility rule as implemented (Atlas catalogue, phases C1–C5)
 
-## Guest eligibility rule as currently implemented
+The full model is in [`catalogue-model-plan.md`](catalogue-model-plan.md). A guest with a valid active stay may see:
 
-A guest may see only:
+1. **Atlas partners** (`source: "partner"`): Places of kind `business` with an active, explicitly confirmed, in-window Atlas contract, whatever hotel the guest is staying at.
+2. **Attractions** (`source: "attraction"`): Places of kind `attraction`, with no contract needed. Business category filters do not hide them.
+3. **Facilities** (`source: "facility"`): active facilities of the guest's own hotel only.
 
-1. A facility owned by the hotel in the guest's valid active stay; or
-2. An external Place with an explicit, currently eligible partnership with that exact hotel.
+Every Place must also be published, verified and not archived. Uncontracted businesses, pending/suspended/ended/expired contracts, other hotels and their facilities, nearby, popular, database-only and Mapbox-only Places are not eligible. Only the guest's own hotel appears on the map.
 
-For either source, the Place must be published, verified, and not archived. Facilities must also be active. Partnerships must be active, explicitly confirmed by an authorized admin, and within their optional start/end window. Pending-review, suspended, revoked, future, expired, unpublished, unverified, archived, nearby, popular, database-only, or Mapbox-only Places are not eligible.
-
-Each hotel-to-Place partnership is its own relationship. A Place partnered with Hotel A is not thereby partnered with Hotel B. If both hotels partner with it, both explicit rows are required. Facilities and external partnerships are separate concepts and tables.
+Hotel partnerships are promotion only: an active partnership with the guest's hotel sets a separate `promotion` field ("Recommended by <hotel>") and a bounded boost in plans, with at most one promoted option per 1-of-3. A partnership never makes a Place visible; losing one removes only the promotion, while losing the contract makes a planned stop unavailable. Guest screens never mention approval, contracts or commission (guarded by `src/app/guest-wording.test.ts`).
 
 The server-side source of truth is `src/services/eligibility/`:
 
@@ -76,10 +72,12 @@ Important source areas:
 
 ### Database model present in code
 
-The schema includes users, Places, hotels, hotel stays, user preferences, the frozen legacy `hotel_places` table, hotel partnerships, hotel facilities, itinerary days, and itinerary stops.
+The schema includes users, Places (with an admin-set `kind`: business, attraction or hotel), hotels, hotel stays, user preferences, the frozen legacy `hotel_places` table, Atlas partner contracts, hotel partnerships, hotel facilities, itinerary days, and itinerary stops.
+
+- `atlas_partner_contracts` holds each business's Atlas contract (pending_review, active, suspended, ended) with confirmation and dates; at most one active and one pending contract per Place.
 
 - A hotel is represented by a `hotels` row referencing its canonical Place.
-- `hotel_partnerships` represents an external Place's relationship with one hotel. The hotel/Place pair is unique; the relationship has status, optional dates, priority, and admin confirmation metadata.
+- `hotel_partnerships` represents a Place's promotional relationship with one hotel (promotion only, never visibility). The hotel/Place pair is unique; the relationship has status, optional dates, priority, and admin confirmation metadata.
 - `hotel_facilities` represents a Place owned by one hotel, with a validated facility type (pool, spa, sauna, gym, dining, room service, event, or other) and active/inactive status.
 - Places have publication and verification state and can be archived. Places referenced by partnership/facility history use `RESTRICT` deletion; archive instead. Itinerary stop snapshots preserve display/history data if a Place reference later disappears.
 - `hotel_stays` has at most one open stay per user, enforced with a partial unique index.

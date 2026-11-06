@@ -57,8 +57,8 @@ export default async function DemoExperiencesPage({
       {experiences.length === 0 ? (
         <div className="space-y-4">
           <EmptyState
-            title="No hotel-approved experiences match yet"
-            description={`${hotel.name} doesn’t have a facility or approved partner for these interests. Try different interests — we only show what your hotel has approved.`}
+            title="No experiences match yet"
+            description={`${hotel.name} has nothing nearby for these interests yet. Try different interests.`}
           />
           <Link href={`/demo/${token}?${buildPlanQuery({ interests, freeTimeMinutes: null })}`} className={`${buttonStyles.secondary} w-full`}>
             Change interests

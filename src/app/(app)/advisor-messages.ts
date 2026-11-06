@@ -27,7 +27,7 @@ export function generationFailureMessage(reason: GenerationFailureReason): strin
     case "no_preferences":
       return "Pick your interests in your profile before generating a plan.";
     case "no_eligible_experiences":
-      return "Your hotel has no approved facilities or partners that match your interests yet. Try different interests, or ask the front desk.";
+      return "Nothing near your hotel matches your interests yet. Try different interests, or ask the front desk.";
     case "no_plan_fits_time":
       return "Nothing your hotel offers fits the time you picked, including the walk back. Try a longer window.";
     case "routing_failed":
@@ -123,7 +123,7 @@ export function planRepairFailureMessage(reason: PlanRepairFailureReason): strin
     case "nothing_to_regenerate":
       return "None of your remaining stops is unavailable, so there is nothing to update.";
     case "no_replacement_available":
-      return "No other approved experience matches your interests right now. You can remove the unavailable stop to continue.";
+      return "No other experience matches your interests right now. You can remove the unavailable stop to continue.";
     case "routing_failed":
       return "We couldn't calculate walking directions right now, so your plan was not changed. Please try again.";
     case "conflict":

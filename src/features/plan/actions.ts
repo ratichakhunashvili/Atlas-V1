@@ -30,7 +30,7 @@ const START_MESSAGES: Record<Exclude<StartDayResult, { ok: true }>["reason"], st
   invalid_time: "Choose how much time you have.",
   no_preferences: "Pick at least one interest.",
   no_eligible_experiences:
-    "Your hotel hasn't approved any places that match these interests. Try different interests, or browse what it offers.",
+    "Nothing near your hotel matches these interests. Try different interests, or browse what it offers.",
   no_plan_fits_time: "Nothing your hotel offers fits into that time, including the walk back. Try a longer time.",
   persistence_failed: "Atlas couldn't save your plan. Please try again.",
 };

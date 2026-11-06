@@ -93,7 +93,7 @@ export function PlacesList() {
                 {searching ? `No places match “${query.trim()}”` : "No places in this filter"}
               </p>
               <p className="font-manrope text-[14px] leading-[1.5] text-atlas-ink">
-                Search only covers places Hotel A offers or has approved. Try another word, or show everything.
+                Search covers Hotel A and the places around it. Try another word, or show everything.
               </p>
               <button
                 type="button"

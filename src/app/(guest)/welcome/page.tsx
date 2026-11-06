@@ -47,8 +47,8 @@ export default function WelcomePage() {
           Your stay is a starting point.
         </h1>
         <p className="w-full font-manrope text-[16px] leading-[1.55] text-atlas-linen">
-          Tell us what you&apos;re curious about and how much time you have. We&apos;ll show you what Hotel A and its
-          approved partners offer.
+          Tell us what you&apos;re curious about and how much time you have. We&apos;ll show you what you can do from
+          Hotel A.
         </p>
       </div>
 

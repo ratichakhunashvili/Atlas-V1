@@ -82,13 +82,13 @@ export function DetailTitle({
   );
 }
 
-/** "Approved by Hotel A" plus the plan chip on partner places. */
-export function ApprovalRow({ chip }: { chip: ReactNode }) {
+/** "Recommended by Hotel A" plus the plan chip on partner places. */
+export function RecommendedRow({ chip }: { chip: ReactNode }) {
   return (
     <div className="flex w-full flex-wrap items-center gap-[8px]">
       <span className="flex items-center gap-[4px]">
         <AtlasIcon src="/atlas-ui/icon-check-slate-14.svg" size={14} />
-        <span className="font-manrope text-[13px] leading-[18px] text-atlas-slate">Approved by Hotel A</span>
+        <span className="font-manrope text-[13px] leading-[18px] text-atlas-slate">Recommended by Hotel A</span>
       </span>
       {chip}
     </div>

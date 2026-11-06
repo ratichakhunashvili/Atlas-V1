@@ -1,11 +1,11 @@
 # Atlas
 
 Atlas is a hotel-anchored experience platform for guests who are already staying at a hotel.
-The approved target model is the **Atlas catalogue** ([docs/catalogue-model-plan.md](docs/catalogue-model-plan.md)):
-guests discover their own hotel's facilities, attractions, and every business with an active Atlas
-contract, and the hotel's own partners get extra promotion. **The code still enforces the earlier
-rule** (only the hotel's own facilities and places that hotel has partnered with) until that plan's
-phases are implemented. A place being nearby, popular, or present in Mapbox never makes it eligible.
+Guests see the **Atlas catalogue** ([docs/catalogue-model-plan.md](docs/catalogue-model-plan.md)):
+their own hotel's facilities, attractions, and every business with an active Atlas contract. A
+hotel's own partners get extra promotion ("Recommended by <hotel>") for that hotel's guests only;
+a partnership never makes a place visible. A place being nearby, popular, or present in Mapbox
+never makes it eligible.
 
 The product rules and working agreements for this project are in [CLAUDE.md](CLAUDE.md).
 [AGENTS.md](AGENTS.md) notes that this Next.js version has breaking changes: read the guides in
@@ -99,15 +99,15 @@ overriding the check needs `npm run db:seed:dev -- --allow-remote` and is your c
 The guest starts with an **active stay at Atlas Test Hotel A**, so no QR scan is needed
 to reach the map, the experiences list or the Advisor.
 
-The catalog is shaped to demonstrate the hotel-specific eligibility rule by hand:
+The catalog is shaped to demonstrate the catalogue rule by hand:
 
-| Place | Relationship | Visible to |
+| Place | Contract and relationships | Visible to |
 | --- | --- | --- |
 | `[Test] Riverside Sauna` | Hotel A's own facility | Hotel A guests |
-| `[Test] Partner Cafe` | Active partner of Hotel A | Hotel A guests |
-| `[Test] Old Town Walking Tour` | Active partner of **both** hotels (two separate rows) | Both |
-| `[Test] Unaffiliated Gallery` | None — published and verified, but partnered with nobody | **Nobody** |
-| `[Test] Suspended Wine Bar` | Suspended partnership with Hotel A | **Nobody** |
+| `[Test] Partner Cafe` | Active Atlas contract; partner of Hotel A | Both (promoted for Hotel A) |
+| `[Test] Old Town Walking Tour` | Active Atlas contract; partner of **both** hotels | Both (promoted for both) |
+| `[Test] Unaffiliated Gallery` | Business with no contract | **Nobody** |
+| `[Test] Suspended Wine Bar` | Contract still pending review | **Nobody** |
 
 If the gallery or the wine bar ever appears for either hotel, eligibility is broken.
 
@@ -119,8 +119,8 @@ code, and no QR credential is seeded (see below), so issue one first:
 3. Sign in as the guest and open `/checkin/<code>`.
 4. Confirm the switch on the page that follows.
 
-Hotel B's guest should then see only `[Test] Old Town Walking Tour` — not Hotel A's sauna,
-and not Hotel A's cafe.
+Hotel B's guest should then see the cafe and the walking tour (the tour marked "Recommended by
+Hotel B") — but not Hotel A's sauna, and not Hotel A itself.
 
 Re-running the seed is safe: every row is keyed on a stable fixture id and conflicts are
 ignored, so nothing is overwritten — including the password of any real account.
@@ -163,7 +163,7 @@ QR link, interests, free time, eligible experiences, itinerary preview). It runs
 fixtures in `src/prototype/fixtures.ts`: it needs no database, sign-in, Mapbox token, GPS or camera, and it
 is not production data. Open <http://localhost:3000/demo> after `npm run dev`.
 
-The prototype reuses the real hotel-specific eligibility rule (`src/services/eligibility/rules.ts`) and is
+The prototype reuses the real catalogue eligibility rule (`src/services/eligibility/rules.ts`) and is
 guarded by `src/prototype/isolation.test.ts`, which fails if the demo starts importing database, auth,
 Mapbox, GPS or QR-scanning code.
 

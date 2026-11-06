@@ -202,7 +202,7 @@ function Finished({ state }: { state: Extract<Started, { status: "finished" }> }
       ? "That's your four activities for today. New options tomorrow."
       : state.reason === "no_time"
         ? "Nothing else fits the time you have left, including the walk back. Enjoy the rest of your day."
-        : `You've done everything ${state.hotel.name} has approved for your interests today.`;
+        : `You've done everything that fits your interests today.`;
   return (
     <div className="flex w-full flex-col items-start gap-[6px] rounded-[14px] bg-atlas-sand p-[14px]">
       <p className="font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">Your day is done</p>
@@ -220,7 +220,7 @@ function NotStarted({ hotelName, header }: { hotelName: string; header: Header }
         </div>
         <h1 className={`w-full ${type.title}`}>No plan for today yet</h1>
         <p className={`w-full ${type.body} text-atlas-slate`}>
-          Tell us how much time you have. We&apos;ll offer three things to do at a time from {hotelName} and its approved partners — up to
+          Tell us how much time you have. We&apos;ll offer three things to do at a time from {hotelName} and the places around it — up to
           four today.
         </p>
         <Link
@@ -332,7 +332,7 @@ export function DailyPlanScreen({
           </h2>
           <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">
             {state.choices.length === 1
-              ? `Only one approved place fits the time you have left.`
+              ? `Only one place fits the time you have left.`
               : `${state.choices.length} options that fit your time, with the walk back to ${state.hotel.name}.`}
           </p>
           <ul className="flex w-full flex-col items-start gap-[10px]">
@@ -342,7 +342,7 @@ export function DailyPlanScreen({
           </ul>
           {state.choices.some((choice) => choice.featured) ? (
             <p className="font-manrope text-[12px] leading-[16px] text-atlas-slate">
-              Featured places are promoted by {state.hotel.name}. Every option is approved by your hotel.
+              Featured places are recommended by {state.hotel.name}.
             </p>
           ) : null}
         </section>

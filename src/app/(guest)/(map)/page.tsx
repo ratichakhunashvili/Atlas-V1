@@ -66,7 +66,7 @@ export default async function HomePage({
               ? `Your stay at ${stay.place.name} starts on ${stay.checkIn.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}. Its places appear here from then.`
               : ended
               ? `Your stay at ${stay.place.name} is past its dates, so Atlas isn't showing its places. Staying somewhere new? Type that hotel's code to start.`
-              : "Atlas shows the places your own hotel has approved. Type the code from the Atlas card at reception to start your stay."}
+              : "Atlas shows what you can do from your hotel. Type the code from the Atlas card at reception to start your stay."}
           </p>
           {checkinError ? (
             <p role="alert" className="w-full rounded-[12px] border border-atlas-danger bg-atlas-danger-soft px-[14px] py-[12px] font-manrope text-[14px] leading-[1.45] text-atlas-danger">

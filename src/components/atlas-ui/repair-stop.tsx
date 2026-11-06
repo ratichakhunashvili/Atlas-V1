@@ -118,7 +118,7 @@ export function RepairStop({ confirmOnOpen = false }: { confirmOnOpen?: boolean 
           </section>
         ) : (
           <p className="w-full rounded-[12px] bg-atlas-sand px-[12px] py-[10px] font-manrope text-[14px] leading-[1.5] text-atlas-ink">
-            None of Hotel A&apos;s other approved places match your choices for this stop. You can remove it, or change your choices.
+            No other place matches your choices for this stop. You can remove it, or change your choices.
           </p>
         )}
 

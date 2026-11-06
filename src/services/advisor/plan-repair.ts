@@ -146,7 +146,7 @@ export async function replaceUnavailableStopsForUser(
     return {
       ok: false,
       reason: "no_replacement_available",
-      message: "No other approved experience matches your interests right now. You can remove the unavailable stop to continue.",
+      message: "No other experience matches your interests right now. You can remove the unavailable stop to continue.",
       unavailableStops,
     };
   }
@@ -246,7 +246,7 @@ export async function replaceUnavailableStopsForUser(
       return {
         ok: false,
         reason: "no_replacement_available",
-        message: "No other approved experience fits the time you have left. You can remove the unavailable stop to continue.",
+        message: "No other experience fits the time you have left. You can remove the unavailable stop to continue.",
         unavailableStops,
       };
     }

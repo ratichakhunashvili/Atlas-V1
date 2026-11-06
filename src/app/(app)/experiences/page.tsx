@@ -42,7 +42,7 @@ export default async function ExperiencesPage({
         <Header />
         <EmptyState
           title="No hotel stay yet"
-          description="Scan your hotel's code to start your stay. Atlas then shows what that hotel has approved for its guests."
+          description="Scan your hotel's code to start your stay. Atlas then shows what you can do around it."
         />
         <p className="text-sm">
           <Link href="/" className="text-slate-700 underline">
@@ -80,11 +80,11 @@ export default async function ExperiencesPage({
 
       {experiences.length === 0 ? (
         <EmptyState
-          title={selectedCategory ? "Nothing approved in that category" : "Nothing approved yet"}
+          title={selectedCategory ? "Nothing in that category yet" : "Nothing to show yet"}
           description={
             selectedCategory
-              ? "Your hotel has no approved experiences in this category. Try another one, or view all."
-              : "Your hotel hasn't approved any experiences yet. Atlas only shows places your own hotel has signed off, so this stays empty until it does."
+              ? "There are no experiences in this category near your hotel yet. Try another one, or view all."
+              : "There are no experiences to show near your hotel yet. Check back soon."
           }
         />
       ) : (
@@ -130,10 +130,9 @@ export default async function ExperiencesPage({
 function Header() {
   return (
     <div>
-      <h1 className="text-xl font-semibold">Approved by your hotel</h1>
+      <h1 className="text-xl font-semibold">Things to do</h1>
       <p className="text-sm text-slate-600">
-        Atlas only ever suggests your own hotel&apos;s facilities and the partners it has approved — never whatever
-        happens to be nearby.
+        Your hotel&apos;s facilities, attractions and Atlas partner places, starting from your hotel.
       </p>
     </div>
   );

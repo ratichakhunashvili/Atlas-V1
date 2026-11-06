@@ -64,8 +64,8 @@ export function NoMatchScreen() {
           <h1 className="w-full font-grotesk text-[24px] font-bold leading-[28px] text-atlas-teal">No partner fits this time</h1>
           <p className="w-full font-manrope text-[15px] leading-[23px] text-atlas-ink">
             {proposal.kind === "no-time"
-              ? `Hotel A's approved places for ${interests} don't fit in ${hoursPhrase(prefs.time)} with the walk back. Try more time, or enjoy what the hotel offers.`
-              : `None of Hotel A's approved partners match ${interests} right now. Try one of these, or enjoy what the hotel offers.`}
+              ? `The places for ${interests} don't fit in ${hoursPhrase(prefs.time)} with the walk back. Try more time, or enjoy what the hotel offers.`
+              : `Nothing matches ${interests} right now. Try one of these, or enjoy what the hotel offers.`}
           </p>
         </div>
         {missing.length > 0 ? (

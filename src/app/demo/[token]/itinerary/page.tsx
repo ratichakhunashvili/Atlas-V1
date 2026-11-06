@@ -54,7 +54,7 @@ export default async function DemoItineraryPage({
       {preview.stops.length === 0 ? (
         <EmptyState
           title="Nothing fits yet"
-          description="No hotel-approved experience fits these interests and this much time. Try more time or different interests — we won’t suggest places your hotel hasn’t approved."
+          description="Nothing fits these interests and this much time. Try more time or different interests."
         />
       ) : (
         <ol className="space-y-3">

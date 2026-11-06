@@ -55,7 +55,7 @@ For visual design and brand-facing copy, follow [docs/atlas-brand-book.md](docs/
 
 ## Critical product rule: the Atlas catalogue
 
-This is a core eligibility rule, enforced on the server. The detailed model, conflicts and phases are in [docs/catalogue-model-plan.md](docs/catalogue-model-plan.md). Until those phases are implemented and approved, the running code still enforces the earlier hotel-partner-only rule; do not change it outside an approved phase.
+This is a core eligibility rule, enforced on the server. The detailed model, conflicts and phases are in [docs/catalogue-model-plan.md](docs/catalogue-model-plan.md). Phases C2–C5 implement it in `src/services/eligibility`; change it only in an approved phase.
 
 A guest's **base** is the hotel of their own valid active stay, established by the hotel QR. It is the starting point, the return destination and the only hotel shown on the map. A guest of that hotel may be shown, as a destination, itinerary stop, mission or achievement location:
 

@@ -33,7 +33,7 @@ export function PlanBuilding() {
           <AtlasAsset src="/atlas-ui/spinner-plan.svg" width={120} height={120} className="motion-safe:animate-[spin_1.6s_linear_infinite]" />
           <h1 className={`w-full text-center ${type.title}`}>Planning your {hoursPhrase(preferences.time)}…</h1>
           <p className={`w-full text-center ${type.body} text-atlas-slate`}>
-            Checking Hotel A&apos;s approved places, walk times and your way back.
+            Checking places, walk times and your way back.
           </p>
         </div>
       </FlowScreen>
@@ -77,7 +77,7 @@ export function PlanReady() {
           <AtlasBackButton to="Preferences" />
           <h1 className={`w-full ${type.title}`}>Nothing fits these choices</h1>
           <p className={`w-full ${type.body} text-atlas-slate`}>
-            None of Hotel A&apos;s approved places match what you picked in {hours}. Change your choices, or see what the hotel offers.
+            Nothing matches what you picked in {hours}. Change your choices, or see what the hotel offers.
           </p>
           <Spacer />
           <AtlasButton to="NoMatch">See what Hotel A offers</AtlasButton>
@@ -110,7 +110,7 @@ export function PlanReady() {
           </h1>
           <Note>
             {shorter
-              ? `You asked for ${hours}. Only ${count} approved ${count === 1 ? "place fits" : "places fit"} with time to walk back to Hotel A, so the plan is shorter.`
+              ? `You asked for ${hours}. Only ${count} ${count === 1 ? "place fits" : "places fit"} with time to walk back to Hotel A, so the plan is shorter.`
               : `You asked for ${hours}. ${count === 1 ? "It fits" : "They fit"} with time to walk back to Hotel A.`}
           </Note>
         </div>

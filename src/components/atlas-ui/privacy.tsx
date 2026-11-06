@@ -66,7 +66,7 @@ function Section({ title, children, gap = 0 }: { title: string; children: ReactN
 const USES = [
   { icon: "/atlas-ui/icon-pin.svg", text: "Location: to show walk times and confirm check-ins. Sent only when you check in." },
   { icon: "/atlas-ui/icon-camera-20.svg", text: "Camera: to read codes and show the marker view. Stays on your phone." },
-  { icon: "/atlas-ui/icon-home-20.svg", text: "Your stay: so we only show what Hotel A offers and approves." },
+  { icon: "/atlas-ui/icon-home-20.svg", text: "Your stay: so we show what you can do from Hotel A." },
 ];
 
 function Documents() {
@@ -74,11 +74,11 @@ function Documents() {
     <>
       <div id="terms" className="flex w-full scroll-mt-[16px] flex-col items-start gap-[6px]">
         <h2 className={HEADING}>Terms of use</h2>
-        <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">[Approved terms text]</p>
+        <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">[Final terms text]</p>
       </div>
       <div id="privacy-notice" className="flex w-full scroll-mt-[16px] flex-col items-start gap-[6px]">
         <h2 className={HEADING}>Privacy notice</h2>
-        <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">[Approved privacy notice text]</p>
+        <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">[Final privacy notice text]</p>
       </div>
     </>
   );
