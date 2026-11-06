@@ -45,8 +45,8 @@ type Header = { hotelName: string; summary: string };
 function Shell({ header, children }: { header: Header; children: ReactNode }) {
   return (
     <main className="relative flex min-h-[100dvh] w-full flex-col bg-atlas-paper">
-      <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col items-start gap-[14px] px-[12px] pb-[24px] pt-[calc(12px+env(safe-area-inset-top))] wide:px-[24px] wide:pt-[calc(20px+env(safe-area-inset-top))]">
-        <div className="flex w-full flex-col items-start gap-[10px]">
+      <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col items-start gap-[30px] px-[12px] pb-[24px] pt-[calc(34px+env(safe-area-inset-top))] wide:px-[24px]">
+        <div className="flex w-full flex-col items-start gap-[30px]">
           <StayHeader hotelName={header.hotelName} summary={header.summary} />
           <PlanSegment active="plan" />
         </div>
@@ -170,7 +170,7 @@ function ChoiceCard({ choice }: { choice: DailyChoice }) {
             </span>
           ) : null}
           <span className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
-            {choice.source === "facility" ? "Hotel" : "Partner"} · {label(choice.category)}
+            {choice.source === "facility" ? "Hotel" : choice.source === "attraction" ? "Attraction" : "Partner"} · {label(choice.category)}
           </span>
         </div>
         <p className={`w-full font-grotesk font-bold text-atlas-teal [overflow-wrap:anywhere] ${big ? "text-[22px] leading-[28px]" : "text-[17px] leading-[22px]"}`}>
