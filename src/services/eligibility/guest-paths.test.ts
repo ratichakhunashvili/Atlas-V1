@@ -125,6 +125,13 @@ describe("no guest-facing code can read Places without eligibility", () => {
     assert.doesNotMatch(get("app/(guest)/(map)/page.tsx"), /@\/db\/queries\/places/);
   });
 
+  test("the viewport API route (phase C3) goes through services/eligibility and never reads a hotel or place id", () => {
+    const route = files.find((f) => f.path === "app/api/places/viewport/route.ts")?.text ?? "";
+    assert.match(route, /getEligibleMapPlacesForGuest/);
+    assert.doesNotMatch(route, /@\/db\/queries\/places/);
+    assert.doesNotMatch(route, /searchParams\.get\(["'](hotelId|hotel_id|placeId|place_id)["']\)/);
+  });
+
   test("the nearby route never reads a hotel or place id from the request", () => {
     const route = files.find((f) => f.path === "app/api/places/nearby/route.ts")?.text ?? "";
     assert.doesNotMatch(route, /searchParams\.get\(["'](hotelId|hotel_id|placeId|place_id)["']\)/);

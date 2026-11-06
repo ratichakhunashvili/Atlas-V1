@@ -88,7 +88,13 @@ export function AtlasMap() {
     const engine = engineRef.current;
     if (!map || !engine || !ready || !scene) return;
     framedRouteRef.current = engine.applyScene(map, containerRef.current, scene, { wide, framedRoute: framedRouteRef.current });
-  }, [scene, ready, wide]);
+    // A screen coming back to a map that didn't move gets no `moveend`, so report the current area here too
+    // (the listening screen ignores an area it has already loaded).
+    const bounds = map.getBounds();
+    if (bounds && viewportRef.current) {
+      viewportRef.current({ south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() });
+    }
+  }, [scene, ready, wide, viewportRef]);
 
   // 2D / 3D.
   useEffect(() => {

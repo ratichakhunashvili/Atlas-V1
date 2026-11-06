@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { MAX_MAP_RADIUS_METERS, MIN_MAP_RADIUS_METERS } from "@/services/eligibility";
-import { nearbyQuerySchema } from "./nearby-schema";
+import { nearbyQuerySchema, viewportQuerySchema } from "./nearby-schema";
 
 describe("nearbyQuerySchema (the /api/places/nearby query)", () => {
   test("accepts a normal map area", () => {
@@ -27,5 +27,19 @@ describe("nearbyQuerySchema (the /api/places/nearby query)", () => {
     if (parsed.success) {
       assert.deepEqual(Object.keys(parsed.data).sort(), ["lat", "lng", "radius"]);
     }
+  });
+});
+
+describe("viewportQuerySchema (the /api/places/viewport query, phase C3)", () => {
+  test("accepts a box and strips a forged hotelId / placeId", () => {
+    const parsed = viewportQuerySchema.safeParse({ south: "41.69", west: "44.79", north: "41.71", east: "44.81", hotelId: "x", placeId: "y" });
+    assert.equal(parsed.success, true);
+    if (parsed.success) assert.deepEqual(Object.keys(parsed.data).sort(), ["east", "north", "south", "west"]);
+  });
+
+  test("rejects an inverted box, out-of-range or missing edges", () => {
+    assert.equal(viewportQuerySchema.safeParse({ south: 42, west: 44, north: 41, east: 45 }).success, false);
+    assert.equal(viewportQuerySchema.safeParse({ south: -91, west: 44, north: 41, east: 45 }).success, false);
+    assert.equal(viewportQuerySchema.safeParse({ south: 41, west: 44, north: 42 }).success, false);
   });
 });
