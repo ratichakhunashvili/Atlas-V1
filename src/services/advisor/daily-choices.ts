@@ -68,8 +68,8 @@ function toChoice(candidate: AdvisorCandidate, entry: EligiblePlace, origin: Lat
     name: place.name,
     category: place.category,
     source: entry.source,
-    featured: entry.source === "partner" && entry.featured,
-    offerText: entry.source === "partner" ? entry.offerText : null,
+    featured: entry.promotion?.featured ?? false,
+    offerText: entry.promotion?.offerText ?? null,
     priceLevel: place.priceLevel,
     address: place.address,
     imageUrl: place.imageUrl,
@@ -107,7 +107,7 @@ export function buildDailyChoices(input: BuildDailyChoicesInput): DailyChoice[] 
   const ranked = rankCandidates(candidates, input.usageHistory, { budget: input.budget });
 
   const chosen: AdvisorCandidate[] = [];
-  const featured = ranked.find((candidate) => entryById.get(candidate.place.id)?.featured === true && candidate.isPartner);
+  const featured = ranked.find((candidate) => entryById.get(candidate.place.id)?.promotion?.featured === true);
   if (featured) chosen.push(featured);
   for (const candidate of ranked) {
     if (chosen.length >= CHOICES_PER_STEP) break;

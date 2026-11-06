@@ -113,7 +113,7 @@ async function loadDefaultDependencies(): Promise<GenerateItineraryDependencies>
 }
 
 function resolveCheckInMethod(candidate: AdvisorCandidate): CheckInMethod {
-  if (candidate.isPartner) return "qr";
+  if (candidate.source === "partner") return "qr";
   if (QR_CHECK_IN_CATEGORIES.includes(candidate.place.category)) return "qr";
   return "gps";
 }
@@ -146,8 +146,7 @@ function fromCandidate(candidate: AdvisorCandidate): SelectedStop {
     longitude: candidate.place.longitude,
     imageUrl: candidate.place.imageUrl,
     visitDurationMinutes: resolveVisitDuration(candidate.place).minutes,
-    // A candidate that is not a partner is one of the hotel's own facilities.
-    hotelActivity: candidate.isPartner ? null : "facility",
+    hotelActivity: candidate.source === "facility" ? "facility" : null,
     eventStartsAt: null,
     eventEndsAt: null,
   };
@@ -161,7 +160,7 @@ function fromCandidate(candidate: AdvisorCandidate): SelectedStop {
 function fromEvent(event: HotelEvent, venue: Place): SelectedStop {
   return {
     placeId: venue.id,
-    checkInMethod: resolveCheckInMethod({ place: venue, distanceMeters: 0, isPartner: false, partnerPriority: null }),
+    checkInMethod: resolveCheckInMethod({ place: venue, distanceMeters: 0, source: "facility", isPartner: false, partnerPriority: null }),
     name: event.title,
     category: venue.category,
     latitude: venue.latitude,

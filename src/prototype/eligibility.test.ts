@@ -16,21 +16,18 @@ const NOW = new Date("2026-06-15T12:00:00Z");
 const ids = (hotelId: string, data: DemoData = DEMO_DATA) => getEligibleExperiencesForDemoHotel(hotelId, NOW, data).map((e) => e.place.id).sort();
 
 describe("prototype eligibility (fixtures)", () => {
-  test("Hotel A sees its own partner, the shared partner and its own facility", () => {
+  test("Hotel A sees both Atlas partners and its own facility", () => {
     assert.deepEqual(ids(DEMO_HOTEL_A.id), [CABLE_CAR.id, ROOFTOP_SPA.id, WINE_CELLAR.id].sort());
   });
 
-  test("Hotel B sees ONLY the place it is explicitly partnered with", () => {
-    assert.deepEqual(ids(DEMO_HOTEL_B.id), [CABLE_CAR.id]);
+  test("Hotel B sees both Atlas partners too: a contract, not a hotel partnership, decides visibility", () => {
+    assert.deepEqual(ids(DEMO_HOTEL_B.id), [CABLE_CAR.id, WINE_CELLAR.id].sort());
   });
 
-  test("the partner of Hotel A only is not shown to Hotel B", () => {
-    assert.equal(ids(DEMO_HOTEL_B.id).includes(WINE_CELLAR.id), false);
-  });
-
-  test("the place partnered with both hotels is shown to both", () => {
-    assert.ok(ids(DEMO_HOTEL_A.id).includes(CABLE_CAR.id));
-    assert.ok(ids(DEMO_HOTEL_B.id).includes(CABLE_CAR.id));
+  test("Hotel A's partnership promotes the wine cellar for Hotel A's guests only", () => {
+    const wineFor = (hotelId: string) => getEligibleExperiencesForDemoHotel(hotelId, NOW).find((e) => e.place.id === WINE_CELLAR.id);
+    assert.notEqual(wineFor(DEMO_HOTEL_A.id)?.promotion, null);
+    assert.equal(wineFor(DEMO_HOTEL_B.id)?.promotion, null);
   });
 
   test("Hotel A's facility is shown to Hotel A guests only, without any partnership row", () => {
@@ -52,13 +49,13 @@ describe("prototype eligibility (fixtures)", () => {
     assert.deepEqual(ids(""), []);
   });
 
-  test("a partnership that is not active is excluded (revoked / pending)", () => {
-    for (const status of ["revoked", "pending_review", "suspended"] as const) {
+  test("a contract that is not active is excluded for every hotel (pending / suspended / ended)", () => {
+    for (const status of ["pending_review", "suspended", "ended"] as const) {
       const data: DemoData = {
         ...DEMO_DATA,
-        partnerships: DEMO_DATA.partnerships.map((row) => (row.placeId === WINE_CELLAR.id ? { ...row, status } : row)),
+        contracts: DEMO_DATA.contracts.map((row) => (row.placeId === WINE_CELLAR.id ? { ...row, status } : row)),
       };
-      assert.equal(ids(DEMO_HOTEL_A.id, data).includes(WINE_CELLAR.id), false, status);
+      for (const hotel of DEMO_DATA.hotels) assert.equal(ids(hotel.id, data).includes(WINE_CELLAR.id), false, status);
     }
   });
 

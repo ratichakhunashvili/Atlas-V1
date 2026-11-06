@@ -3,8 +3,11 @@ import { readFileSync } from "node:fs";
 import { after, before, describe, it } from "node:test";
 import { eq, sql } from "drizzle-orm";
 import { createTestDatabase, expectSqlFailure, type TestDatabase } from "./test-support/pglite";
+import { buildEligiblePlaces } from "@/services/eligibility/rules";
 import {
+  listAttractionPlacesForCatalogue,
   listCatalogueForAdmin,
+  listContractRowsForCatalogue,
   loadContractFacts,
   proposeContract,
   setPlaceKind,
@@ -206,6 +209,71 @@ describe("migration 0024 backfill (decisions 1 and 3)", () => {
       assert.ok(contracts.every((contract) => contract.status === "pending_review"), "the backfill makes nothing active");
     } finally {
       await backfillDb.close();
+    }
+  });
+});
+
+describe("guest catalogue reads (phase C2), end to end through the real SQL and the real rule", () => {
+  it("shows contracted businesses and attractions to every hotel, each hotel only its own facilities, and nothing else", async () => {
+    const catalogueDb = await createTestDatabase();
+    try {
+      const { db, schema } = catalogueDb;
+      const now = new Date("2026-11-06T12:00:00Z");
+      const insert = async (name: string, category: "hotel" | "restaurant" | "landmark" | "spa", kind: "business" | "attraction" | "hotel" = "business") => {
+        const [row] = await db
+          .insert(schema.places)
+          .values({ name, latitude: 41.7, longitude: 44.8, category, kind, publicationStatus: "published", publishedAt: now, verificationStatus: "verified", verifiedAt: now })
+          .returning();
+        return row;
+      };
+      const hotelAPlace = await insert("A Hotel", "hotel", "hotel");
+      const hotelBPlace = await insert("B Hotel", "hotel", "hotel");
+      const [hotelA] = await db.insert(schema.hotels).values({ placeId: hotelAPlace.id }).returning();
+      const [hotelB] = await db.insert(schema.hotels).values({ placeId: hotelBPlace.id }).returning();
+      const contracted = await insert("Contracted Cafe", "restaurant");
+      const pending = await insert("Pending Cafe", "restaurant");
+      const partnershipOnly = await insert("Partnership Only Cafe", "restaurant");
+      await insert("Fortress", "landmark", "attraction");
+      const bGarden = await insert("B Garden", "landmark", "attraction"); // Hotel B's facility, marked as an attraction
+      const aSpa = await insert("A Spa", "spa");
+      await db.insert(schema.hotelFacilities).values([
+        { hotelId: hotelA.id, placeId: aSpa.id, facilityType: "spa", status: "active" },
+        { hotelId: hotelB.id, placeId: bGarden.id, facilityType: "other", status: "active" },
+      ]);
+      await db.insert(schema.atlasPartnerContracts).values([
+        { placeId: contracted.id, status: "active", confirmedAt: now },
+        { placeId: pending.id, status: "pending_review" },
+      ]);
+      await db.insert(schema.hotelPartnerships).values([
+        { hotelId: hotelA.id, placeId: contracted.id, status: "active", confirmedAt: now, featured: true },
+        { hotelId: hotelA.id, placeId: partnershipOnly.id, status: "active", confirmedAt: now },
+      ]);
+
+      const catalogueFor = async (hotelId: string, hotelPlaceId: string) => {
+        const [contracts, attractions] = await Promise.all([listContractRowsForCatalogue(db, hotelId), listAttractionPlacesForCatalogue(db, hotelId)]);
+        const facilities = (
+          await db.select({ facility: schema.hotelFacilities, place: schema.places }).from(schema.hotelFacilities)
+            .innerJoin(schema.places, eq(schema.places.id, schema.hotelFacilities.placeId))
+            .where(eq(schema.hotelFacilities.hotelId, hotelId))
+        ).map(({ facility, place }) => ({ ...facility, place }));
+        const partnerships = (
+          await db.select({ partnership: schema.hotelPartnerships, place: schema.places }).from(schema.hotelPartnerships)
+            .innerJoin(schema.places, eq(schema.places.id, schema.hotelPartnerships.placeId))
+            .where(eq(schema.hotelPartnerships.hotelId, hotelId))
+        ).map(({ partnership, place }) => ({ ...partnership, place }));
+        const result = buildEligiblePlaces({ hotelId, hotelPlaceId, facilities, contracts, attractions, partnerships, now });
+        return new Map(result.map((entry) => [entry.place.name, entry]));
+      };
+
+      const forA = await catalogueFor(hotelA.id, hotelAPlace.id);
+      const forB = await catalogueFor(hotelB.id, hotelBPlace.id);
+      assert.deepEqual([...forA.keys()].sort(), ["A Spa", "Contracted Cafe", "Fortress"]);
+      assert.deepEqual([...forB.keys()].sort(), ["B Garden", "Contracted Cafe", "Fortress"]);
+      assert.equal(forB.get("B Garden")?.source, "facility", "Hotel B's own garden is its facility");
+      assert.notEqual(forA.get("Contracted Cafe")?.promotion, null, "promoted by Hotel A");
+      assert.equal(forB.get("Contracted Cafe")?.promotion, null, "not by Hotel B");
+    } finally {
+      await catalogueDb.close();
     }
   });
 });

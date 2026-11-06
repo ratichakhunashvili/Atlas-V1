@@ -2,6 +2,7 @@ import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { eq, inArray } from "drizzle-orm";
 import { buildEligiblePlaces, type FacilityRow, type PartnershipRow } from "@/services/eligibility/rules";
+import { listAttractionPlacesForCatalogue, listContractRowsForCatalogue } from "./operations/atlas-contracts";
 import { DEV_FIXTURE_EMAILS, DEV_FIXTURE_IDS, FIXTURE_PLACE_COUNT, seedDevFixtures } from "./operations/dev-seed";
 import { createTestDatabase, type TestDatabase } from "./test-support/pglite";
 
@@ -10,7 +11,7 @@ import { createTestDatabase, type TestDatabase } from "./test-support/pglite";
  * real seeding operation — not a copy of its SQL.
  *
  * The point is not that rows appear. It is that the fixture set actually
- * demonstrates the hotel-specific eligibility rule it claims to demonstrate:
+ * demonstrates the Atlas catalogue rule it claims to demonstrate:
  * if a later edit quietly makes the "unaffiliated" Place visible, or forgets a
  * publication timestamp so a partner vanishes, these fail.
  */
@@ -62,12 +63,16 @@ describe("development fixtures", () => {
       placeId: row.facility.placeId,
       status: row.facility.status,
       facilityType: row.facility.facilityType,
-      featured: false,
-      offerText: null,
       place: row.place,
     }));
 
-    return buildEligiblePlaces({ hotelId, hotelPlaceId, partnerships, facilities, now: NOW }).map(
+    // The catalogue inputs come from the real guest queries, so their SQL is exercised here too.
+    const [contracts, attractions] = await Promise.all([
+      listContractRowsForCatalogue(db, hotelId),
+      listAttractionPlacesForCatalogue(db, hotelId),
+    ]);
+
+    return buildEligiblePlaces({ hotelId, hotelPlaceId, facilities, contracts, attractions, partnerships, now: NOW }).map(
       (entry) => entry.place.name
     );
   }
@@ -112,20 +117,24 @@ describe("development fixtures", () => {
     assert.deepEqual(credentials, []);
   });
 
-  test("Hotel A's guest sees its own facility and both of its active partners", async () => {
+  test("Hotel A's guest sees its own facility and both Atlas partners", async () => {
     const names = await eligibleFor(DEV_FIXTURE_IDS.hotelA, DEV_FIXTURE_IDS.hotelAPlace);
     assert.deepEqual(new Set(names), new Set(["[Test] Riverside Sauna", "[Test] Partner Cafe", "[Test] Old Town Walking Tour"]));
   });
 
-  test("Hotel B's guest sees only the partner Hotel B has its own row for", async () => {
+  test("Hotel B's guest sees both Atlas partners too: a contract, not a hotel partnership, decides visibility", async () => {
     const names = await eligibleFor(DEV_FIXTURE_IDS.hotelB, DEV_FIXTURE_IDS.hotelBPlace);
-    assert.deepEqual(names, ["[Test] Old Town Walking Tour"]);
+    assert.deepEqual(new Set(names), new Set(["[Test] Partner Cafe", "[Test] Old Town Walking Tour"]));
   });
 
-  test("Hotel A's facility is not eligible for Hotel B, and Hotel A's cafe is not either", async () => {
-    const names = await eligibleFor(DEV_FIXTURE_IDS.hotelB, DEV_FIXTURE_IDS.hotelBPlace);
-    assert.ok(!names.includes("[Test] Riverside Sauna"));
-    assert.ok(!names.includes("[Test] Partner Cafe"));
+  test("Hotel A's facility is not eligible for Hotel B, and the pending wine bar for nobody", async () => {
+    for (const [hotelId, placeId] of [
+      [DEV_FIXTURE_IDS.hotelA, DEV_FIXTURE_IDS.hotelAPlace],
+      [DEV_FIXTURE_IDS.hotelB, DEV_FIXTURE_IDS.hotelBPlace],
+    ] as const) {
+      assert.ok(!(await eligibleFor(hotelId, placeId)).includes("[Test] Suspended Wine Bar"));
+    }
+    assert.ok(!(await eligibleFor(DEV_FIXTURE_IDS.hotelB, DEV_FIXTURE_IDS.hotelBPlace)).includes("[Test] Riverside Sauna"));
   });
 
   test("the unaffiliated Place is published and verified yet eligible for nobody", async () => {
@@ -134,7 +143,7 @@ describe("development fixtures", () => {
       .from(harness.schema.places)
       .where(eq(harness.schema.places.id, DEV_FIXTURE_IDS.galleryPlace));
 
-    // Fit to show in every respect EXCEPT a hotel relationship — which is the only thing that matters.
+    // Fit to show in every respect EXCEPT an Atlas contract — which is what a business needs.
     assert.equal(gallery?.publicationStatus, "published");
     assert.equal(gallery?.verificationStatus, "verified");
 

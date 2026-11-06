@@ -41,10 +41,8 @@ const entry = (p: Place, source: "partner" | "facility" = "partner"): EligiblePl
   place: p,
   source,
   relationId: `${source}-${p.id}`,
-  priority: null,
   facilityType: source === "facility" ? "other" : null,
-  featured: false,
-  offerText: null,
+  promotion: source === "partner" ? { partnershipId: `promotion-${p.id}`, priority: null, featured: false, offerText: null } : null,
 });
 
 let eligibleByHotel: Record<string, EligiblePlace[]>;

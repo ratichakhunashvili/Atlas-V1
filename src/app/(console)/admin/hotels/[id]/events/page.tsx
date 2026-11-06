@@ -81,7 +81,7 @@ export default async function HotelEventsPage({
               </option>
               {eligible.map(({ place, source }) => (
                 <option key={place.id} value={place.id}>
-                  {place.name} ({source === "facility" ? "hotel facility" : "hotel partner"})
+                  {place.name} ({source === "facility" ? "hotel facility" : source === "attraction" ? "attraction" : "Atlas partner"})
                 </option>
               ))}
             </Select>

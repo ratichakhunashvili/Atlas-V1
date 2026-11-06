@@ -48,8 +48,8 @@ describe("selectExperiences only narrows the eligible set", () => {
     assert.deepEqual(selectExperiences(eligibleFor(DEMO_HOTEL_A.id), []), []);
   });
 
-  test("Hotel B with wellness or food interests gets an empty list — no substitution from other hotels or non-partners", () => {
-    assert.deepEqual(selectExperiences(eligibleFor(DEMO_HOTEL_B.id), ["wellness", "food"]), []);
+  test("Hotel B with wellness interests gets an empty list — no substitution from another hotel's facility", () => {
+    assert.deepEqual(selectExperiences(eligibleFor(DEMO_HOTEL_B.id), ["wellness"]), []);
     assert.deepEqual(selectExperiences(eligibleFor(DEMO_HOTEL_B.id), ["sights"]).map((e) => e.place.id), [CABLE_CAR.id]);
   });
 
@@ -64,12 +64,12 @@ describe("toExperienceView", () => {
   test("labels facilities and partners differently", () => {
     const views = eligibleFor(DEMO_HOTEL_A.id).map(toExperienceView);
     assert.equal(views.find((v) => v.id === ROOFTOP_SPA.id)?.kind, "Hotel facility");
-    assert.equal(views.find((v) => v.id === WINE_CELLAR.id)?.kind, "Hotel partner");
+    assert.equal(views.find((v) => v.id === WINE_CELLAR.id)?.kind, "Partner");
   });
 });
 
 describe("buildItineraryPreview (prototype)", () => {
-  const view = (id: string, visitMinutes: number): ExperienceView => ({ id, name: id, description: null, address: null, kind: "Hotel partner", visitMinutes });
+  const view = (id: string, visitMinutes: number): ExperienceView => ({ id, name: id, description: null, address: null, kind: "Partner", visitMinutes });
 
   test("fits stops in order within the free time, with a fixed placeholder gap between them", () => {
     const preview = buildItineraryPreview([view("a", 60), view("b", 60)], 240);

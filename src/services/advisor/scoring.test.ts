@@ -13,6 +13,7 @@ function makeCandidate(overrides: {
   return {
     place: makeTestPlace({ id: overrides.id, category: "restaurant" }),
     distanceMeters: overrides.distanceMeters ?? 100,
+    source: overrides.isPartner ? "partner" : "facility",
     isPartner: overrides.isPartner ?? false,
     partnerPriority: overrides.partnerPriority ?? null,
   };

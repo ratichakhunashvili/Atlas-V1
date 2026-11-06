@@ -6,10 +6,9 @@ import { DEMO_DATA, type DemoData, type DemoHotel } from "./fixtures";
  *
  * It does NOT re-implement the Atlas rule: it scopes the fixture rows to one
  * hotel and hands them to the same pure rule the production service uses
- * (services/eligibility/rules.ts). That rule returns only
- *   (a) active facilities OWNED by this hotel, and
- *   (b) external Places with an active, confirmed partnership with THIS hotel.
- * A nearby or popular Place with no relationship is never returned.
+ * (services/eligibility/rules.ts): this hotel's own facilities, attractions, and
+ * businesses with an active Atlas contract; this hotel's partnerships only promote.
+ * A nearby or popular Place with no contract is never returned.
  */
 
 /** The hotel is identified ONLY from the demo QR token, never from other URL parameters. */
@@ -30,6 +29,8 @@ export function getEligibleExperiencesForDemoHotel(
     hotelPlaceId: hotel.placeId,
     partnerships: data.partnerships.filter((row) => row.hotelId === hotel.id),
     facilities: data.facilities.filter((row) => row.hotelId === hotel.id),
+    contracts: data.contracts,
+    attractions: [],
     now,
   });
 }

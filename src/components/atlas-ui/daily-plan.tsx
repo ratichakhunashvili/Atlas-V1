@@ -170,7 +170,7 @@ function ChoiceCard({ choice }: { choice: DailyChoice }) {
             </span>
           ) : null}
           <span className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
-            {choice.source === "facility" ? "Hotel" : "Partner"} · {label(choice.category)}
+            {choice.source === "facility" ? "Hotel" : choice.source === "attraction" ? "Attraction" : "Partner"} · {label(choice.category)}
           </span>
         </div>
         <p className={`w-full font-grotesk font-bold text-atlas-teal [overflow-wrap:anywhere] ${big ? "text-[22px] leading-[28px]" : "text-[17px] leading-[22px]"}`}>

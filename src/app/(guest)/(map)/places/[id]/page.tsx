@@ -86,9 +86,9 @@ export default async function PlaceDetailPage({ params }: { params: Promise<{ id
           {price ? <Fact label="Price level" value={price} /> : null}
         </div>
 
-        {experience.offerText ? (
+        {experience.promotion?.offerText ? (
           <p className="w-full rounded-[12px] bg-atlas-sand px-[12px] py-[10px] font-manrope text-[14px] leading-[20px] text-atlas-ink">
-            {experience.offerText}
+            {experience.promotion.offerText}
           </p>
         ) : null}
 

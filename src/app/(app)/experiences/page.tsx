@@ -105,7 +105,7 @@ export default async function ExperiencesPage({
                       </p>
                     </div>
                     <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                      {source === "facility" ? `Hotel's own${facilityType ? ` · ${facilityType}` : ""}` : "Hotel partner"}
+                      {source === "facility" ? `Hotel's own${facilityType ? ` · ${facilityType}` : ""}` : source === "attraction" ? "Attraction" : "Partner"}
                     </span>
                   </div>
 

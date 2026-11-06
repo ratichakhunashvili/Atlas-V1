@@ -22,14 +22,14 @@ import type { AtlasDatabase } from "./types";
  * walking estimates have something plausible to work with; no real business
  * is named, described, or represented as an Atlas partner.
  *
- * The fixture set is deliberately shaped around the hotel-specific
- * eligibility rule, so it can be exercised by hand in a browser:
+ * The fixture set is deliberately shaped around the Atlas catalogue rule
+ * (docs/catalogue-model-plan.md), so it can be exercised by hand in a browser:
  *
- *   - Hotel A owns a facility                  -> eligible for A's guests, no partnership needed
- *   - Partner Cafe is active with Hotel A only -> eligible for A, NOT for B
- *   - Walking Tour is active with A and B      -> two separate rows, one per hotel
- *   - Unaffiliated Gallery has no relationship -> eligible for nobody, though published and verified
- *   - Wine Bar's partnership is suspended      -> eligible for nobody
+ *   - Hotel A owns a facility                     -> eligible for A's guests only, no contract needed
+ *   - Partner Cafe has an active Atlas contract   -> eligible for A and B; promoted for A (A's partnership)
+ *   - Walking Tour has an active Atlas contract   -> eligible for A and B; promoted for both
+ *   - Unaffiliated Gallery is a business, no contract -> eligible for nobody, though published and verified
+ *   - Wine Bar's contract is only pending_review  -> eligible for nobody
  *
  * Idempotent: every insert is keyed on a stable fixture id and conflicts are
  * ignored, so re-running changes nothing and — importantly — can never
@@ -82,7 +82,7 @@ export const DEV_FIXTURE_IDS = {
   tourPartnershipB: "a71a5000-0000-4000-8000-000000004003",
   wineBarPartnershipA: "a71a5000-0000-4000-8000-000000004004",
 
-  // Atlas contracts (docs/catalogue-model-plan.md). Not read by guest eligibility until phase C2.
+  // Atlas contracts (docs/catalogue-model-plan.md): what puts a business in the guest catalogue.
   cafeContract: "a71a5000-0000-4000-8000-000000005001",
   tourContract: "a71a5000-0000-4000-8000-000000005002",
   wineBarContract: "a71a5000-0000-4000-8000-000000005003",
@@ -246,7 +246,7 @@ export async function seedDevFixtures(
     .onConflictDoNothing();
 
   // Cafe and tour are Atlas partners; the gallery is a business with NO contract (never visible in the catalogue
-  // model); the wine bar's contract is only proposed. Guest eligibility ignores all of this until phase C2.
+  // model); the wine bar's contract is only proposed, so it stays hidden.
   await db
     .insert(atlasPartnerContracts)
     .values([

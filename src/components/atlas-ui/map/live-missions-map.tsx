@@ -27,7 +27,7 @@ import { useSheetSwipe } from "../use-sheet-swipe";
 export type LivePlace = {
   id: string;
   name: string;
-  source: "facility" | "partner";
+  source: "facility" | "partner" | "attraction";
   category: string;
   address: string | null;
   priceLevel: number | null;
@@ -104,7 +104,7 @@ function LivePlaceCard({ place, selected }: { place: LivePlace; selected: boolea
       )}
       <span className="flex min-w-0 flex-1 flex-col items-start gap-[3px]">
         <span className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
-          {place.source === "facility" ? "At your hotel" : "Partner"} · {label(place.category)}
+          {place.source === "facility" ? "At your hotel" : place.source === "attraction" ? "Attraction" : "Partner"} · {label(place.category)}
         </span>
         <span className="w-full font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal [overflow-wrap:anywhere]">
           {place.name}

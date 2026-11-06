@@ -1,9 +1,17 @@
 import type { Hotel, Place, PlaceCategory } from "@/db/schema";
 import type { LatLng } from "@/lib/geo";
 import { calculateDayNumber, stayEndFor } from "@/services/advisor/stay-day";
-import { buildEligiblePlaces, filterEligibleByRadius, type EligiblePlace, type EligibilitySource, type FacilityRow, type PartnershipRow } from "./rules";
+import {
+  buildEligiblePlaces,
+  filterEligibleByRadius,
+  type ContractRow,
+  type EligiblePlace,
+  type EligibilitySource,
+  type FacilityRow,
+  type PartnershipRow,
+} from "./rules";
 
-export type { EligiblePlace, EligibilitySource } from "./rules";
+export type { EligiblePlace, EligibilitySource, Promotion } from "./rules";
 
 /**
  * THE Atlas eligibility service — the one place that decides which Places a
@@ -18,10 +26,12 @@ export type { EligiblePlace, EligibilitySource } from "./rules";
  *  - A client-supplied hotelId / placeId is only ever a *claim*, checked
  *    against what the stay makes eligible (authorizeGuestHotel,
  *    getEligibleExperienceForGuest). It can never select or widen anything.
- *  - Eligible = published + verified + not archived Places that are either
- *    (a) active facilities owned by that hotel, or (b) reached through an
- *    active, confirmed, in-window partnership with that same hotel.
- *  - Optional filters (area, categories) can only NARROW the result.
+ *  - Eligible = the Atlas catalogue (rules.ts): attractions, businesses with
+ *    an active, confirmed, in-window Atlas contract, and active facilities
+ *    owned by that hotel; published, verified, not archived; never another
+ *    hotel. That hotel's partnerships only add `promotion`.
+ *  - Optional filters (area, categories) can only NARROW the result, and a
+ *    category filter never hides attractions.
  */
 
 /** Server-enforced bounds for any client-supplied map radius. The radius only narrows what is shown; it never makes a Place eligible. */
@@ -39,23 +49,30 @@ export type GuestStay = {
 export type EligibilityDependencies = {
   /** The authenticated guest's open stay (checkOut IS NULL), or null. */
   findActiveStayForUser: (userId: string) => Promise<GuestStay | null>;
-  /** Every partnership row for ONE hotel (all statuses) — rules.ts decides which are eligible. */
+  /** Every partnership row for ONE hotel (all statuses), for promotion only — rules.ts decides which promote. */
   listPartnershipsForHotel: (hotelId: string) => Promise<PartnershipRow[]>;
   listFacilitiesForHotel: (hotelId: string) => Promise<FacilityRow[]>;
+  /** Candidate Atlas contracts, without other hotels' facilities. rules.ts decides which are eligible. */
+  listContractsForCatalogue: (hotelId: string) => Promise<ContractRow[]>;
+  /** Candidate attraction Places, without other hotels' facilities. */
+  listAttractionsForCatalogue: (hotelId: string) => Promise<Place[]>;
 };
 
 // Lazy imports: db/queries/* start with `import "server-only"`, which throws
 // outside Next's bundler. Same pattern as every other services/* module.
 async function loadDefaultDependencies(): Promise<EligibilityDependencies> {
-  const [staysQ, partnershipsQ, facilitiesQ] = await Promise.all([
+  const [staysQ, partnershipsQ, facilitiesQ, contractsQ] = await Promise.all([
     import("@/db/queries/hotel-stays"),
     import("@/db/queries/hotel-partnerships"),
     import("@/db/queries/hotel-facilities"),
+    import("@/db/queries/atlas-contracts"),
   ]);
   return {
     findActiveStayForUser: staysQ.findActiveStayForUser,
     listPartnershipsForHotel: partnershipsQ.listPartnershipRowsForHotel,
     listFacilitiesForHotel: facilitiesQ.listFacilityRowsForHotel,
+    listContractsForCatalogue: contractsQ.listContractRowsForCatalogue,
+    listAttractionsForCatalogue: contractsQ.listAttractionPlacesForCatalogue,
   };
 }
 
@@ -118,14 +135,19 @@ export async function authorizeGuestHotel(
 export async function listEligiblePlacesForStay(
   stay: { hotel: Pick<Hotel, "id">; place: Pick<Place, "id"> },
   now: Date = new Date(),
-  deps?: Pick<EligibilityDependencies, "listPartnershipsForHotel" | "listFacilitiesForHotel">
+  deps?: Pick<
+    EligibilityDependencies,
+    "listPartnershipsForHotel" | "listFacilitiesForHotel" | "listContractsForCatalogue" | "listAttractionsForCatalogue"
+  >
 ): Promise<EligiblePlace[]> {
   const d = deps ?? (await loadDefaultDependencies());
-  const [partnerships, facilities] = await Promise.all([
+  const [partnerships, facilities, contracts, attractions] = await Promise.all([
     d.listPartnershipsForHotel(stay.hotel.id),
     d.listFacilitiesForHotel(stay.hotel.id),
+    d.listContractsForCatalogue(stay.hotel.id),
+    d.listAttractionsForCatalogue(stay.hotel.id),
   ]);
-  return buildEligiblePlaces({ hotelId: stay.hotel.id, hotelPlaceId: stay.place.id, partnerships, facilities, now });
+  return buildEligiblePlaces({ hotelId: stay.hotel.id, hotelPlaceId: stay.place.id, facilities, contracts, attractions, partnerships, now });
 }
 
 export type GuestExperienceFilter = {
@@ -146,8 +168,8 @@ export function clampMapRadius(radiusMeters: number): number {
 
 /**
  * The general entry point. userId in, eligible experiences out. No valid
- * stay => nothing. Filters only narrow. External partners and hotel-owned
- * facilities are distinguishable via `source`.
+ * stay => nothing. Filters only narrow. Attractions, Atlas partners and
+ * hotel-owned facilities are distinguishable via `source`.
  */
 export async function listEligibleExperiencesForGuest(
   input: { userId: string; filter?: GuestExperienceFilter },
@@ -166,7 +188,8 @@ export async function listEligibleExperiencesForGuest(
   const filter = input.filter;
   if (filter?.categories) {
     const wanted = new Set<PlaceCategory>(filter.categories);
-    experiences = experiences.filter((entry) => wanted.has(entry.place.category));
+    // A category filter narrows businesses and facilities; attractions stay (catalogue plan §4).
+    experiences = experiences.filter((entry) => entry.source === "attraction" || wanted.has(entry.place.category));
   }
   if (filter?.radiusMeters !== undefined) {
     experiences = filterEligibleByRadius(experiences, filter.center ?? hotelLocation, clampMapRadius(filter.radiusMeters));
@@ -199,7 +222,7 @@ export async function getEligibleExperienceForGuest(
 /** The lean shape sent to the client map: db/queries/places.ts's PlaceMapPoint plus where the eligibility came from. */
 export type EligibleMapPoint = {
   id: string;
-  /** The hotel's own facility, or an external partner it has approved. */
+  /** An attraction, an Atlas partner, or the hotel's own facility. */
   source: EligibilitySource;
   name: string;
   description: string | null;

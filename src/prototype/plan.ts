@@ -71,7 +71,7 @@ export type ExperienceView = {
   name: string;
   description: string | null;
   address: string | null;
-  kind: "Hotel facility" | "Hotel partner";
+  kind: "Hotel facility" | "Attraction" | "Partner";
   visitMinutes: number;
 };
 
@@ -81,7 +81,7 @@ export function toExperienceView(entry: EligiblePlace): ExperienceView {
     name: entry.place.name,
     description: entry.place.description,
     address: entry.place.address,
-    kind: entry.source === "facility" ? "Hotel facility" : "Hotel partner",
+    kind: entry.source === "facility" ? "Hotel facility" : entry.source === "attraction" ? "Attraction" : "Partner",
     visitMinutes: DEMO_VISIT_MINUTES[entry.place.id] ?? 60,
   };
 }

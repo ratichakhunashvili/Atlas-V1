@@ -1,11 +1,11 @@
 import type { Place } from "@/db/schema";
-import type { FacilityRow, PartnershipRow } from "@/services/eligibility/rules";
+import type { ContractRow, FacilityRow, PartnershipRow } from "@/services/eligibility/rules";
 
 /**
  * PROTOTYPE FIXTURES — typed, local, in-memory demo data for the /demo guest
  * flow. These are NOT production API responses and are never read from or
  * written to a database. They reuse the production row shapes
- * (PartnershipRow / FacilityRow) so the real eligibility rule can run on them
+ * (ContractRow / PartnershipRow / FacilityRow) so the real eligibility rule can run on them
  * unchanged.
  */
 
@@ -20,6 +20,9 @@ export type DemoHotel = {
 
 export type DemoData = {
   hotels: readonly DemoHotel[];
+  /** Atlas contracts: what puts a business in the catalogue for every hotel's guests. */
+  contracts: readonly ContractRow[];
+  /** Hotel partnerships: promotion only. */
   partnerships: readonly PartnershipRow[];
   facilities: readonly FacilityRow[];
 };
@@ -43,6 +46,8 @@ export const DEMO_IDS = {
   partnershipACableCar: "00000000-0000-4000-8000-000000000042",
   partnershipBCableCar: "00000000-0000-4000-8000-000000000043",
   facilityARooftopSpa: "00000000-0000-4000-8000-000000000051",
+  contractWineCellar: "00000000-0000-4000-8000-000000000061",
+  contractCableCar: "00000000-0000-4000-8000-000000000062",
 } as const;
 
 function fixturePlace(
@@ -164,6 +169,10 @@ export const DEMO_VISIT_MINUTES: Readonly<Record<string, number>> = {
 
 const CONFIRMED = new Date("2026-01-02T00:00:00Z");
 
+function activeContract(id: string, place: Place): ContractRow {
+  return { id, placeId: place.id, status: "active", startsAt: null, endsAt: null, confirmedAt: CONFIRMED, place };
+}
+
 function activePartnership(id: string, hotel: DemoHotel, place: Place, priority: number | null = null): PartnershipRow {
   return {
     id,
@@ -182,7 +191,13 @@ function activePartnership(id: string, hotel: DemoHotel, place: Place, priority:
 
 export const DEMO_DATA: DemoData = {
   hotels: [DEMO_HOTEL_A, DEMO_HOTEL_B],
-  // Each hotel needs its OWN explicit row. The corner café has none.
+  // The wine cellar and cable car are Atlas partners, so guests of either hotel see them. The corner café has no
+  // contract, so nobody does.
+  contracts: [
+    activeContract(DEMO_IDS.contractWineCellar, WINE_CELLAR),
+    activeContract(DEMO_IDS.contractCableCar, CABLE_CAR),
+  ],
+  // Each hotel promotes through its OWN row; a partnership never makes a Place visible.
   partnerships: [
     activePartnership(DEMO_IDS.partnershipAWine, DEMO_HOTEL_A, WINE_CELLAR, 1),
     activePartnership(DEMO_IDS.partnershipACableCar, DEMO_HOTEL_A, CABLE_CAR, 2),

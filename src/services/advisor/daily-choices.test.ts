@@ -16,20 +16,20 @@ const partner = (place: Place, extra: Partial<EligiblePlace> = {}): EligiblePlac
   place,
   source: "partner",
   relationId: `p-${place.id}`,
-  priority: null,
   facilityType: null,
-  featured: false,
-  offerText: null,
+  promotion: { partnershipId: "promotion", priority: null, featured: false, offerText: null },
   ...extra,
+});
+/** A hotel partnership's promotion for an Atlas partner (the only thing that can feature it). */
+const promoted = (fields: { featured?: boolean; offerText?: string | null }): Partial<EligiblePlace> => ({
+  promotion: { partnershipId: "promotion", priority: null, featured: fields.featured ?? false, offerText: fields.offerText ?? null },
 });
 const facility = (place: Place, extra: Partial<EligiblePlace> = {}): EligiblePlace => ({
   place,
   source: "facility",
   relationId: `f-${place.id}`,
-  priority: null,
   facilityType: "other",
-  featured: false,
-  offerText: null,
+  promotion: null,
   ...extra,
 });
 
@@ -63,7 +63,7 @@ describe("buildDailyChoices", () => {
       partner(near("p1", 1)),
       partner(near("p2", 2)),
       partner(near("p3", 3)),
-      partner(near("featured", 9), { featured: true, offerText: "10% off for hotel guests" }),
+      partner(near("featured", 9), promoted({ featured: true, offerText: "10% off for hotel guests" })),
     ];
     const choices = buildDailyChoices(input(pool));
     assert.equal(choices.length, 3);
@@ -73,7 +73,7 @@ describe("buildDailyChoices", () => {
   });
 
   it("does not offer a featured partner that does not fit the time left", () => {
-    const pool = [partner(near("p1", 1)), partner(near("far-featured", 60), { featured: true })]; // ~6.7 km away
+    const pool = [partner(near("p1", 1)), partner(near("far-featured", 60), promoted({ featured: true }))]; // ~6.7 km away
     const choices = buildDailyChoices(input(pool, { remainingMinutes: 60 }));
     assert.deepEqual(
       choices.map((choice) => choice.placeId),
@@ -82,15 +82,15 @@ describe("buildDailyChoices", () => {
   });
 
   it("does not offer a featured partner outside the guest's interests", () => {
-    const pool = [partner(near("museum", 1, { category: "museum" }), { featured: true }), partner(near("p1", 2))];
+    const pool = [partner(near("museum", 1, { category: "museum" }), promoted({ featured: true })), partner(near("p1", 2))];
     assert.deepEqual(
       buildDailyChoices(input(pool)).map((choice) => choice.placeId),
       ["p1"]
     );
   });
 
-  it("never marks a hotel facility as featured", () => {
-    const choices = buildDailyChoices(input([facility(near("sauna", 1, { category: "spa" }), { featured: true, offerText: "x" })]));
+  it("never marks a Place without a hotel promotion as featured", () => {
+    const choices = buildDailyChoices(input([facility(near("sauna", 1, { category: "spa" }))]));
     assert.equal(choices[0].featured, false);
     assert.equal(choices[0].offerText, null);
   });

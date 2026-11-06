@@ -330,9 +330,9 @@ export async function findAdvisorTestScenario(tag: string): Promise<ScenarioStat
   if (!stay) return null;
 
   const places = await placesQ.listPlacesByNamePrefix(scenarioPlaceMarker(tag));
-  // Exactly what the Advisor itself sees: eligible partners only (active + confirmed + in-window).
+  // Exactly what the Advisor itself sees: the Places this hotel promotes (its partnerships with Atlas partners).
   const eligible = await eligibilityM.listEligiblePlacesForStay(stay);
-  const partnerPlaceIds = new Map(eligible.filter((entry) => entry.source === "partner").map((entry) => [entry.place.id, entry.priority]));
+  const partnerPlaceIds = new Map(eligible.filter((entry) => entry.promotion !== null).map((entry) => [entry.place.id, entry.promotion?.priority ?? null]));
 
   return {
     tag,

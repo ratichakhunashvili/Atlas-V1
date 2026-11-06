@@ -15,7 +15,7 @@ function latOffsetForMeters(meters: number): number {
 }
 
 function partner(place: Place): EligiblePlace {
-  return { place, source: "partner", relationId: `p-${place.id}`, priority: null, facilityType: null, featured: false, offerText: null };
+  return { place, source: "partner", relationId: `p-${place.id}`, facilityType: null, promotion: { partnershipId: `p-${place.id}`, priority: null, featured: false, offerText: null } };
 }
 
 function candidatesFor(places: Place[], extra: { preferredMaxDistanceMeters?: number | null } = {}) {

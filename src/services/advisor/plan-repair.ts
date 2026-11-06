@@ -158,7 +158,7 @@ export async function replaceUnavailableStopsForUser(
     stop: {
       placeId: candidate.place.id,
       isHotelStop: false,
-      checkInMethod: candidate.isPartner || candidate.place.category === "landmark" || candidate.place.category === "historical" ? ("qr" as const) : ("gps" as const),
+      checkInMethod: candidate.source === "partner" || candidate.place.category === "landmark" || candidate.place.category === "historical" ? ("qr" as const) : ("gps" as const),
       name: candidate.place.name,
       category: candidate.place.category,
       latitude: candidate.place.latitude,

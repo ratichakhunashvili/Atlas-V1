@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, notExists } from "drizzle-orm";
 import { PG_UNIQUE_VIOLATION, hasPgErrorCode } from "@/db/errors";
 import {
   atlasPartnerContracts,
@@ -7,14 +7,16 @@ import {
   places,
   type AtlasContractStatus,
   type AtlasPartnerContract,
+  type Place,
   type PlaceKind,
 } from "@/db/schema";
+import type { ContractRow } from "@/services/eligibility/rules";
 import type { AtlasDatabase } from "./types";
 
 /**
- * Atlas partner contracts and Place kinds — ADMIN data only (docs/catalogue-model-plan.md, phase C1). Nothing here is
- * read by guest code, and nothing here changes eligibility: services/eligibility does not consult contracts or kinds
- * yet. Takes the database handle as a parameter so db/atlas-contracts.pglite.test.ts exercises these exact queries.
+ * Atlas partner contracts and Place kinds (docs/catalogue-model-plan.md). The admin workflow, plus the two raw
+ * catalogue reads that services/eligibility judges for guests; no other guest code reads these. Takes the database
+ * handle as a parameter so db/atlas-contracts.pglite.test.ts exercises these exact queries.
  */
 
 /** Contracts with these statuses block a new proposal (one pending, one active per Place). */
@@ -130,3 +132,47 @@ export async function listCatalogueForAdmin(db: AtlasDatabase) {
 }
 
 export type AdminCatalogueRow = Awaited<ReturnType<typeof listCatalogueForAdmin>>[number];
+
+/**
+ * GUEST catalogue input (phase C2): active contracts with their Place, for services/eligibility to judge. Rows whose
+ * Place is another hotel's facility are left out here, because the pure rule cannot see facility ownership; the
+ * guest's own hotel facilities reach the rule separately. The rule re-checks status, confirmation, window and Place.
+ */
+export async function listContractRowsForCatalogue(db: AtlasDatabase, hotelId: string): Promise<ContractRow[]> {
+  return db
+    .select({
+      id: atlasPartnerContracts.id,
+      placeId: atlasPartnerContracts.placeId,
+      status: atlasPartnerContracts.status,
+      startsAt: atlasPartnerContracts.startsAt,
+      endsAt: atlasPartnerContracts.endsAt,
+      confirmedAt: atlasPartnerContracts.confirmedAt,
+      place: places,
+    })
+    .from(atlasPartnerContracts)
+    .innerJoin(places, eq(atlasPartnerContracts.placeId, places.id))
+    .where(
+and(eq(atlasPartnerContracts.status, "active"), notOtherHotelsFacility(db, hotelId))
+    );
+}
+
+/**
+ * GUEST catalogue input (phase C2): attraction Places. Like the contract read, it leaves out another hotel's facility
+ * (an admin may have marked one as an attraction); services/eligibility re-checks kind and publication.
+ */
+export async function listAttractionPlacesForCatalogue(db: AtlasDatabase, hotelId: string): Promise<Place[]> {
+  return db
+    .select()
+    .from(places)
+    .where(and(eq(places.kind, "attraction"), isNull(places.archivedAt), notOtherHotelsFacility(db, hotelId)));
+}
+
+/** The Place is not a facility of any hotel other than `hotelId` (decision 5: other hotels' facilities never appear). */
+function notOtherHotelsFacility(db: AtlasDatabase, hotelId: string) {
+  return notExists(
+    db
+      .select({ id: hotelFacilities.id })
+      .from(hotelFacilities)
+      .where(and(eq(hotelFacilities.placeId, places.id), ne(hotelFacilities.hotelId, hotelId)))
+  );
+}

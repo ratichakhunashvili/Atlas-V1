@@ -1,29 +1,51 @@
-import type { FacilityStatus, FacilityType, Place, PartnershipStatus } from "@/db/schema";
+import type { AtlasContractStatus, FacilityStatus, FacilityType, Place, PartnershipStatus } from "@/db/schema";
 import { distanceMeters, type LatLng } from "@/lib/geo";
 
 /**
- * The single definition of "may this Place be recommended to this hotel's
- * guests". Pure: no DB, no clock reads (`now` is always passed in).
+ * The single definition of "may this Place be shown to this hotel's guests": the Atlas catalogue rule
+ * (docs/catalogue-model-plan.md §2). Pure: no DB, no clock reads (`now` is always passed in).
  *
- * Eligible = (a) a facility the hotel itself OWNS, or (b) an external Place
- * with an explicitly confirmed, active, in-window partnership with THIS
- * hotel. Nothing else — not nearness, popularity, presence in Atlas's
- * `places` table, or presence in Mapbox.
+ *   catalogue(H, now) =
+ *       attractions (places.kind = "attraction")
+ *     ∪ businesses with an active, confirmed, in-window Atlas contract
+ *     ∪ active facilities owned by H
+ *     − every hotel Place (H's own is the base, never a destination)
+ *   and every Place must be published, verified and not archived.
+ *
+ * A hotel partnership never makes a Place visible. It only PROMOTES an Atlas partner, for H's guests, and promotes
+ * nothing once that partner's contract has lapsed. Nearness, popularity, presence in the database or in Mapbox count
+ * for nothing.
  */
 
-export type EligibilitySource = "partner" | "facility";
+export type EligibilitySource = "attraction" | "partner" | "facility";
+
+/** How H promotes an Atlas partner to its own guests. Ranking and presentation only, never visibility. */
+export type Promotion = {
+  partnershipId: string;
+  priority: number | null;
+  featured: boolean;
+  /** This hotel's offer, shown as written. */
+  offerText: string | null;
+};
 
 export type EligiblePlace = {
   place: Place;
   source: EligibilitySource;
-  /** hotel_partnerships.id or hotel_facilities.id, depending on `source`. */
+  /** atlas_partner_contracts.id, hotel_facilities.id, or the Place id for an attraction. */
   relationId: string;
-  priority: number | null;
   facilityType: FacilityType | null;
-  /** Featured by this hotel (partners only; always false for a facility). Ranking and presentation only. */
-  featured: boolean;
-  /** This hotel's offer for the partner, shown as written. Always null for a facility. */
-  offerText: string | null;
+  /** Only ever set on a `partner`, and only from the guest's own hotel's partnership. */
+  promotion: Promotion | null;
+};
+
+export type ContractRow = {
+  id: string;
+  placeId: string;
+  status: AtlasContractStatus;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  confirmedAt: Date | null;
+  place: Place;
 };
 
 export type PartnershipRow = {
@@ -50,35 +72,50 @@ export type FacilityRow = {
 };
 
 /**
- * The Place itself must be fit to show: published (an admin decided it is
- * ready), verified (an admin confirmed it is real and correctly described),
- * and not archived. Applies to facilities AND external partners.
+ * The Place itself must be fit to show: published (an admin decided it is ready), verified (an admin confirmed it is
+ * real and correctly described), and not archived. Applies to every source.
  */
 export function isPlaceRecommendable(place: Pick<Place, "publicationStatus" | "verificationStatus" | "archivedAt">): boolean {
   return place.publicationStatus === "published" && place.verificationStatus === "verified" && place.archivedAt === null;
 }
 
-export function isPartnershipEligible(row: PartnershipRow, hotelId: string, now: Date): boolean {
-  if (row.hotelId !== hotelId) return false; // a partnership with Hotel A never applies to Hotel B
-  if (row.status !== "active") return false; // pending_review / suspended / revoked
-  if (row.confirmedAt === null) return false; // never eligible without explicit admin confirmation
+function isInWindow(row: { startsAt: Date | null; endsAt: Date | null }, now: Date): boolean {
   if (row.startsAt !== null && row.startsAt.getTime() > now.getTime()) return false; // not started yet
   if (row.endsAt !== null && row.endsAt.getTime() <= now.getTime()) return false; // expired
-  if (!isPlaceRecommendable(row.place)) return false; // draft / unverified / archived
   return true;
+}
+
+/** An Atlas contract puts a business in the catalogue only while active, explicitly confirmed and in its window. */
+export function isContractEligible(row: ContractRow, now: Date): boolean {
+  if (row.status !== "active") return false; // pending_review / suspended / ended
+  if (row.confirmedAt === null) return false;
+  if (!isInWindow(row, now)) return false;
+  if (row.place.kind !== "business") return false; // an attraction needs no contract; a hotel never gets one
+  return isPlaceRecommendable(row.place);
+}
+
+export function isAttractionEligible(place: Place): boolean {
+  return place.kind === "attraction" && isPlaceRecommendable(place);
+}
+
+/** Whether this hotel's partnership may PROMOTE. Visibility is the contract's job, never the partnership's. */
+export function isPartnershipEligible(row: PartnershipRow, hotelId: string, now: Date): boolean {
+  if (row.hotelId !== hotelId) return false; // a partnership with Hotel A never applies to Hotel B
+  if (row.status !== "active") return false;
+  if (row.confirmedAt === null) return false;
+  return isInWindow(row, now);
 }
 
 export function isFacilityEligible(row: FacilityRow, hotelId: string): boolean {
   if (row.hotelId !== hotelId) return false;
   if (row.status !== "active") return false;
-  if (!isPlaceRecommendable(row.place)) return false;
-  return true;
+  return isPlaceRecommendable(row.place);
 }
 
 /**
- * A hotel is never a destination for another hotel's guests (CLAUDE.md: other hotels must not appear), even if a
- * partnership or facility row wrongly points at one. Hotel anchor Places are kind "hotel" (set when the hotel is
- * created, and by migration 0024); the category check also catches a hotel Place not yet linked to a hotel.
+ * A hotel is never a destination (CLAUDE.md: other hotels must not appear), even if a contract, facility or
+ * attraction row wrongly points at one. Hotel anchor Places are kind "hotel"; the category check also catches a
+ * hotel Place not yet linked to a hotel.
  */
 export function isHotelPlace(place: Pick<Place, "kind" | "category">): boolean {
   return place.kind === "hotel" || place.category === "hotel";
@@ -86,39 +123,47 @@ export function isHotelPlace(place: Pick<Place, "kind" | "category">): boolean {
 
 export type BuildEligiblePlacesInput = {
   hotelId: string;
-  /** The hotel's own Place: never an external partner/destination of itself. */
+  /** The hotel's own Place: the base, never a destination of itself. */
   hotelPlaceId: string;
-  partnerships: readonly PartnershipRow[];
+  /** This hotel's facilities (re-checked against hotelId here). */
   facilities: readonly FacilityRow[];
+  /** Candidate Atlas contracts, shared by every hotel's guests. The caller excludes other hotels' facilities. */
+  contracts: readonly ContractRow[];
+  /** Candidate attraction Places. */
+  attractions: readonly Place[];
+  /** This hotel's partnerships, for promotion only (re-checked against hotelId here). */
+  partnerships: readonly PartnershipRow[];
   now: Date;
 };
 
-/**
- * Both inputs are expected to be pre-scoped to `hotelId` by the caller; the
- * hotelId re-checks here are defense in depth, so a caller bug can never
- * leak another hotel's rows through.
- */
 export function buildEligiblePlaces(input: BuildEligiblePlacesInput): EligiblePlace[] {
-  const { hotelId, hotelPlaceId, partnerships, facilities, now } = input;
+  const { hotelId, hotelPlaceId, facilities, contracts, attractions, partnerships, now } = input;
   const result: EligiblePlace[] = [];
   const seen = new Set<string>([hotelPlaceId]);
 
-  // Facilities first so a Place that is (wrongly) in both tables is reported
-  // as the hotel's own facility, once.
+  // Facilities first, so a Place that is (wrongly) also contracted is reported once, as the hotel's own.
   for (const row of facilities) {
     if (!isFacilityEligible(row, hotelId) || isHotelPlace(row.place) || seen.has(row.place.id)) continue;
     seen.add(row.place.id);
-    result.push({ place: row.place, source: "facility", relationId: row.id, priority: null, facilityType: row.facilityType, featured: false, offerText: null });
+    result.push({ place: row.place, source: "facility", relationId: row.id, facilityType: row.facilityType, promotion: null });
   }
 
+  for (const place of attractions) {
+    if (!isAttractionEligible(place) || isHotelPlace(place) || seen.has(place.id)) continue;
+    seen.add(place.id);
+    result.push({ place, source: "attraction", relationId: place.id, facilityType: null, promotion: null });
+  }
+
+  const promotions = new Map<string, Promotion>();
   for (const row of partnerships) {
-    if (!isPartnershipEligible(row, hotelId, now) || isHotelPlace(row.place) || seen.has(row.place.id)) continue;
+    if (!isPartnershipEligible(row, hotelId, now) || promotions.has(row.placeId)) continue;
+    promotions.set(row.placeId, { partnershipId: row.id, priority: row.priority, featured: row.featured, offerText: row.offerText });
+  }
+
+  for (const row of contracts) {
+    if (!isContractEligible(row, now) || isHotelPlace(row.place) || seen.has(row.place.id)) continue;
     seen.add(row.place.id);
-    result.push({ place: row.place, source: "partner", relationId: row.id, priority: row.priority,
-      facilityType: null,
-      featured: row.featured,
-      offerText: row.offerText,
-    });
+    result.push({ place: row.place, source: "partner", relationId: row.id, facilityType: null, promotion: promotions.get(row.place.id) ?? null });
   }
 
   return result;
