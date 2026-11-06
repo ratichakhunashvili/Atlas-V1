@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LiveMissionsMap } from "@/components/atlas-ui/map/live-missions-map";
 import { AtlasButton, AtlasField, type } from "@/components/atlas-ui/ui";
 import { findCurrentStayForUser } from "@/db/queries/hotel-stays";
+import { listPlaceVisitsForUser } from "@/db/queries/place-visits";
 import { findPreferencesForUser } from "@/db/queries/preferences";
 import { checkInToHotelFormAction } from "@/features/hotel-stays/actions";
 import { stayHeaderSummary } from "@/features/plan/interests";
@@ -11,15 +12,22 @@ import { isTestEntryOffered } from "@/features/test-entry/offer";
 import { requireUser } from "@/lib/authorization";
 import { getDailyPlanForUser } from "@/services/advisor/daily-plan";
 import { getEligibleMapPlacesForGuest } from "@/services/eligibility";
+import { boundsAround } from "@/services/eligibility/viewport";
 
 /*
  * Main · Missions › Map (home) — Figma frame 1:205 — on real data.
  *
  * Every Place on this page comes from getEligibleMapPlacesForGuest, which derives the hotel from
- * the guest's own active stay: its active facilities and its confirmed, in-window partners. No
- * request parameter widens that, and no valid stay means no Places at all — the guest is asked
- * to join their hotel instead of being shown "everything nearby".
+ * the guest's own active stay: the Atlas catalogue (attractions, Atlas partners, the hotel's own
+ * facilities). No request parameter widens that, and no valid stay means no Places at all — the
+ * guest is asked to join their hotel instead of being shown "everything nearby".
+ *
+ * The first render sends only the area around the hotel; the map then asks /api/places/viewport
+ * for whatever area the guest moves to (catalogue plan §4, phase C3).
  */
+
+/** About the area the map opens on around the hotel (DESIGN_ZOOM on a phone), in degrees either side. */
+const OPENING_HALF_SPAN_DEGREES = 0.015;
 
 export const metadata: Metadata = { title: "Map" };
 export const dynamic = "force-dynamic";
@@ -31,9 +39,10 @@ export default async function HomePage({
 }) {
   const { checkinError } = await searchParams;
   const user = await requireUser();
-  const [map, stay, testEntryOffered] = await Promise.all([
-    getEligibleMapPlacesForGuest({ userId: user.id }),
-    findCurrentStayForUser(user.id),
+  const stay = await findCurrentStayForUser(user.id);
+  const opening = stay ? boundsAround({ lat: stay.place.latitude, lng: stay.place.longitude }, OPENING_HALF_SPAN_DEGREES) : undefined;
+  const [map, testEntryOffered] = await Promise.all([
+    getEligibleMapPlacesForGuest({ userId: user.id, bounds: opening }),
     isTestEntryOffered(user.id),
   ]);
 
@@ -81,7 +90,11 @@ export default async function HomePage({
   }
 
   // Preferences come first, every day: until today's time and interests are set, there is nothing to show yet.
-  const [plan, saved] = await Promise.all([getDailyPlanForUser(user.id), findPreferencesForUser(user.id)]);
+  const [plan, saved, visits] = await Promise.all([
+    getDailyPlanForUser(user.id),
+    findPreferencesForUser(user.id),
+    listPlaceVisitsForUser(user.id),
+  ]);
   if (plan.status === "not_started") redirect("/preferences");
   const summary = stayHeaderSummary({
     availableMinutes: plan.status === "no_stay" ? null : plan.availableMinutes,
@@ -93,6 +106,8 @@ export default async function HomePage({
     <LiveMissionsMap
       summary={summary}
       hotel={{ name: stay.place.name, address: stay.place.address, at: [map.hotelLocation.lng, map.hotelLocation.lat] }}
+      truncated={map.truncated}
+      visitedPlaceIds={visits.map((visit) => visit.placeId)}
       places={map.places.map((place) => ({
         id: place.id,
         name: place.name,
@@ -101,6 +116,7 @@ export default async function HomePage({
         address: place.address,
         priceLevel: place.priceLevel,
         imageUrl: place.imageUrl,
+        recommended: place.recommended,
         at: [place.longitude, place.latitude],
       }))}
     />

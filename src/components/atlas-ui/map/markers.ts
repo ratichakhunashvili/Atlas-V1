@@ -9,7 +9,9 @@ import type { Map as MapboxMap } from "mapbox-gl/esm";
  *   facility    30 circle, Warm White, 2px Deep Teal border, 6px teal dot
  *   selected    36 version of the same shape on a 42 Muted Bronze ring (r12 square / circle)
  *   checked     30 partner square in Deep Teal with a 3px Warm White border and a check
+ *   recommended partner square with a Muted Bronze dot: the guest's own hotel recommends it (subtle emphasis)
  *   attraction  32 diamond, exported from Figma (beige; bronze when selected)
+ *   locked      the attraction diamond in grey, until the guest has visited it
  *   hotel       38 Deep Teal circle, 3px Warm White border, home icon
  *   you         26 halo at 18% teal around a 13 teal dot with a 3px Warm White border
  * Route screens add a plain start circle, a plain destination square and a small "you" dot.
@@ -21,6 +23,8 @@ const TEAL = "#0a4a4f";
 const PAPER = "#f6f3ed";
 const BEIGE = "#d7c4b1";
 const BRONZE = "#a58d66";
+const GREY = "#8a8f8f";
+const GREY_SOFT = "#e4e4e1";
 const PIXEL_RATIO = 2;
 
 type Overlay = { src: string; size: number };
@@ -35,13 +39,26 @@ const box = (x: number, size: number, radius: number, fill: string, stroke: stri
   return `<rect x="${x + half}" y="${x + half}" width="${size - strokeWidth}" height="${size - strokeWidth}" rx="${radius - half}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`;
 };
 
-const dot = (center: number) => `<rect x="${center - 3}" y="${center - 3}" width="6" height="6" rx="3" fill="${TEAL}"/>`;
+const dot = (center: number, fill: string = TEAL) => `<rect x="${center - 3}" y="${center - 3}" width="6" height="6" rx="3" fill="${fill}"/>`;
+
+/** The Figma attraction diamond (public/atlas-ui/marker-attraction.svg), recoloured for the locked state. */
+const diamond = (fill: string, stroke: string) =>
+  svg(
+    32,
+    `<path d="M27.3137 13.1716L18.8284 4.68629C17.2663 3.12419 14.7337 3.12419 13.1716 4.68629L4.68629 13.1716C3.12419 14.7337 3.12419 17.2663 4.68629 18.8284L13.1716 27.3137C14.7337 28.8758 17.2663 28.8758 18.8284 27.3137L27.3137 18.8284C28.8758 17.2663 28.8758 14.7337 27.3137 13.1716Z" fill="${fill}" stroke="${stroke}" stroke-width="2"/>` +
+      `<circle cx="16" cy="16" r="3" fill="${stroke}"/>`
+  );
 
 export const MARKERS = {
   "partner": { size: 30, svg: svg(30, box(0, 30, 9, BEIGE, TEAL, 2) + dot(15)) },
   "partner-selected": {
     size: 42,
     svg: svg(42, `<rect width="42" height="42" rx="12" fill="${BRONZE}"/>` + box(3, 36, 9, BEIGE, TEAL, 2) + dot(21)),
+  },
+  "partner-recommended": { size: 30, svg: svg(30, box(0, 30, 9, BEIGE, TEAL, 2) + dot(15, BRONZE)) },
+  "partner-recommended-selected": {
+    size: 42,
+    svg: svg(42, `<rect width="42" height="42" rx="12" fill="${BRONZE}"/>` + box(3, 36, 9, BEIGE, TEAL, 2) + dot(21, BRONZE)),
   },
   /** The plan's next stop on the next-stop map: the 36 size without the selection ring. */
   "partner-next": { size: 36, svg: svg(36, box(0, 36, 9, BEIGE, TEAL, 2) + dot(18)) },
@@ -57,6 +74,8 @@ export const MARKERS = {
   },
   "attraction": { size: 32, src: "/atlas-ui/marker-attraction.svg" },
   "attraction-selected": { size: 32, src: "/atlas-ui/marker-attraction-selected.svg" },
+  "attraction-locked": { size: 32, svg: diamond(GREY_SOFT, GREY) },
+  "attraction-locked-selected": { size: 32, svg: diamond(BRONZE, GREY) },
   "hotel": {
     size: 38,
     svg: svg(38, box(0, 38, 19, TEAL, PAPER, 3)),

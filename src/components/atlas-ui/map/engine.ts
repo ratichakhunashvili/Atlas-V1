@@ -2,7 +2,7 @@ import type { GeoJSONSource, Map as MapboxMap } from "mapbox-gl/esm";
 import { HOTEL_LNGLAT, MAP_CENTER, DESIGN_ZOOM, PLACE_LNGLAT, YOU_LNGLAT, type LngLat } from "./geo";
 import { markerImageId, registerMarkers, type MarkerBitmaps } from "./markers";
 import { addBuildingExtrusions, applyAtlasPalette, MAP_STYLE_URL } from "./style";
-import type { CameraTarget, MapScene } from "./scene";
+import type { CameraTarget, MapScene, MapViewport } from "./scene";
 import { sidePanelWidth } from "../use-layout";
 import routes from "./routes.json";
 
@@ -89,6 +89,8 @@ type MapHandlers = {
   onReady: () => void;
   onUnauthorized: () => void;
   onPlaceClick: (placeId: string) => void;
+  /** The visible area each time the camera comes to rest. */
+  onViewport: (viewport: MapViewport) => void;
 };
 
 /** Creates the one Mapbox map, with the Atlas palette, sources, layers and marker handlers. */
@@ -96,7 +98,7 @@ export function createAtlasMap(
   mapboxgl: MapboxGl,
   container: HTMLDivElement,
   bitmaps: MarkerBitmaps,
-  { onReady, onUnauthorized, onPlaceClick }: MapHandlers
+  { onReady, onUnauthorized, onPlaceClick, onViewport }: MapHandlers
 ): MapboxMap {
   const map = new mapboxgl.Map({
     container,
@@ -154,6 +156,12 @@ export function createAtlasMap(
       });
     }
     onReady();
+  });
+
+  // One event per camera rest, not per frame: screens fetch the Places for the new area from it.
+  map.on("moveend", () => {
+    const bounds = map.getBounds();
+    if (bounds) onViewport({ south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() });
   });
 
   map.on("click", "atlas-markers", (event) => {

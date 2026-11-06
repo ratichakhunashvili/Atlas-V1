@@ -10,8 +10,10 @@ import {
   type FacilityRow,
   type PartnershipRow,
 } from "./rules";
+import { clampBounds, selectForViewport, type MapBounds } from "./viewport";
 
 export type { EligiblePlace, EligibilitySource, Promotion } from "./rules";
+export { MAP_RESULT_CAP, type MapBounds } from "./viewport";
 
 /**
  * THE Atlas eligibility service — the one place that decides which Places a
@@ -52,10 +54,10 @@ export type EligibilityDependencies = {
   /** Every partnership row for ONE hotel (all statuses), for promotion only — rules.ts decides which promote. */
   listPartnershipsForHotel: (hotelId: string) => Promise<PartnershipRow[]>;
   listFacilitiesForHotel: (hotelId: string) => Promise<FacilityRow[]>;
-  /** Candidate Atlas contracts, without other hotels' facilities. rules.ts decides which are eligible. */
-  listContractsForCatalogue: (hotelId: string) => Promise<ContractRow[]>;
-  /** Candidate attraction Places, without other hotels' facilities. */
-  listAttractionsForCatalogue: (hotelId: string) => Promise<Place[]>;
+  /** Candidate Atlas contracts, without other hotels' facilities, optionally only inside a map area. rules.ts decides which are eligible. */
+  listContractsForCatalogue: (hotelId: string, bounds?: MapBounds) => Promise<ContractRow[]>;
+  /** Candidate attraction Places, without other hotels' facilities, optionally only inside a map area. */
+  listAttractionsForCatalogue: (hotelId: string, bounds?: MapBounds) => Promise<Place[]>;
 };
 
 // Lazy imports: db/queries/* start with `import "server-only"`, which throws
@@ -138,14 +140,16 @@ export async function listEligiblePlacesForStay(
   deps?: Pick<
     EligibilityDependencies,
     "listPartnershipsForHotel" | "listFacilitiesForHotel" | "listContractsForCatalogue" | "listAttractionsForCatalogue"
-  >
+  >,
+  /** Lets the database skip catalogue Places outside a map area. Callers still filter by the area themselves. */
+  bounds?: MapBounds
 ): Promise<EligiblePlace[]> {
   const d = deps ?? (await loadDefaultDependencies());
   const [partnerships, facilities, contracts, attractions] = await Promise.all([
     d.listPartnershipsForHotel(stay.hotel.id),
     d.listFacilitiesForHotel(stay.hotel.id),
-    d.listContractsForCatalogue(stay.hotel.id),
-    d.listAttractionsForCatalogue(stay.hotel.id),
+    d.listContractsForCatalogue(stay.hotel.id, bounds),
+    d.listAttractionsForCatalogue(stay.hotel.id, bounds),
   ]);
   return buildEligiblePlaces({ hotelId: stay.hotel.id, hotelPlaceId: stay.place.id, facilities, contracts, attractions, partnerships, now });
 }
@@ -155,10 +159,12 @@ export type GuestExperienceFilter = {
   center?: LatLng;
   radiusMeters?: number;
   categories?: readonly PlaceCategory[];
+  /** The visible map area. Narrows to Places inside it, nearest its centre first, at most MAP_RESULT_CAP. */
+  bounds?: MapBounds;
 };
 
 export type GuestExperiencesResult =
-  | { status: "ok"; hotelLocation: LatLng; experiences: EligiblePlace[] }
+  | { status: "ok"; hotelLocation: LatLng; experiences: EligiblePlace[]; truncated: boolean }
   | { status: StayFailureReason; experiences: [] };
 
 export function clampMapRadius(radiusMeters: number): number {
@@ -183,9 +189,9 @@ export async function listEligibleExperiencesForGuest(
 
   const { stay } = context;
   const hotelLocation: LatLng = { lat: stay.place.latitude, lng: stay.place.longitude };
-  let experiences = await listEligiblePlacesForStay(stay, now, d);
-
   const filter = input.filter;
+  const bounds = filter?.bounds ? clampBounds(filter.bounds) : undefined;
+  let experiences = await listEligiblePlacesForStay(stay, now, d, bounds);
   if (filter?.categories) {
     const wanted = new Set<PlaceCategory>(filter.categories);
     // A category filter narrows businesses and facilities; attractions stay (catalogue plan §4).
@@ -194,8 +200,10 @@ export async function listEligibleExperiencesForGuest(
   if (filter?.radiusMeters !== undefined) {
     experiences = filterEligibleByRadius(experiences, filter.center ?? hotelLocation, clampMapRadius(filter.radiusMeters));
   }
+  let truncated = false;
+  if (bounds) ({ places: experiences, truncated } = selectForViewport(experiences, bounds));
 
-  return { status: "ok", hotelLocation, experiences };
+  return { status: "ok", hotelLocation, experiences, truncated };
 }
 
 /**
@@ -232,17 +240,21 @@ export type EligibleMapPoint = {
   address: string | null;
   priceLevel: number | null;
   imageUrl: string | null;
+  /** The guest's own hotel recommends this partner (a promotion exists). Never set for another hotel's partnership. */
+  recommended: boolean;
 };
 
 export type GuestMapPlacesResult =
-  | { status: "ok"; places: EligibleMapPoint[]; hotelLocation: LatLng }
-  | { status: "no_active_stay"; places: [] };
+  | { status: "ok"; places: EligibleMapPoint[]; hotelLocation: LatLng; truncated: boolean }
+  | { status: "no_active_stay"; places: []; truncated: false };
 
 export type GuestMapPlacesInput = {
   userId: string;
   /** Optional client-supplied map area. Narrowing only. */
   center?: LatLng;
   radiusMeters?: number;
+  /** Optional client-supplied visible area. Narrowing only, and capped. */
+  bounds?: MapBounds;
 };
 
 /** Map-shaped view over listEligibleExperiencesForGuest — no rules of its own. */
@@ -252,16 +264,17 @@ export async function getEligibleMapPlacesForGuest(
   deps?: EligibilityDependencies
 ): Promise<GuestMapPlacesResult> {
   const result = await listEligibleExperiencesForGuest(
-    { userId: input.userId, filter: { center: input.center, radiusMeters: input.radiusMeters } },
+    { userId: input.userId, filter: { center: input.center, radiusMeters: input.radiusMeters, bounds: input.bounds } },
     now,
     deps
   );
-  if (result.status !== "ok") return { status: "no_active_stay", places: [] };
+  if (result.status !== "ok") return { status: "no_active_stay", places: [], truncated: false };
 
   return {
     status: "ok",
     hotelLocation: result.hotelLocation,
-    places: result.experiences.map(({ place, source }) => ({
+    truncated: result.truncated,
+    places: result.experiences.map(({ place, source, promotion }) => ({
       id: place.id,
       source,
       name: place.name,
@@ -272,6 +285,7 @@ export async function getEligibleMapPlacesForGuest(
       address: place.address,
       priceLevel: place.priceLevel,
       imageUrl: place.imageUrl,
+      recommended: promotion !== null,
     })),
   };
 }

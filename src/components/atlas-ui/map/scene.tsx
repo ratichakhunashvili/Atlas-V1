@@ -40,6 +40,8 @@ export type MapScene = {
 };
 
 export type CameraTarget = "design" | "you" | "hotel";
+/** The visible map area, reported when the guest stops moving the map. */
+export type MapViewport = { south: number; west: number; north: number; east: number };
 export type MapDimension = "2D" | "3D";
 
 /**
@@ -52,6 +54,7 @@ type SceneContextValue = {
   scene: MapScene | null;
   setScene: (scene: MapScene | null) => void;
   placeClickRef: React.RefObject<((id: string) => void) | null>;
+  viewportRef: React.RefObject<((viewport: MapViewport) => void) | null>;
   camera: { target: CameraTarget; seq: number };
   moveCamera: (target: CameraTarget) => void;
   dimension: MapDimension;
@@ -65,13 +68,14 @@ export function MapSceneProvider({ children }: { children: ReactNode }) {
   const [camera, setCamera] = useState<{ target: CameraTarget; seq: number }>({ target: "design", seq: 0 });
   const [dimension, setDimension] = useState<MapDimension>(INITIAL_DIMENSION);
   const placeClickRef = useRef<((id: string) => void) | null>(null);
+  const viewportRef = useRef<((viewport: MapViewport) => void) | null>(null);
 
   const moveCamera = useCallback((target: CameraTarget) => {
     setCamera((current) => ({ target, seq: current.seq + 1 }));
   }, []);
 
   const value = useMemo(
-    () => ({ scene, setScene, placeClickRef, camera, moveCamera, dimension, setDimension }),
+    () => ({ scene, setScene, placeClickRef, viewportRef, camera, moveCamera, dimension, setDimension }),
     [scene, camera, moveCamera, dimension]
   );
 
@@ -103,4 +107,18 @@ export function useMapScene(scene: MapScene, onPlaceClick?: (id: string) => void
       placeClickRef.current = null;
     };
   }, [onPlaceClick, placeClickRef]);
+}
+
+/**
+ * Called by a map screen that loads Places for the visible area: `onViewport` runs each time the guest stops moving
+ * the map (Mapbox `moveend`), and once when the map first settles. Only one screen listens at a time.
+ */
+export function useMapViewport(onViewport: (viewport: MapViewport) => void): void {
+  const { viewportRef } = useSceneContext();
+  useEffect(() => {
+    viewportRef.current = onViewport;
+    return () => {
+      if (viewportRef.current === onViewport) viewportRef.current = null;
+    };
+  }, [onViewport, viewportRef]);
 }

@@ -27,7 +27,7 @@ export function AtlasMap() {
   const framedRouteRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(TOKEN ? null : "missing-token");
-  const { scene, placeClickRef, camera, dimension } = useSceneContext();
+  const { scene, placeClickRef, viewportRef, camera, dimension } = useSceneContext();
   const wide = useWideLayout();
   const reducedMotion = useReducedMotion();
 
@@ -53,6 +53,9 @@ export function AtlasMap() {
         onPlaceClick: (placeId) => {
           if (placeClickRef.current) placeClickRef.current(placeId);
         },
+        onViewport: (viewport) => {
+          if (viewportRef.current) viewportRef.current(viewport);
+        },
       });
     })().catch(() => setFailed("load"));
 
@@ -61,7 +64,7 @@ export function AtlasMap() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [placeClickRef]);
+  }, [placeClickRef, viewportRef]);
 
   // Mapbox's logo sits above the screen's sheet. Placed as soon as the scene is known, not after
   // the style has loaded, so the logo doesn't appear at the bottom first and then jump up.

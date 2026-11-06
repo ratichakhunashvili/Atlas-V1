@@ -16,3 +16,18 @@ export const nearbyQuerySchema = z.object({
 });
 
 export type NearbyQuery = z.infer<typeof nearbyQuerySchema>;
+
+/**
+ * Query for /api/places/viewport: the visible map box. Only the AREA is client-controlled, and unknown keys are
+ * stripped as above. The service clamps an oversized box and caps the result, so a forged box can only narrow.
+ */
+export const viewportQuerySchema = z
+  .object({
+    south: z.coerce.number().min(-90).max(90),
+    west: z.coerce.number().min(-180).max(180),
+    north: z.coerce.number().min(-90).max(90),
+    east: z.coerce.number().min(-180).max(180),
+  })
+  .refine((box) => box.south <= box.north && box.west <= box.east, { message: "south/west must not exceed north/east" });
+
+export type ViewportQuery = z.infer<typeof viewportQuerySchema>;

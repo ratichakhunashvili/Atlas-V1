@@ -192,6 +192,35 @@ describe("the Atlas catalogue, through the guest map", () => {
   });
 });
 
+describe("phase C3: the map's visible area and the Recommended label", () => {
+  const box = (south: number, north: number) => ({ south, north, west: 44.79, east: 44.81 });
+
+  test("a viewport narrows to the Places inside it and never adds one", async () => {
+    // fortress (offset 3) and the plain partner (offset 2) are in; the pool (offset 12) is out.
+    const result = await getEligibleMapPlacesForGuest({ userId: "guest-a", bounds: box(41.70015, 41.70035) }, NOW, DEPS);
+    assert.deepEqual(ids(result.places), ["fortress", "plain-partner"]);
+    assert.equal(result.truncated, false);
+  });
+
+  test("§9.11 a forged huge box still returns only the guest's catalogue, and other hotels never appear", async () => {
+    const result = await getEligibleMapPlacesForGuest({ userId: "guest-b", bounds: { south: -90, north: 90, west: -180, east: 180 } }, NOW, DEPS);
+    assert.ok(ids(result.places).every((id) => VISIBLE_TO_B.includes(id)));
+    assert.equal(ids(result.places).includes("hotel-a-place"), false);
+  });
+
+  test("the map marks a partner recommended only for the hotel that promotes it", async () => {
+    const recommended = async (userId: string) =>
+      (await getEligibleMapPlacesForGuest({ userId }, NOW, DEPS)).places.filter((p) => p.recommended).map((p) => p.id);
+    assert.deepEqual(await recommended("guest-a"), ["promoted-partner"]);
+    assert.deepEqual(await recommended("guest-b"), []);
+  });
+
+  test("a viewport with no stay is still empty", async () => {
+    const result = await getEligibleMapPlacesForGuest({ userId: "guest-nostay", bounds: box(41, 42) }, NOW, DEPS);
+    assert.deepEqual(result.places, []);
+  });
+});
+
 describe("hotel partnerships promote; they never decide visibility", () => {
   test("§9.7 Hotel A's partnership promotes its Atlas partner for Hotel A's guests only", async () => {
     const a = await listEligibleExperiencesForGuest({ userId: "guest-a" }, NOW, DEPS);

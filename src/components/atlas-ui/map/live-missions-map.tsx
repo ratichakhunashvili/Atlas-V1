@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AtlasIcon } from "../asset";
 import { AtlasBottomBar } from "../bottom-bar";
 import { PlanSegment, StayHeader } from "../missions-chrome";
 import { DimensionSwitch } from "./dimension-switch";
 import type { MarkerImage } from "./markers";
-import { useMapScene, useSceneContext, type ScenePlace } from "./scene";
+import { useMapScene, useMapViewport, useSceneContext, type MapViewport, type ScenePlace } from "./scene";
 import { useShortScreen, useWideLayout } from "../use-layout";
 import { useSheetSwipe } from "../use-sheet-swipe";
 
@@ -15,9 +15,10 @@ import { useSheetSwipe } from "../use-sheet-swipe";
  * Main · Missions › Map (home) — Figma frame 1:205 — on real data.
  *
  * Every place here arrives from the server already filtered by services/eligibility for the
- * guest's own active stay: the hotel's active facilities and the partners it has explicitly
- * approved. This component never adds, widens or substitutes anything. With nothing approved it
- * says so instead of showing other places.
+ * guest's own active stay (the Atlas catalogue: attractions, Atlas partners and the hotel's own
+ * facilities). The server sends only the places inside the visible map area, at most
+ * MAP_RESULT_CAP of them; moving the map asks /api/places/viewport for the new area. This
+ * component only narrows what it was sent, with the chips; it never adds or substitutes anything.
  *
  * Not connected yet (shown honestly rather than faked): the guest's live location, photos, plan
  * positions and achievement status. The "you" dot and the locate control are left out until the
@@ -32,13 +33,26 @@ export type LivePlace = {
   address: string | null;
   priceLevel: number | null;
   imageUrl: string | null;
+  /** The guest's own hotel recommends this partner. */
+  recommended: boolean;
   /** [lng, lat] */
   at: [number, number];
 };
 
 export type LiveHotel = { name: string; address: string | null; at: [number, number] };
 
+/** Business chips. Attractions have their own toggle, so choosing "Partners" or "Hotel" never hides them. */
 type Filter = "All" | "Hotel" | "Partners";
+
+/** How long the map must rest before the new area is fetched. */
+const VIEWPORT_DEBOUNCE_MS = 250;
+
+type ViewportResponse = { places: (Omit<LivePlace, "at"> & { latitude: number; longitude: number })[]; truncated: boolean };
+
+/** Rounded to ~10 m so a tiny nudge of the map doesn't refetch the same area. */
+function viewportKey(viewport: MapViewport): string {
+  return [viewport.south, viewport.west, viewport.north, viewport.east].map((value) => value.toFixed(4)).join(",");
+}
 
 const SHEET_HEIGHT = 196;
 const SHEET_COLLAPSED = 64;
@@ -74,17 +88,24 @@ function label(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ");
 }
 
-function marker(place: LivePlace, selected: boolean): MarkerImage {
+function marker(place: LivePlace, selected: boolean, visited: boolean): MarkerImage {
   if (place.source === "facility") return selected ? "facility-selected" : "facility";
+  // An attraction stays grey until the guest has visited it.
+  if (place.source === "attraction") {
+    if (visited) return selected ? "attraction-selected" : "attraction";
+    return selected ? "attraction-locked-selected" : "attraction-locked";
+  }
+  if (place.recommended) return selected ? "partner-recommended-selected" : "partner-recommended";
   return selected ? "partner-selected" : "partner";
 }
 
-function matches(filter: Filter, place: LivePlace) {
+function matches(filter: Filter, attractions: boolean, place: LivePlace) {
+  if (place.source === "attraction") return attractions;
   return filter === "All" || (filter === "Hotel" ? place.source === "facility" : place.source === "partner");
 }
 
 /** A card opens the place's details; tapping its marker on the map highlights it and scrolls it into view. */
-function LivePlaceCard({ place, selected }: { place: LivePlace; selected: boolean }) {
+function LivePlaceCard({ place, selected, hotelName }: { place: LivePlace; selected: boolean; hotelName: string }) {
   return (
     <Link
       id={`live-place-${place.id}`}
@@ -109,6 +130,13 @@ function LivePlaceCard({ place, selected }: { place: LivePlace; selected: boolea
         <span className="w-full font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal [overflow-wrap:anywhere]">
           {place.name}
         </span>
+        {place.recommended ? (
+          // Teal text for contrast; the bronze dot matches the recommended marker.
+          <span className="flex items-center gap-[5px] font-manrope text-[12px] font-semibold leading-[16px] text-atlas-teal">
+            <span aria-hidden className="size-[6px] shrink-0 rounded-full bg-atlas-bronze" />
+            Recommended by {hotelName}
+          </span>
+        ) : null}
         <span className="flex w-full flex-wrap items-center gap-[6px]">
           {place.address ? (
             <span className="min-w-0 truncate font-manrope text-[13px] leading-[18px] text-atlas-ink">{place.address}</span>
@@ -124,9 +152,27 @@ function LivePlaceCard({ place, selected }: { place: LivePlace; selected: boolea
   );
 }
 
-export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; places: LivePlace[]; summary: string }) {
+export function LiveMissionsMap({
+  hotel,
+  places: initialPlaces,
+  truncated: initialTruncated,
+  visitedPlaceIds,
+  summary,
+}: {
+  hotel: LiveHotel;
+  places: LivePlace[];
+  truncated: boolean;
+  /** Places this guest has visited: their attractions show unlocked. */
+  visitedPlaceIds: string[];
+  summary: string;
+}) {
+  const [places, setPlaces] = useState(initialPlaces);
+  const [truncated, setTruncated] = useState(initialTruncated);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [filter, setFilter] = useState<Filter>("All");
-  const visible = places.filter((place) => matches(filter, place));
+  const [attractions, setAttractions] = useState(true);
+  const visited = new Set(visitedPlaceIds);
+  const visible = places.filter((place) => matches(filter, attractions, place));
   const [selected, setSelected] = useState<string | null>(places[0]?.id ?? null);
   const short = useShortScreen();
   // The phone sheet rests minimised, as a row of cards, or as a full list ("List" button, or swipe up again).
@@ -142,11 +188,57 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
   const [listAtTop, setListAtTop] = useState(true);
   const { moveCamera } = useSceneContext();
 
-  const scenePlaces: ScenePlace[] = visible.map((place) => ({ id: place.id, marker: marker(place, place.id === selected), at: place.at }));
+  const scenePlaces: ScenePlace[] = visible.map((place) => ({
+    id: place.id,
+    marker: marker(place, place.id === selected, visited.has(place.id)),
+    at: place.at,
+  }));
+
+  // Load the catalogue Places for the area the guest is looking at, once the map comes to rest. A newer move
+  // cancels the older request, so a slow answer never overwrites the current area.
+  const lastKey = useRef<string | null>(null);
+  const pending = useRef<{ timer: ReturnType<typeof setTimeout> | null; controller: AbortController | null }>({ timer: null, controller: null });
+  const onViewport = useCallback((viewport: MapViewport) => {
+    const key = viewportKey(viewport);
+    if (key === lastKey.current) return;
+    if (pending.current.timer) clearTimeout(pending.current.timer);
+    pending.current.timer = setTimeout(async () => {
+      pending.current.controller?.abort();
+      const controller = new AbortController();
+      pending.current.controller = controller;
+      const query = new URLSearchParams({
+        south: String(viewport.south),
+        west: String(viewport.west),
+        north: String(viewport.north),
+        east: String(viewport.east),
+      });
+      try {
+        const response = await fetch(`/api/places/viewport?${query}`, { signal: controller.signal });
+        if (!response.ok) throw new Error(`Places request failed (${response.status})`);
+        const body = (await response.json()) as ViewportResponse;
+        lastKey.current = key;
+        setPlaces(body.places.map(({ latitude, longitude, ...place }) => ({ ...place, at: [longitude, latitude] as [number, number] })));
+        setTruncated(body.truncated);
+        setLoadFailed(false);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error(error);
+        setLoadFailed(true);
+      }
+    }, VIEWPORT_DEBOUNCE_MS);
+  }, []);
+  useEffect(() => {
+    const current = pending.current;
+    return () => {
+      if (current.timer) clearTimeout(current.timer);
+      current.controller?.abort();
+    };
+  }, []);
+  useMapViewport(onViewport);
 
   const selectPlace = useCallback(
     (id: string) => {
-      if (places.some((place) => place.id === id && matches(filter, place))) {
+      if (places.some((place) => place.id === id && matches(filter, attractions, place))) {
         setSelected(id);
         setCollapsed(false);
         // After the sheet opens, bring this place's card into view so the tap visibly answers.
@@ -155,7 +247,7 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
         );
       }
     },
-    [places, filter]
+    [places, filter, attractions]
   );
 
   useMapScene(
@@ -172,7 +264,7 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
   );
 
   const counts: Record<Filter, number> = {
-    All: places.length,
+    All: places.filter((place) => place.source !== "attraction").length,
     Hotel: places.filter((place) => place.source === "facility").length,
     Partners: places.filter((place) => place.source === "partner").length,
   };
@@ -188,7 +280,7 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
             aria-pressed={active}
             onClick={() => {
               setFilter(chip);
-              setSelected(places.find((place) => matches(chip, place))?.id ?? null);
+              setSelected(places.find((place) => matches(chip, attractions, place))?.id ?? null);
             }}
             className={`flex h-[44px] shrink-0 items-center gap-[6px] whitespace-nowrap rounded-[22px] border px-[12px] font-manrope text-[13px] leading-[18px] ${
               active ? "border-atlas-teal bg-atlas-teal" : "border-atlas-beige bg-atlas-paper"
@@ -199,6 +291,19 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
           </button>
         );
       })}
+      <button
+        type="button"
+        aria-pressed={attractions}
+        onClick={() => setAttractions(!attractions)}
+        className={`flex h-[44px] shrink-0 items-center gap-[6px] whitespace-nowrap rounded-[22px] border px-[12px] font-manrope text-[13px] leading-[18px] ${
+          attractions ? "border-atlas-teal bg-atlas-teal" : "border-atlas-beige bg-atlas-paper"
+        }`}
+      >
+        <span className={`font-semibold ${attractions ? "text-atlas-paper" : "text-atlas-teal"}`}>Attractions</span>
+        <span className={`font-medium ${attractions ? "text-atlas-paper/75" : "text-atlas-teal/75"}`}>
+          {places.filter((place) => place.source === "attraction").length}
+        </span>
+      </button>
     </div>
   );
 
@@ -251,9 +356,16 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
             <span className="sr-only">{collapsed ? "Show places" : "Hide places to see more of the map"}</span>
           </button>
           <div className="flex min-h-[44px] w-full shrink-0 items-center justify-between pl-[16px] pr-[12px] wide:px-[4px]">
-            <h2 className="font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal">
-              {visible.length} {visible.length === 1 ? "place" : "places"} for you
-            </h2>
+            <div className="flex min-w-0 flex-col">
+              <h2 className="font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal">
+                {visible.length} {visible.length === 1 ? "place" : "places"} in this area
+              </h2>
+              {loadFailed || truncated ? (
+                <p role="status" className="font-manrope text-[12px] leading-[16px] text-atlas-slate">
+                  {loadFailed ? "Couldn't update the places. Move the map to try again." : "Zoom in to see every place here."}
+                </p>
+              ) : null}
+            </div>
             <button
               type="button"
               aria-pressed={list}
@@ -275,12 +387,12 @@ export function LiveMissionsMap({ hotel, places, summary }: { hotel: LiveHotel; 
             {visible.length === 0 ? (
               <p className="w-full font-manrope text-[14px] leading-[1.45] text-atlas-slate">
                 {places.length === 0
-                  ? `${hotel.name} hasn't approved any facilities or partners yet. Atlas only shows places your own hotel has signed off.`
+                  ? "Nothing to show in this part of the map. Move the map or zoom out to see more."
                   : "Nothing in this group. Try another filter."}
               </p>
             ) : (
               visible.map((place) => (
-                <LivePlaceCard key={place.id} place={place} selected={place.id === selected} />
+                <LivePlaceCard key={place.id} place={place} selected={place.id === selected} hotelName={hotel.name} />
               ))
             )}
           </div>

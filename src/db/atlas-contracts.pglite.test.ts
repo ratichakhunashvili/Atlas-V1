@@ -272,6 +272,13 @@ describe("guest catalogue reads (phase C2), end to end through the real SQL and 
       assert.equal(forB.get("B Garden")?.source, "facility", "Hotel B's own garden is its facility");
       assert.notEqual(forA.get("Contracted Cafe")?.promotion, null, "promoted by Hotel A");
       assert.equal(forB.get("Contracted Cafe")?.promotion, null, "not by Hotel B");
+
+      // Phase C3: a map area is narrowed in the database itself, and only narrows.
+      const around = (lat: number, lng: number) => ({ south: lat - 0.01, north: lat + 0.01, west: lng - 0.01, east: lng + 0.01 });
+      const inArea = await listContractRowsForCatalogue(db, hotelA.id, around(contracted.latitude, contracted.longitude));
+      assert.ok(inArea.some((row) => row.placeId === contracted.id));
+      assert.deepEqual(await listContractRowsForCatalogue(db, hotelA.id, around(contracted.latitude + 1, contracted.longitude)), []);
+      assert.deepEqual(await listAttractionPlacesForCatalogue(db, hotelA.id, around(contracted.latitude + 1, contracted.longitude)), []);
     } finally {
       await catalogueDb.close();
     }

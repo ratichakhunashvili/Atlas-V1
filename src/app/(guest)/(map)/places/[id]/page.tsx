@@ -5,6 +5,7 @@ import { AtlasIcon } from "@/components/atlas-ui/asset";
 import { AtlasBottomBar } from "@/components/atlas-ui/bottom-bar";
 import { type } from "@/components/atlas-ui/ui";
 import { findAchievementForPlace } from "@/db/queries/achievements";
+import { findCurrentStayForUser } from "@/db/queries/hotel-stays";
 import { hasVisitedPlace } from "@/db/queries/place-visits";
 import { requireUser } from "@/lib/authorization";
 import { describePriceLevel } from "@/services/advisor/preference-ranking";
@@ -16,9 +17,12 @@ import { listEligibleExperiencesForGuest } from "@/services/eligibility";
  * One place's details, opened from a card on the home map or from Achievements.
  *
  * The Place is looked up ONLY among the experiences the eligibility service returns for the
- * signed-in guest's own stay. An id from the address bar that isn't one of them — a nearby
- * non-partner, another hotel's partner, a typo — gets the same "not found" as an id that doesn't
- * exist, so the page can't be used to discover places the guest's hotel hasn't approved.
+ * signed-in guest's own stay (the Atlas catalogue). An id from the address bar that isn't one of
+ * them — an uncontracted business, another hotel or its facility, a typo — gets the same "not
+ * found" as an id that doesn't exist, so the page can't be used to discover places outside it.
+ *
+ * "Recommended by <hotel>" and the offer appear only when the guest's OWN hotel promotes this
+ * partner; services/eligibility never sets a promotion from another hotel's partnership.
  */
 
 export const metadata: Metadata = { title: "Place" };
@@ -48,8 +52,13 @@ export default async function PlaceDetailPage({ params }: { params: Promise<{ id
   if (!experience || eligible.status !== "ok") notFound();
 
   const { place } = experience;
-  const [achievement, visited] = await Promise.all([findAchievementForPlace(place.id), hasVisitedPlace(user.id, place.id)]);
+  const [achievement, visited, stay] = await Promise.all([
+    findAchievementForPlace(place.id),
+    hasVisitedPlace(user.id, place.id),
+    experience.promotion ? findCurrentStayForUser(user.id) : null,
+  ]);
   const facility = experience.source === "facility";
+  const recommendedBy = experience.promotion ? stay?.place.name ?? null : null;
   const walk = facility ? null : Math.max(1, Math.round(estimateWalkMinutes(eligible.hotelLocation, { lat: place.latitude, lng: place.longitude })));
   const price = describePriceLevel(place.priceLevel);
 
@@ -72,12 +81,17 @@ export default async function PlaceDetailPage({ params }: { params: Promise<{ id
       <div className="mx-auto flex w-full max-w-[640px] flex-1 flex-col items-start gap-[14px] px-[16px] pb-[120px] pt-[16px]">
         <div className="flex w-full flex-col items-start gap-[4px]">
           <p className={type.eyebrow}>
-            {facility ? "At your hotel" : "Partner"} · {categoryLabel(place.category)}
+            {facility ? "At your hotel" : experience.source === "attraction" ? "Attraction" : "Partner"} · {categoryLabel(place.category)}
           </p>
           <h1 className={`w-full ${type.title} [overflow-wrap:anywhere]`}>{place.name}</h1>
-          <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">
-            {facility ? "Part of your hotel" : "Approved by your hotel"}
-          </p>
+          {facility ? (
+            <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">Part of your hotel</p>
+          ) : recommendedBy ? (
+            <p className="flex items-center gap-[6px] font-manrope text-[13px] font-semibold leading-[18px] text-atlas-teal">
+              <span aria-hidden className="size-[6px] shrink-0 rounded-full bg-atlas-bronze" />
+              Recommended by {recommendedBy}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex w-full gap-[8px]">

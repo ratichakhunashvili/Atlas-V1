@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, notExists } from "drizzle-orm";
+import { and, between, desc, eq, inArray, isNull, ne, notExists, type SQL } from "drizzle-orm";
 import { PG_UNIQUE_VIOLATION, hasPgErrorCode } from "@/db/errors";
 import {
   atlasPartnerContracts,
@@ -11,6 +11,7 @@ import {
   type PlaceKind,
 } from "@/db/schema";
 import type { ContractRow } from "@/services/eligibility/rules";
+import type { MapBounds } from "@/services/eligibility/viewport";
 import type { AtlasDatabase } from "./types";
 
 /**
@@ -138,7 +139,7 @@ export type AdminCatalogueRow = Awaited<ReturnType<typeof listCatalogueForAdmin>
  * Place is another hotel's facility are left out here, because the pure rule cannot see facility ownership; the
  * guest's own hotel facilities reach the rule separately. The rule re-checks status, confirmation, window and Place.
  */
-export async function listContractRowsForCatalogue(db: AtlasDatabase, hotelId: string): Promise<ContractRow[]> {
+export async function listContractRowsForCatalogue(db: AtlasDatabase, hotelId: string, bounds?: MapBounds): Promise<ContractRow[]> {
   return db
     .select({
       id: atlasPartnerContracts.id,
@@ -152,7 +153,7 @@ export async function listContractRowsForCatalogue(db: AtlasDatabase, hotelId: s
     .from(atlasPartnerContracts)
     .innerJoin(places, eq(atlasPartnerContracts.placeId, places.id))
     .where(
-and(eq(atlasPartnerContracts.status, "active"), notOtherHotelsFacility(db, hotelId))
+and(eq(atlasPartnerContracts.status, "active"), notOtherHotelsFacility(db, hotelId), withinBounds(bounds))
     );
 }
 
@@ -160,11 +161,20 @@ and(eq(atlasPartnerContracts.status, "active"), notOtherHotelsFacility(db, hotel
  * GUEST catalogue input (phase C2): attraction Places. Like the contract read, it leaves out another hotel's facility
  * (an admin may have marked one as an attraction); services/eligibility re-checks kind and publication.
  */
-export async function listAttractionPlacesForCatalogue(db: AtlasDatabase, hotelId: string): Promise<Place[]> {
+export async function listAttractionPlacesForCatalogue(db: AtlasDatabase, hotelId: string, bounds?: MapBounds): Promise<Place[]> {
   return db
     .select()
     .from(places)
-    .where(and(eq(places.kind, "attraction"), isNull(places.archivedAt), notOtherHotelsFacility(db, hotelId)));
+    .where(and(eq(places.kind, "attraction"), isNull(places.archivedAt), notOtherHotelsFacility(db, hotelId), withinBounds(bounds)));
+}
+
+/**
+ * Optional map-area narrowing (phase C3), done in the database so a city-wide catalogue isn't read for one viewport.
+ * A plain range over places_coordinates_idx (latitude, longitude); services/eligibility re-checks the box and caps.
+ */
+function withinBounds(bounds: MapBounds | undefined): SQL | undefined {
+  if (!bounds) return undefined;
+  return and(between(places.latitude, bounds.south, bounds.north), between(places.longitude, bounds.west, bounds.east));
 }
 
 /** The Place is not a facility of any hotel other than `hotelId` (decision 5: other hotels' facilities never appear). */
