@@ -11,8 +11,9 @@ import {
   updateModelSettings,
   upsertPlaceModel,
 } from "@/db/queries/place-models";
-import { storageService } from "@/services/storage";
-import { uploadModelFile } from "@/services/map3d";
+import { STORAGE_NOT_CONFIGURED_MESSAGE } from "@/services/storage";
+import { storageService } from "@/services/storage/server";
+import { isOwnModelUrl, validateModelShape } from "@/services/map3d";
 import { anchorSeparationMeters, validateAnchor } from "@/services/map3d/placement";
 import { modelIdSchema, modelSettingsSchema, placeIdSchema } from "./schema";
 
@@ -38,7 +39,14 @@ function back(outcome: { error: string } | { ok: string }): never {
   redirect(`${LIST_PATH}?${query}`);
 }
 
-export async function uploadPlaceModelAction(formData: FormData) {
+/**
+ * Attaches a model the admin's browser has just uploaded straight to the store (see app/api/admin/models/upload).
+ *
+ * The browser only reports a URL, and that is a claim: it must be this Place's own model path in Atlas's store, and
+ * the store's own record of the file (its size, type and first four bytes) must pass the same checks a server-side
+ * upload would. A file that fails is deleted again, and no model row is written.
+ */
+export async function attachUploadedModelAction(formData: FormData) {
   const admin = await requireAdmin();
 
   const placeId = placeIdSchema.safeParse(formData.get("placeId") ?? "");
@@ -47,37 +55,26 @@ export async function uploadPlaceModelAction(formData: FormData) {
   const place = await findPlaceById(placeId.data);
   if (!place) back({ error: "That place no longer exists." });
 
-  const file = formData.get("model");
-  if (!(file instanceof File) || file.size === 0) back({ error: "Choose a .glb model file." });
+  if (!storageService.configured) back({ error: STORAGE_NOT_CONFIGURED_MESSAGE });
 
-  /*
-   * Read the bytes to validate them. Validation looks at the magic number and the
-   * size — it never parses or executes the file, and nothing server-side renders
-   * it: a GLB is handed to the browser's loader and nowhere else.
-   */
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const url = String(formData.get("url") ?? "");
+  if (!isOwnModelUrl(url, place.id)) back({ error: "That upload doesn't belong to this place. Upload the file again." });
 
-  const result = await uploadModelFile(storageService, {
-    placeId: place.id,
-    bytes,
-    contentType: file.type,
-  });
+  const stored = await storageService.inspect(url);
+  if (!stored) back({ error: "The uploaded file couldn't be found in storage. Upload it again." });
 
-  if (!result.ok) {
-    /*
-     * Includes the "no object store configured" case. The admin is told what is
-     * missing and NO model row is written — a row pointing at a file that does not
-     * exist would be worse than the refusal.
-     */
-    back({ error: result.message });
+  const validation = validateModelShape(stored);
+  if (!validation.ok) {
+    await storageService.delete(stored.key);
+    back({ error: validation.message });
   }
 
   const saved = await upsertPlaceModel({
     placeId: place.id,
-    storageKey: result.key,
-    fileUrl: result.url,
-    fileSizeBytes: bytes.byteLength,
-    contentType: file.type,
+    storageKey: stored.key,
+    fileUrl: stored.url,
+    fileSizeBytes: stored.size,
+    contentType: stored.contentType,
     uploadedByUserId: admin.id,
   });
 
@@ -87,7 +84,7 @@ export async function uploadPlaceModelAction(formData: FormData) {
     targetType: "place_model",
     targetId: saved.id,
     // The storage key and URL are privileged/irrelevant here: the trail records that a file was attached, not where it lives.
-    after: { placeId: place.id, uploaded: true, fileSizeBytes: bytes.byteLength, status: saved.status },
+    after: { placeId: place.id, uploaded: true, fileSizeBytes: stored.size, status: saved.status },
   });
 
   revalidatePath(LIST_PATH);

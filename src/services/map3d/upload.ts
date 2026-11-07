@@ -37,11 +37,19 @@ export function validateModelFile(input: {
   bytes: Uint8Array;
   contentType: string;
 }): ModelValidation {
-  if (input.bytes.byteLength === 0) {
+  return validateModelShape({ size: input.bytes.byteLength, contentType: input.contentType, firstBytes: input.bytes });
+}
+
+/**
+ * The checks themselves, on what is known about a file without holding all of it: its size, its declared type and
+ * its first bytes. A direct upload is judged this way after it lands, from the store's own record and a 4-byte read.
+ */
+export function validateModelShape(input: { size: number; contentType: string; firstBytes: Uint8Array }): ModelValidation {
+  if (input.size === 0) {
     return { ok: false, reason: "empty", message: "That file is empty." };
   }
 
-  if (input.bytes.byteLength > MAX_MODEL_BYTES) {
+  if (input.size > MAX_MODEL_BYTES) {
     const megabytes = Math.round(MAX_MODEL_BYTES / (1024 * 1024));
     return {
       ok: false,
@@ -58,7 +66,7 @@ export function validateModelFile(input: {
     };
   }
 
-  const startsWithGlb = GLB_MAGIC.every((byte, index) => input.bytes[index] === byte);
+  const startsWithGlb = GLB_MAGIC.every((byte, index) => input.firstBytes[index] === byte);
   if (!startsWithGlb) {
     return {
       ok: false,
@@ -78,6 +86,31 @@ export function validateModelFile(input: {
  */
 export function modelStorageKey(placeId: string): string {
   return `place-models/${placeId}.glb`;
+}
+
+/**
+ * Whether a URL the browser reports after a direct upload is really this Place's model in Atlas's own Blob store.
+ *
+ * The browser uploads straight to the store (Vercel rejects function bodies over 4.5 MB), then tells the server the
+ * URL it got. That URL is a client claim: it must be an https URL on Vercel Blob's public host and sit under this
+ * Place's own model path, or the server refuses to attach it — an admin form must not be able to point a model at
+ * an arbitrary site, or at another Place's file. (The store then confirms the file is its own; see the storage
+ * service's `inspect`.)
+ */
+export function isOwnModelUrl(url: string, placeId: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return (
+    parsed.protocol === "https:" &&
+    parsed.hostname.endsWith(".public.blob.vercel-storage.com") &&
+    parsed.search === "" &&
+    parsed.pathname.startsWith(`/place-models/${placeId}`) &&
+    parsed.pathname.endsWith(".glb")
+  );
 }
 
 /**

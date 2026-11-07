@@ -2,11 +2,10 @@
  * File storage, as an interface the rest of Atlas depends on rather than a
  * specific vendor.
  *
- * **No object store is configured in this project.** `@vercel/blob` is approved
- * but not installed, and no credentials exist. That is a fact the product has to
- * handle, not hide: an upload form that silently fails, or worse reports success
- * and stores a row pointing at nothing, is the failure mode this interface exists
- * to prevent.
+ * A deployment may have no object store connected (no `BLOB_READ_WRITE_TOKEN`).
+ * That is a fact the product has to handle, not hide: an upload form that
+ * silently fails, or worse reports success and stores a row pointing at nothing,
+ * is the failure mode this interface exists to prevent.
  *
  * So the default implementation reports `configured: false` and refuses, with a
  * message an admin can act on. Callers must check the result; they are given no
@@ -26,11 +25,18 @@ export type StorageUploadResult =
   | { ok: false; reason: "not_configured" | "rejected" | "failed"; message: string };
 
 export type StorageService = {
-  /** Whether a real store is wired up. False in this project today. */
+  /** Whether a real store is wired up. */
   readonly configured: boolean;
   upload(input: StorageUploadInput): Promise<StorageUploadResult>;
   delete(key: string): Promise<{ ok: boolean; message?: string }>;
+  /**
+   * What the store itself records about a file the browser uploaded directly: null when the URL is not a file in
+   * this store. Used to check a direct upload before any database row points at it.
+   */
+  inspect(url: string): Promise<StoredFile | null>;
 };
+
+export type StoredFile = { key: string; url: string; size: number; contentType: string; firstBytes: Uint8Array };
 
 /** What an admin is told when no store is configured. Names the missing thing rather than blaming them. */
 export const STORAGE_NOT_CONFIGURED_MESSAGE =
@@ -53,16 +59,16 @@ export const unconfiguredStorage: StorageService = {
   async delete() {
     return { ok: false, message: STORAGE_NOT_CONFIGURED_MESSAGE };
   },
+
+  async inspect() {
+    return null;
+  },
 };
 
-/**
- * The storage the application uses.
- *
- * When Vercel Blob (or another store) is configured, this is where its
- * implementation is wired in — the shape above is all the rest of Atlas depends
- * on, so nothing else changes. Until then every caller gets the refusal above.
+/*
+ * The storage the application actually uses is chosen in ./server.ts (server-only): Vercel Blob when the project has
+ * a Blob store connected, otherwise the refusal above. This file stays free of the SDK so tests can import it.
  */
-export const storageService: StorageService = unconfiguredStorage;
 
 /**
  * An in-memory store for tests.
@@ -93,6 +99,12 @@ export function createFakeStorage(options: { failWith?: StorageUploadResult } = 
     async delete(key) {
       files.delete(key);
       return { ok: true };
+    },
+
+    async inspect(url) {
+      const key = url.replace("https://test-storage.invalid/", "");
+      const file = files.get(key);
+      return file ? { key, url, size: file.size, contentType: file.contentType, firstBytes: new Uint8Array([0x67, 0x6c, 0x54, 0x46]) } : null;
     },
   };
 }

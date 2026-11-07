@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { Alert } from "@/components/shared/alert";
-import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
-import { Select } from "@/components/shared/select";
 import { listModelsForAdmin } from "@/db/queries/place-models";
 import { listPlaces } from "@/db/queries/places";
-import { storageService } from "@/services/storage";
-import { MAX_MODEL_BYTES } from "@/services/map3d";
-import { deletePlaceModelAction, uploadPlaceModelAction } from "@/features/place-models/actions";
+import { storageService } from "@/services/storage/server";
+import { MAX_MODEL_BYTES, modelStorageKey } from "@/services/map3d";
+import { deletePlaceModelAction } from "@/features/place-models/actions";
+import { ModelUploadForm } from "@/components/admin/model-upload-form";
 import { ConfirmSubmit } from "@/components/admin/confirm-submit";
 
 /**
@@ -64,32 +63,11 @@ export default async function AdminModelsPage({
               Every eligible Place already has a model, or there are no unarchived Places to attach one to.
             </p>
           ) : (
-            <form action={uploadPlaceModelAction} className="space-y-3">
-              <Select label="Place" name="placeId" required>
-                {available.map((place) => (
-                  <option key={place.id} value={place.id}>
-                    {place.name} ({place.category})
-                  </option>
-                ))}
-              </Select>
-
-              <label className="block space-y-1">
-                <span className="text-sm font-medium text-slate-700">Model file</span>
-                <input
-                  type="file"
-                  name="model"
-                  accept=".glb,model/gltf-binary"
-                  required
-                  className="block w-full text-sm"
-                />
-                <span className="block text-xs text-slate-500">
-                  Binary glTF (.glb), up to {maxMegabytes} MB. New models start as drafts and are invisible to guests
-                  until enabled.
-                </span>
-              </label>
-
-              <Button type="submit">Upload model</Button>
-            </form>
+            <ModelUploadForm
+              places={available.map(({ id, name, category }) => ({ id, name, category }))}
+              modelPath={modelStorageKey("{placeId}")}
+              maxMegabytes={maxMegabytes}
+            />
           )}
         </Card>
       )}
