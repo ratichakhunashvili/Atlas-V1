@@ -11,8 +11,8 @@ import type { StorageService, StorageUploadResult } from "@/services/storage";
 /** Binary glTF. The only format the client loader reads. */
 export const ALLOWED_MODEL_CONTENT_TYPES = ["model/gltf-binary"] as const;
 
-/** 25 MB. Large enough for a detailed landmark, small enough that a phone on hotel wifi can load it. */
-export const MAX_MODEL_BYTES = 25 * 1024 * 1024;
+/** 50 MB. Room for a detailed landmark; compress models (Draco/Meshopt, smaller textures) so phones load them quickly. */
+export const MAX_MODEL_BYTES = 50 * 1024 * 1024;
 
 /** The first four bytes of every GLB file: "glTF". */
 const GLB_MAGIC = [0x67, 0x6c, 0x54, 0x46];
