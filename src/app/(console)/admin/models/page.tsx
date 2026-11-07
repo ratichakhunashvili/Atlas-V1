@@ -64,6 +64,8 @@ export default async function AdminModelsPage({
             </p>
           ) : (
             <ModelUploadForm
+              // A new list of places (after an upload) resets the form, so it never keeps a place that is gone.
+              key={available.map((place) => place.id).join(",")}
               places={available.map(({ id, name, category }) => ({ id, name, category }))}
               modelPath={modelStorageKey("{placeId}")}
               maxMegabytes={maxMegabytes}

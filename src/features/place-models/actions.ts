@@ -58,7 +58,10 @@ export async function attachUploadedModelAction(formData: FormData) {
   if (!storageService.configured) back({ error: STORAGE_NOT_CONFIGURED_MESSAGE });
 
   const url = String(formData.get("url") ?? "");
-  if (!isOwnModelUrl(url, place.id)) back({ error: "That upload doesn't belong to this place. Upload the file again." });
+  if (!isOwnModelUrl(url, place.id)) {
+    // Admin-only screen: naming the address the store returned is what makes a mismatch fixable.
+    back({ error: `That upload doesn't belong to ${place.name} (the store returned ${url || "no address"}). Upload the file again.` });
+  }
 
   const stored = await storageService.inspect(url);
   if (!stored) back({ error: "The uploaded file couldn't be found in storage. Upload it again." });
