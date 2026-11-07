@@ -1,7 +1,7 @@
 "use client";
 
 import { uploadPresigned } from "@vercel/blob/client";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/shared/button";
 import { Select } from "@/components/shared/select";
 import { attachUploadedModelAction } from "@/features/place-models/actions";
@@ -24,9 +24,7 @@ export function ModelUploadForm({
   modelPath: string;
   maxMegabytes: number;
 }) {
-  const attachRef = useRef<HTMLFormElement>(null);
   const [placeId, setPlaceId] = useState(places[0]?.id ?? "");
-  const [url, setUrl] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +41,7 @@ export function ModelUploadForm({
     }
     setError(null);
     setProgress(0);
+    let url: string;
     try {
       const blob = await uploadPresigned(modelPath.replace("{placeId}", placeId), file, {
         access: "public",
@@ -52,13 +51,18 @@ export function ModelUploadForm({
         multipart: file.size > MULTIPART_FROM_BYTES,
         onUploadProgress: ({ percentage }) => setProgress(Math.round(percentage)),
       });
-      setUrl(blob.url);
-      // The hidden form posts { placeId, url } to the Server Action, which checks the stored file and redirects.
-      queueMicrotask(() => attachRef.current?.requestSubmit());
+      url = blob.url;
     } catch (cause) {
       setProgress(null);
       setError(cause instanceof Error && cause.message ? cause.message : "The upload failed. Try again.");
+      return;
     }
+    // Straight to the Server Action, which checks the stored file and redirects with the outcome. Not via a hidden
+    // form (React would not have rendered the new URL into it yet), and outside the try: the redirect is Next.js's own.
+    const attach = new FormData();
+    attach.set("placeId", placeId);
+    attach.set("url", url);
+    await attachUploadedModelAction(attach);
   }
 
   const busy = progress !== null;
@@ -98,10 +102,6 @@ export function ModelUploadForm({
         </Button>
       </form>
 
-      <form ref={attachRef} action={attachUploadedModelAction} hidden>
-        <input type="hidden" name="placeId" value={placeId} />
-        <input type="hidden" name="url" value={url} />
-      </form>
     </>
   );
 }
