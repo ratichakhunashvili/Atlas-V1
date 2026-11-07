@@ -1,3 +1,4 @@
+import { DAY_MONTH as DAY } from "@/lib/format";
 /**
  * The facts the Profile screen shows, as plain data a client component can receive.
  * Built by loadGuestProfile (guest-profile-data.ts); the stay wording is pure and tested.
@@ -19,7 +20,6 @@ export type GuestProfile = {
 };
 
 const DAY_MS = 86_400_000;
-const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Tbilisi" });
 
 export function describeStay(input: { checkIn: Date; expectedCheckOut: Date | null; checkOut: Date | null; now: Date }): { dates: string; progress: string } {
   const end = input.checkOut ?? input.expectedCheckOut;

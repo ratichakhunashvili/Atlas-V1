@@ -4,6 +4,7 @@ import { AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
 import { StatusPill } from "@/components/admin/status-pill";
 import { listHotelsWithPlace } from "@/db/queries/hotels";
 import { listActiveQrCredentialsForAdmin } from "@/db/queries/qr-credentials";
+import { DAY_MONTH_YEAR as DATE } from "@/lib/format";
 
 /*
  * QR codes in use, on real data. Only a hash of each code is stored, so a code is never shown again after
@@ -14,7 +15,6 @@ import { listActiveQrCredentialsForAdmin } from "@/db/queries/qr-credentials";
 export const metadata: Metadata = { title: "QR codes" };
 export const dynamic = "force-dynamic";
 
-const DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Tbilisi" });
 
 export default async function AdminQrPage() {
   const [codes, hotels] = await Promise.all([listActiveQrCredentialsForAdmin(), listHotelsWithPlace()]);
