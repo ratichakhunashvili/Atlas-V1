@@ -26,6 +26,7 @@ export const darkTheme: ThemeDefinition = {
       museum: "#b794f6",
       beach: "#2dd4bf",
       nightlife: "#a78bfa",
+      winery: "#c084a8",
       attraction: "#5b9bff",
       activity: "#38bdf8",
       hotel: "#b794f6",

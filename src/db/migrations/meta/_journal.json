@@ -190,6 +190,20 @@
       "when": 1793900471795,
       "tag": "0026_users_email_case_insensitive",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794049151627,
+      "tag": "0027_places_location_gist",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1794049240262,
+      "tag": "0028_winery_category",
+      "breakpoints": true
     }
   ]
 }

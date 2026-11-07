@@ -22,8 +22,10 @@ const R1 = id("f", 1); // a replacement candidate
 const DECOY = id("9", 1); // a nearby Place with NO relationship to the hotel
 
 const hotelPlace = makeTestPlace({ id: HOTEL_PLACE, category: "hotel", latitude: 41.7, longitude: 44.8, name: "Hotel" });
+// A different category group per position, so variety (one place per group per day) only decides the tests about it.
+const VARIED = ["other", "restaurant", "museum", "nature", "spa", "winery", "shop", "tour"] as const;
 const placeAt = (placeId: string, n: number, name: string) =>
-  makeTestPlace({ id: placeId, category: "restaurant", latitude: 41.7 + n * 0.001, longitude: 44.8, name });
+  makeTestPlace({ id: placeId, category: VARIED[n % VARIED.length], latitude: 41.7 + n * 0.001, longitude: 44.8, name });
 const eligibleEntry = (place: ReturnType<typeof makeTestPlace>): EligiblePlace => ({
   place,
   source: "facility",
@@ -55,7 +57,7 @@ const stop = (stopId: string, placeId: string, position: number, overrides: Part
   isHotelStop: false,
   checkInMethod: "gps",
   name: `Stop ${position + 1}`,
-  category: "restaurant",
+  category: VARIED[(position + 1) % VARIED.length],
   latitude: 41.7 + (position + 1) * 0.001,
   longitude: 44.8,
   imageUrl: null,
@@ -118,7 +120,7 @@ function makeWorld(options: WorldOptions) {
       userId === USER && options.validStay !== false
         ? { id: STAY, checkIn: new Date("2026-06-15T08:00:00Z"), checkOut: null, hotel: { id: HOTEL, placeId: HOTEL_PLACE, qrToken: "x", createdAt: NOW, updatedAt: NOW }, place: hotelPlace }
         : null,
-    findPreferencesForUser: async () => ({ userId: USER, principalId: null, categories: ["restaurant"], budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: NOW }),
+    findPreferencesForUser: async () => ({ userId: USER, principalId: null, categories: [...VARIED], budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: NOW }),
     findItineraryDay: async (userId, hotelId, dayNumber) => (userId === USER && hotelId === HOTEL && dayNumber === 1 ? state.day : null),
     listItineraryStops: async () => active(),
     findItineraryStopWithDay: async (stopId) => {
@@ -443,5 +445,27 @@ describe("displayed duration stays accurate after a repair; the original estimat
     await removeUnavailableStopForUser({ userId: USER, stopId: S3 }, NOW, routeFails.deps);
     assert.equal(routeFails.state.day.totalDurationSeconds, null);
     assert.equal(routeFails.state.day.originalDurationSeconds, 7200);
+  });
+});
+
+describe("replacements keep the day varied: one place per category group", () => {
+  const sameGroupAsCompleted = () => placeAt(id("f", 2), 9, "Another restaurant"); // n=9: restaurant, like completed S1
+
+  test("skips a replacement from a group the rest of today already has, and takes one from a new group", async () => {
+    const w = makeWorld({
+      stops: plan(),
+      eligible: [stopPlaces[0], stopPlaces[1], stopPlaces[3], sameGroupAsCompleted(), placeAt(R1, 5, "R1")],
+    });
+    const result = await replaceUnavailableStopsForUser(USER, NOW, w.deps);
+    assert.equal(result.ok, true);
+    assert.deepEqual(w.active().map((s) => s.placeId), [P1, P2, R1, P4]);
+  });
+
+  test("replaces nothing rather than repeat a group", async () => {
+    const w = makeWorld({ stops: plan(), eligible: [stopPlaces[0], stopPlaces[1], stopPlaces[3], sameGroupAsCompleted()] });
+    const result = await replaceUnavailableStopsForUser(USER, NOW, w.deps);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.reason, "no_replacement_available");
+    assert.equal(w.state.replacementPersists, 0);
   });
 });

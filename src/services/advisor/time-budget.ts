@@ -84,11 +84,20 @@ export function fitStopsToBudget<T extends { location: LatLng; visitMinutes: num
   candidates: readonly T[];
   budgetMinutes: number;
   maxStops: number;
+  /**
+   * Variety: a candidate whose group is already taken (by an earlier pick, or listed in `usedGroups`) is skipped,
+   * so the next one of a DIFFERENT group can still fit. Omit for no grouping.
+   */
+  groupOf?: (candidate: T) => string | null;
+  usedGroups?: ReadonlySet<string>;
 }): T[] {
   const chosen: T[] = [];
+  const takenGroups = new Set(input.usedGroups ?? []);
 
   for (const candidate of input.candidates) {
     if (chosen.length >= input.maxStops) break;
+    const group = input.groupOf?.(candidate) ?? null;
+    if (group !== null && takenGroups.has(group)) continue;
 
     const withCandidate = [...chosen, candidate];
     const estimate = estimateRoundTripMinutes({
@@ -98,6 +107,7 @@ export function fitStopsToBudget<T extends { location: LatLng; visitMinutes: num
 
     if (estimate <= input.budgetMinutes) {
       chosen.push(candidate);
+      if (group !== null) takenGroups.add(group);
     }
   }
 

@@ -7,11 +7,12 @@ import { BUDGET_LEVELS, type BudgetLevel, type PlaceCategory } from "@/db/schema
  * categories. Interests only NARROW the hotel's eligible Places — nothing here can make a Place eligible.
  */
 
-export const INTERESTS = ["Food", "Culture", "Nature", "Wellness", "History", "Art", "Nightlife", "Shopping"] as const;
+export const INTERESTS = ["Food", "Wine", "Culture", "Nature", "Wellness", "History", "Art", "Nightlife", "Shopping"] as const;
 export type Interest = (typeof INTERESTS)[number];
 
 export const INTEREST_CATEGORIES: Readonly<Record<Interest, readonly PlaceCategory[]>> = {
   Food: ["restaurant"],
+  Wine: ["winery"],
   Culture: ["tour", "attraction", "activity"],
   Nature: ["nature", "beach"],
   Wellness: ["spa"],

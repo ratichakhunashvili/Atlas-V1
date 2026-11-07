@@ -21,6 +21,7 @@ import type { HotelEvent } from "@/db/schema";
 // fix as services/routing/index.ts's resolveAccessToken, same reason — see
 // that file's comment for the full story.
 import type { PersistItineraryInput, PersistItineraryResult } from "@/db/queries/itinerary";
+import { categoryGroupOf, groupsUsedBy } from "./category-groups";
 
 /** Guests get one generated plan per real day; admins are exempt so they can test freely — matches Map Advisor Functional's original cooldown AND preference-gating exemptions (itinerary.ts, GENERATION_COOLDOWN_HOURS / `isAdmin`). */
 const GENERATION_COOLDOWN_HOURS = 24;
@@ -605,6 +606,10 @@ export async function generateItineraryForUser(
     })),
     budgetMinutes: availableMinutes,
     maxStops: neededNewStops,
+    // One place per category group per day, counting the stops already completed today. A scheduled event is a
+    // timed happening, not a kind of place, and attendance checks may still drop it after routing, so it claims no group.
+    groupOf: (fitted) => (fitted.stop.category && fitted.stop.hotelActivity !== "event" ? categoryGroupOf(fitted.stop.category) : null),
+    usedGroups: groupsUsedBy(completedStops),
   }).map((fitted) => fitted.stop);
 
   if (selectedStops.length === 0) {

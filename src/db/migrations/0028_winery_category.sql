@@ -1,0 +1,4 @@
+ALTER TABLE "places" DROP CONSTRAINT "places_category_check";--> statement-breakpoint
+ALTER TABLE "itinerary_stops" DROP CONSTRAINT "itinerary_stops_category_check";--> statement-breakpoint
+ALTER TABLE "places" ADD CONSTRAINT "places_category_check" CHECK ("places"."category" in ('restaurant', 'spa', 'tour', 'shop', 'landmark', 'historical', 'nature', 'museum', 'beach', 'nightlife', 'winery', 'attraction', 'activity', 'hotel', 'other'));--> statement-breakpoint
+ALTER TABLE "itinerary_stops" ADD CONSTRAINT "itinerary_stops_category_check" CHECK ("itinerary_stops"."category" is null or "itinerary_stops"."category" in ('restaurant', 'spa', 'tour', 'shop', 'landmark', 'historical', 'nature', 'museum', 'beach', 'nightlife', 'winery', 'attraction', 'activity', 'hotel', 'other'));

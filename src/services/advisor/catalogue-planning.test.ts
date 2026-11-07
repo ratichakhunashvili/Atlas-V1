@@ -22,9 +22,20 @@ const HOTEL_B = "hotel-b";
 const HOTEL = { lat: 41.7, lng: 44.8 };
 const hotelPlace = makeTestPlace({ id: "hotel-a-place", category: "hotel", latitude: HOTEL.lat, longitude: HOTEL.lng });
 
+// A different category group per position, so variety (one per group per day) only decides the tests about it.
+const VARIED = ["restaurant", "landmark", "spa", "nature", "winery", "shop", "tour", "other"] as const;
+
 // ~111 m per 0.001° of latitude.
 const near = (id: string, n: number, extra: Partial<Place> = {}) =>
-  makeTestPlace({ id, name: id, category: "restaurant", latitude: HOTEL.lat + n * 0.001, longitude: HOTEL.lng, visitDurationMinutes: 30, ...extra });
+  makeTestPlace({
+    id,
+    name: id,
+    category: VARIED[Math.abs(Math.round(n)) % VARIED.length],
+    latitude: HOTEL.lat + n * 0.001,
+    longitude: HOTEL.lng,
+    visitDurationMinutes: 30,
+    ...extra,
+  });
 
 const contract = (place: Place, extra: Partial<ContractRow> = {}): ContractRow => ({
   id: `contract-${place.id}`,
@@ -67,7 +78,7 @@ function catalogueFor(
   });
 }
 
-function choicesFrom(eligiblePlaces: ReturnType<typeof catalogueFor>, categories: Place["category"][] = ["restaurant", "landmark"]) {
+function choicesFrom(eligiblePlaces: ReturnType<typeof catalogueFor>, categories: Place["category"][] = [...VARIED]) {
   return buildDailyChoices({
     eligiblePlaces,
     hotelPlaceId: hotelPlace.id,

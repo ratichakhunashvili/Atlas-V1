@@ -7,6 +7,9 @@ import { computeDayCompletedAt } from "./plan-state";
 import { generateItineraryForUser, type GenerateItineraryDependencies } from "./generate-itinerary";
 
 let placeCounter = 0;
+// Varied category groups by default: a day holds one place per group (category-groups.ts), so tests that are not
+// about that rule must not quietly lose stops to it.
+const VARIED_CATEGORIES = ["restaurant", "landmark", "spa", "nature", "winery", "shop", "tour", "other"] as const;
 function makePlace(overrides: Partial<Place> = {}): Place {
   placeCounter += 1;
   return {
@@ -15,7 +18,7 @@ function makePlace(overrides: Partial<Place> = {}): Place {
     description: null,
     latitude: 41.715 + placeCounter * 0.001,
     longitude: 44.827 + placeCounter * 0.001,
-    category: "restaurant",
+    category: VARIED_CATEGORIES[placeCounter % VARIED_CATEGORIES.length],
     address: null,
     imageUrl: null,
     website: null,
@@ -236,7 +239,7 @@ function buildDeps(options: BuildDepsOptions = {}) {
         : null,
     findPreferencesForUser: async () =>
       options.preferences === undefined
-        ? { userId: user.id, principalId: null, categories: ["restaurant", "landmark"], budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: new Date() }
+        ? { userId: user.id, principalId: null, categories: [...VARIED_CATEGORIES], budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: new Date() }
         : options.preferences === null
           ? null
           : { userId: user.id, principalId: null, categories: options.preferences.categories, budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: new Date() },
@@ -334,8 +337,8 @@ test("eligible places that match none of the guest's interests also return no_el
 });
 
 test("a generated day is never auto-completed: every stop starts unvisited and none is an auto check-in", async () => {
-  const nearby = [makePlace({ category: "restaurant" }), makePlace({ category: "restaurant" })];
-  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: ["restaurant"] } });
+  const nearby = [makePlace(), makePlace()];
+  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: [...VARIED_CATEGORIES] } });
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
   if (result.ok) {
@@ -350,8 +353,8 @@ test("a generated day is never auto-completed: every stop starts unvisited and n
 });
 
 test("the hotel is the route origin and return point but never a stop", async () => {
-  const nearby = [makePlace({ category: "restaurant" }), makePlace({ category: "restaurant" })];
-  const { deps, user, hotelPlace } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: ["restaurant"] } });
+  const nearby = [makePlace(), makePlace()];
+  const { deps, user, hotelPlace } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: [...VARIED_CATEGORIES] } });
   const calls: Array<Parameters<GenerateItineraryDependencies["optimizeWalkingRoute"]>[0]> = [];
   const spied: GenerateItineraryDependencies = {
     ...deps,
@@ -371,7 +374,7 @@ test("the hotel is the route origin and return point but never a stop", async ()
 });
 
 test("a hotel with only facilities (no partners) still gets a plan made only of those facilities", async () => {
-  const facilities = [makePlace({ category: "spa" }), makePlace({ category: "restaurant" })];
+  const facilities = [makePlace({ category: "spa" }), makePlace()];
   const { deps, user } = buildDeps({ eligiblePlaces: facilities, preferences: { categories: ["spa", "restaurant"] } });
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
@@ -381,7 +384,7 @@ test("a hotel with only facilities (no partners) still gets a plan made only of 
 });
 
 test("an active partner is chosen and leads the day; its stop is checked in by QR", async () => {
-  const partnerPlace = makePlace({ category: "restaurant", name: "Partner Place" });
+  const partnerPlace = makePlace({ name: "Partner Place" });
   const { deps, user } = buildDeps({
     eligiblePlaces: [partnerPlace],
     partnerRelations: [{ hotelId: "hotel-1", placeId: partnerPlace.id, priority: 1, createdAt: new Date(), place: partnerPlace }],
@@ -413,11 +416,11 @@ test("landmark/historical categories get qr check-in, everything else gets gps",
 });
 
 test("fewer candidates than the target stop count yields fewer unique stops, never repeats or substitutes", async () => {
-  const partnerPlace = makePlace({ category: "restaurant" });
-  const regularPlace = makePlace({ category: "restaurant" });
+  const partnerPlace = makePlace();
+  const regularPlace = makePlace();
   const { deps, user } = buildDeps({
     eligiblePlaces: [partnerPlace, regularPlace],
-    preferences: { categories: ["restaurant"] },
+    preferences: { categories: [...VARIED_CATEGORIES] },
     partnerRelations: [{ hotelId: "hotel-1", placeId: partnerPlace.id, priority: null, createdAt: new Date(), place: partnerPlace }],
   });
   const result = await generateItineraryForUser(user.id, NOW, deps);
@@ -433,8 +436,8 @@ test("fewer candidates than the target stop count yields fewer unique stops, nev
 
 test("routing failure fails the whole generation instead of persisting a fake route", async () => {
   const { deps, user, store } = buildDeps({
-    eligiblePlaces: [makePlace({ category: "restaurant" })],
-    preferences: { categories: ["restaurant"] },
+    eligiblePlaces: [makePlace()],
+    preferences: { categories: [...VARIED_CATEGORIES] },
     route: { ok: false, reason: "no_route", message: "no route" },
   });
   const result = await generateItineraryForUser(user.id, NOW, deps);
@@ -446,8 +449,8 @@ test("routing failure fails the whole generation instead of persisting a fake ro
 test("a malformed route order (length mismatch) fails instead of persisting undefined stops", async () => {
   // Two eligible stops, but the route mock only returns a single-entry order.
   const { deps, user } = buildDeps({
-    eligiblePlaces: [makePlace({ category: "restaurant" }), makePlace({ category: "restaurant" })],
-    preferences: { categories: ["restaurant"] },
+    eligiblePlaces: [makePlace(), makePlace()],
+    preferences: { categories: [...VARIED_CATEGORIES] },
     route: routeWithOrder([0]),
   });
   const result = await generateItineraryForUser(user.id, NOW, deps);
@@ -457,8 +460,8 @@ test("a malformed route order (length mismatch) fails instead of persisting unde
 
 test("the optimizer's stop order is kept exactly as returned (the hotel is only the origin/return point)", async () => {
   const { deps, user } = buildDeps({
-    eligiblePlaces: [makePlace({ category: "restaurant" }), makePlace({ category: "restaurant" })],
-    preferences: { categories: ["restaurant"] },
+    eligiblePlaces: [makePlace(), makePlace()],
+    preferences: { categories: [...VARIED_CATEGORIES] },
     route: routeWithOrder([1, 0]),
   });
   const sent: Array<{ lat: number; lng: number }> = [];
@@ -483,8 +486,8 @@ test("the optimizer's stop order is kept exactly as returned (the hotel is only 
 });
 
 test("difficulty ratchet: no previous day defaults to MIN_STOPS (4)", async () => {
-  const nearby = Array.from({ length: 6 }, () => makePlace({ category: "restaurant" }));
-  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: ["restaurant"] } });
+  const nearby = Array.from({ length: 6 }, () => makePlace());
+  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: [...VARIED_CATEGORIES] } });
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.itinerary.stops.length, 4);
@@ -530,10 +533,10 @@ test("difficulty ratchet: a fully-visited, easily-completed previous day raises 
       },
     ]
   );
-  const nearby = Array.from({ length: 6 }, () => makePlace({ category: "restaurant" }));
+  const nearby = Array.from({ length: 6 }, () => makePlace());
   const { deps, user } = buildDeps({
     eligiblePlaces: nearby,
-    preferences: { categories: ["restaurant"] },
+    preferences: { categories: [...VARIED_CATEGORIES] },
     store,
     checkIn: new Date("2026-03-10T08:00:00Z"),
   });
@@ -544,8 +547,8 @@ test("difficulty ratchet: a fully-visited, easily-completed previous day raises 
 });
 
 test("an existing itinerary within cooldown is returned as-is, without calling routing again", async () => {
-  const nearby = [makePlace({ category: "restaurant" })];
-  const { deps, user, getRouteCallCount } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: ["restaurant"] } });
+  const nearby = [makePlace()];
+  const { deps, user, getRouteCallCount } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: [...VARIED_CATEGORIES] } });
 
   const first = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(first.ok, true);
@@ -561,9 +564,9 @@ test("an existing itinerary within cooldown is returned as-is, without calling r
 });
 
 test("an admin bypasses the cooldown and regenerates today's itinerary in place", async () => {
-  const nearby = [makePlace({ category: "restaurant" })];
+  const nearby = [makePlace()];
   const admin = makeUser({ role: "admin" });
-  const { deps, getRouteCallCount } = buildDeps({ user: admin, eligiblePlaces: nearby, preferences: { categories: ["restaurant"] } });
+  const { deps, getRouteCallCount } = buildDeps({ user: admin, eligiblePlaces: nearby, preferences: { categories: [...VARIED_CATEGORIES] } });
 
   const first = await generateItineraryForUser(admin.id, NOW, deps);
   assert.equal(first.ok, true);
@@ -615,8 +618,8 @@ test("cooldown expired (existing day generated long ago) rebuilds the same day i
       },
     ]
   );
-  const nearby = [makePlace({ category: "restaurant" })];
-  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: ["restaurant"] }, store });
+  const nearby = [makePlace()];
+  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: [...VARIED_CATEGORIES] }, store });
 
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
@@ -632,8 +635,8 @@ test("cooldown expired (existing day generated long ago) rebuilds the same day i
 
 test("losing the create race for a brand-new day returns the winner's itinerary instead of erroring", async () => {
   const store = createFakeItineraryStore();
-  const nearby = [makePlace({ category: "restaurant" })];
-  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: ["restaurant"] }, store });
+  const nearby = [makePlace()];
+  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: [...VARIED_CATEGORIES] }, store });
 
   // Simulate a concurrent winner by seeding day 1 directly (bypassing this call's own persistItinerary),
   // AFTER candidate/route resolution would already be in flight in a real race, before this call persists.
@@ -737,11 +740,11 @@ const pendingStops = () => [historyStop(H.pendingStop1, H.pendingPlace1, 1), his
 /** Five eligible Places: the three already in the saved plan (so they are still eligible) plus fresh candidates. */
 function eligibleForRebuild() {
   const inPlan = [
-    makePlace({ id: H.donePlace, category: "restaurant", name: "Completed place" }),
-    makePlace({ id: H.pendingPlace1, category: "restaurant", name: "Pending place 1" }),
-    makePlace({ id: H.pendingPlace2, category: "restaurant", name: "Pending place 2" }),
+    makePlace({ id: H.donePlace, name: "Completed place" }),
+    makePlace({ id: H.pendingPlace1, name: "Pending place 1" }),
+    makePlace({ id: H.pendingPlace2, name: "Pending place 2" }),
   ];
-  const fresh = Array.from({ length: 4 }, (_, i) => makePlace({ id: `00000000-0000-4000-8000-0000000000f${i + 1}`, category: "restaurant", name: `Fresh ${i + 1}` }));
+  const fresh = Array.from({ length: 4 }, (_, i) => makePlace({ id: `00000000-0000-4000-8000-0000000000f${i + 1}`, name: `Fresh ${i + 1}` }));
   return { inPlan, fresh, all: [...inPlan, ...fresh] };
 }
 
@@ -750,7 +753,7 @@ test("a full rebuild NEVER deletes or supersedes a completed stop: its row, posi
   const done = completedStop();
   store.seedDay(historyDay(OLD_GENERATION), [done, ...pendingStops()]);
   const { all } = eligibleForRebuild();
-  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: ["restaurant"] }, store });
+  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: [...VARIED_CATEGORIES] }, store });
 
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
@@ -772,7 +775,7 @@ test("a full rebuild SUPERSEDES (never deletes) the old pending stops: their sna
   const before = pendingStops();
   store.seedDay(historyDay(OLD_GENERATION), [completedStop(), ...before]);
   const { all } = eligibleForRebuild();
-  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: ["restaurant"] }, store });
+  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: [...VARIED_CATEGORIES] }, store });
 
   await generateItineraryForUser(user.id, NOW, deps);
 
@@ -794,7 +797,7 @@ test("a full rebuild adds only the NEW pending stops the target still needs, aft
   const store = createFakeItineraryStore();
   store.seedDay(historyDay(OLD_GENERATION), [completedStop(), ...pendingStops()]);
   const { all } = eligibleForRebuild();
-  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: ["restaurant"] }, store });
+  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: [...VARIED_CATEGORIES] }, store });
 
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
@@ -814,7 +817,7 @@ test("completed visits stay counted in scoring history after a rebuild; supersed
   const store = createFakeItineraryStore();
   store.seedDay(historyDay(OLD_GENERATION), [completedStop(), ...pendingStops()]);
   const { all } = eligibleForRebuild();
-  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: ["restaurant"] }, store });
+  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: [...VARIED_CATEGORIES] }, store });
 
   await generateItineraryForUser(user.id, NOW, deps);
 
@@ -829,7 +832,7 @@ test("the admin bypass rebuild preserves completed stops too (same path)", async
   const done = completedStop();
   store.seedDay(historyDay(RECENT_GENERATION), [done, ...pendingStops()]); // inside the cooldown: only the admin bypass can rebuild
   const { all } = eligibleForRebuild();
-  const { deps, user } = buildDeps({ user: makeUser({ role: "admin" }), eligiblePlaces: all, preferences: { categories: ["restaurant"] }, store });
+  const { deps, user } = buildDeps({ user: makeUser({ role: "admin" }), eligiblePlaces: all, preferences: { categories: [...VARIED_CATEGORIES] }, store });
 
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
@@ -844,7 +847,7 @@ test("when completed stops already meet the target there is nothing to add: the 
   );
   store.seedDay(historyDay(OLD_GENERATION, { stopCount: 4, completedAt: COMPLETED_AT }), completed);
   const { all } = eligibleForRebuild();
-  const { deps, user, getRouteCallCount } = buildDeps({ eligiblePlaces: all, preferences: { categories: ["restaurant"] }, store });
+  const { deps, user, getRouteCallCount } = buildDeps({ eligiblePlaces: all, preferences: { categories: [...VARIED_CATEGORIES] }, store });
 
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
@@ -857,7 +860,7 @@ test("a rebuild with no eligible experiences changes NOTHING: history and comple
   const store = createFakeItineraryStore();
   const rowsBefore = [completedStop(), ...pendingStops()];
   store.seedDay(historyDay(OLD_GENERATION), rowsBefore);
-  const { deps, user } = buildDeps({ eligiblePlaces: [], preferences: { categories: ["restaurant"] }, store });
+  const { deps, user } = buildDeps({ eligiblePlaces: [], preferences: { categories: [...VARIED_CATEGORIES] }, store });
 
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, false);
@@ -872,7 +875,7 @@ test("ordinary Generate NEVER changes an existing day, even when a pending stop 
   // None of the saved stops' Places is eligible any more.
   const { deps, user, getRouteCallCount } = buildDeps({
     eligiblePlaces: [makePlace({ id: "00000000-0000-4000-8000-0000000000f9", category: "restaurant" })],
-    preferences: { categories: ["restaurant"] },
+    preferences: { categories: [...VARIED_CATEGORIES] },
     store,
   });
 
@@ -934,10 +937,10 @@ function previousDayWithDurations(totalDurationSeconds: number | null, originalD
 }
 
 async function nextDayStopCount(store: ReturnType<typeof createFakeItineraryStore>): Promise<number> {
-  const nearby = Array.from({ length: 6 }, () => makePlace({ category: "restaurant" }));
+  const nearby = Array.from({ length: 6 }, () => makePlace());
   const { deps, user } = buildDeps({
     eligiblePlaces: nearby,
-    preferences: { categories: ["restaurant"] },
+    preferences: { categories: [...VARIED_CATEGORIES] },
     store,
     checkIn: new Date("2026-03-10T08:00:00Z"),
   });
@@ -961,8 +964,8 @@ test("an older day without an original estimate falls back to its total duration
 });
 
 test("a brand-new generated day stores its estimate as BOTH the active and the original duration", async () => {
-  const nearby = [makePlace({ category: "restaurant" }), makePlace({ category: "restaurant" })];
-  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: ["restaurant"] } });
+  const nearby = [makePlace(), makePlace()];
+  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: [...VARIED_CATEGORIES] } });
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
   if (result.ok) {
@@ -975,11 +978,29 @@ test("a full rebuild is a NEW plan: both the active and the original estimate be
   const store = createFakeItineraryStore();
   store.seedDay(historyDay(OLD_GENERATION, { totalDurationSeconds: 1200, originalDurationSeconds: 7200 }), [completedStop(), ...pendingStops()]);
   const { all } = eligibleForRebuild();
-  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: ["restaurant"] }, store });
+  const { deps, user } = buildDeps({ eligiblePlaces: all, preferences: { categories: [...VARIED_CATEGORIES] }, store });
   const result = await generateItineraryForUser(user.id, NOW, deps);
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.itinerary.day.totalDurationSeconds, 3600);
     assert.equal(result.itinerary.day.originalDurationSeconds, 3600);
   }
+});
+
+test("a generated day holds at most one place per category group: never two food places", async () => {
+  const nearby = [
+    makePlace({ category: "restaurant" }),
+    makePlace({ category: "nightlife" }),
+    makePlace({ category: "restaurant" }),
+    makePlace({ category: "museum" }),
+    makePlace({ category: "historical" }),
+  ];
+  const { deps, user } = buildDeps({ eligiblePlaces: nearby, preferences: { categories: ["restaurant", "nightlife", "museum", "historical"] } });
+  const result = await generateItineraryForUser(user.id, NOW, deps);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const categories = result.itinerary.stops.map((stop) => stop.category);
+  assert.equal(categories.length, 2, "food once, history once: fewer stops rather than a repeat");
+  assert.equal(categories.filter((c) => c === "restaurant" || c === "nightlife").length, 1);
+  assert.equal(categories.filter((c) => c === "museum" || c === "historical").length, 1);
 });

@@ -28,8 +28,9 @@ const place = (id: string, n: number, category: PlaceCategory = "restaurant") =>
 const sauna = place("sauna", 1, "spa");
 const cafe = place("cafe", 2);
 const tour = place("tour", 3, "tour");
-const bistro = place("bistro", 4);
-const deli = place("deli", 5);
+// Different category groups: a day holds at most one place per group (category-groups.ts).
+const bistro = place("bistro", 4, "museum");
+const deli = place("deli", 5, "nature");
 const decoy = place("decoy-nearby", 1); // in Atlas, next door, partnered with nobody
 
 const stays: Record<string, GuestStay> = {
@@ -137,8 +138,8 @@ beforeEach(() => {
     "hotel-b": [entry(tour)],
   };
   preferences = {
-    [GUEST_A]: prefs(GUEST_A, ["restaurant", "spa", "tour"]),
-    [GUEST_B]: prefs(GUEST_B, ["restaurant", "spa", "tour"]),
+    [GUEST_A]: prefs(GUEST_A, ["restaurant", "spa", "tour", "museum", "nature"]),
+    [GUEST_B]: prefs(GUEST_B, ["restaurant", "spa", "tour", "museum", "nature"]),
   };
   days = [];
   stops = [];
@@ -172,7 +173,7 @@ describe("daily plan: starting the day", () => {
   });
 
   it("saves nothing when the hotel has nothing approved that matches", async () => {
-    preferences[GUEST_A] = prefs(GUEST_A, ["museum"]);
+    preferences[GUEST_A] = prefs(GUEST_A, ["beach"]);
     assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: false, reason: "no_eligible_experiences" });
     assert.equal(days.length, 0, "the guest's one day is not used up");
   });
@@ -291,5 +292,16 @@ describe("daily plan: the day's progress", () => {
     assert.equal(state.status, "in_progress");
     assert.equal(state.status === "in_progress" && state.currentAvailable, false);
     assert.deepEqual(await simulateScanForTesting(GUEST_B, NOW, deps()), { ok: false });
+  });
+
+  it("never offers a second place from a group the day already has", async () => {
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    await pickChoiceForUser(GUEST_A, cafe.id, NOW, deps());
+    await simulateScanForTesting(GUEST_A, NOW, deps());
+    const offered = await choicesFor(GUEST_A);
+    assert.ok(offered.length > 0);
+    assert.ok(!offered.includes(decoy.id) && offered.every((id) => id !== cafe.id));
+    const state = await getDailyPlanForUser(GUEST_A, NOW, deps());
+    assert.ok(state.status === "choosing" && state.choices.every((choice) => choice.category !== "restaurant" && choice.category !== "nightlife"));
   });
 });

@@ -92,7 +92,7 @@ function buildDeps(options: Options) {
     findPreferencesForUser: async (): Promise<UserPreferences> => ({
       userId: user.id,
       principalId: null,
-      categories: ["restaurant", "spa", "museum"],
+      categories: ["restaurant", "spa", "museum", "nature", "winery", "shop"],
       budget: null,
       activityLevel: null,
       maxDistanceMeters: null,
@@ -169,9 +169,11 @@ function buildDeps(options: Options) {
 
 /** Partners a short walk from the hotel, so these tests exercise the budget rather than the distance filter. */
 function quickPartners(count: number, visitMinutes: number): Place[] {
+  // Different category groups, so the one-per-group variety rule never decides these time tests.
+  const varied = ["restaurant", "spa", "museum", "nature", "winery", "shop"] as const;
   return Array.from({ length: count }, (_, index) =>
     place({
-      category: "restaurant",
+      category: varied[index % varied.length],
       visitDurationMinutes: visitMinutes,
       latitude: 41.715 + index * 0.0004,
       longitude: 44.827 + index * 0.0004,

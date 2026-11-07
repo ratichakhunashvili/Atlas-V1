@@ -26,6 +26,7 @@ export const lightTheme: ThemeDefinition = {
       museum: "#8b5cf6",
       beach: "#0ea5a5",
       nightlife: "#7c3aed",
+      winery: "#8e2c5a",
       attraction: "#2563eb",
       activity: "#0891b2",
       hotel: "#8b5cf6",

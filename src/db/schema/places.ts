@@ -25,6 +25,7 @@ export const PLACE_CATEGORIES = [
   "museum",
   "beach",
   "nightlife",
+  "winery",
   "attraction",
   "activity",
   "hotel",
@@ -120,10 +121,13 @@ export const places = pgTable(
   },
   (table) => [
     index("places_category_idx").on(table.category),
-    // A plain btree placeholder, not a geo index — fine for Phase 1's list
-    // views, but radius/bounding-box queries in the Map phase will need
-    // PostGIS or a proper geo index instead.
+    // A plain btree from Phase 1, kept for the list views that sort by coordinates.
     index("places_coordinates_idx").on(table.latitude, table.longitude),
+    // The map's viewport query (catalogue phase C3): a GiST index over the built-in `point` type, so
+    // "inside this box" (`point(longitude, latitude) <@ box(...)`) is answered from a 2-D index instead
+    // of scanning a latitude range. Built into Postgres: no PostGIS extension needed on Neon or in PGlite.
+    // The query must use exactly this expression for the planner to pick the index.
+    index("places_location_gist_idx").using("gist", sql`point(${table.longitude}, ${table.latitude})`),
     // A visit takes a positive amount of time, and a stop lasting more than a day is
     // a data-entry mistake rather than an experience.
     check("places_visit_duration_check", sql`${table.visitDurationMinutes} is null or (${table.visitDurationMinutes} > 0 and ${table.visitDurationMinutes} <= 1440)`),

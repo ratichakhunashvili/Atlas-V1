@@ -31,6 +31,7 @@ export const CATEGORY_VISIT_DURATION_MINUTES: Record<PlaceCategory, number> = {
   museum: 60,
   beach: 90,
   nightlife: 90,
+  winery: 75,
   attraction: 60,
   activity: 60,
   // The hotel is the route's origin and return point, never a stop; this entry

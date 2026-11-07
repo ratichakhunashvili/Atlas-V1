@@ -7,6 +7,7 @@ import type { UsageHistory } from "./scoring";
 import { calculateDayNumber, stayEndFor } from "./stay-day";
 import { isAvailableMinutesOption, remainingBudgetMinutes } from "./time-budget";
 import { savedStopVisitMinutes } from "./visit-duration";
+import { groupsUsedBy, type CategoryGroup } from "./category-groups";
 
 /*
  * The guest's day as "choose 1 of 3", up to four activities. One day per calendar day of the stay.
@@ -139,6 +140,7 @@ function choicesFor(input: {
   preferences: UserPreferences | null;
   origin: LatLng;
   excludePlaceIds: ReadonlySet<string>;
+  usedCategoryGroups?: ReadonlySet<CategoryGroup>;
   remainingMinutes: number;
   usageHistory: UsageHistory;
 }): DailyChoice[] {
@@ -151,6 +153,7 @@ function choicesFor(input: {
     budget: input.preferences?.budget ?? null,
     preferredMaxDistanceMeters: input.preferences?.maxDistanceMeters ?? null,
     excludePlaceIds: input.excludePlaceIds,
+    usedCategoryGroups: input.usedCategoryGroups,
     remainingMinutes: input.remainingMinutes,
     usageHistory: input.usageHistory,
   });
@@ -200,8 +203,10 @@ export async function getDailyPlanForUser(userId: string, now: Date = new Date()
   const lastVisited = stops.at(-1);
   const origin = lastVisited ? { lat: lastVisited.latitude, lng: lastVisited.longitude } : { lat: stay.place.latitude, lng: stay.place.longitude };
   const excludePlaceIds = new Set(stops.flatMap((stop) => (stop.placeId ? [stop.placeId] : [])));
+  // One place per category group per day: whatever today already has (picked or visited) is off the table.
+  const usedCategoryGroups = groupsUsedBy(stops);
   const usageHistory = await d.getStopUsageHistory(userId, stay.hotel.id);
-  const shared = { stay, eligible, preferences, origin, excludePlaceIds, usageHistory };
+  const shared = { stay, eligible, preferences, origin, excludePlaceIds, usedCategoryGroups, usageHistory };
 
   const choices = choicesFor({ ...shared, remainingMinutes: remainingMinutes ?? 0 });
   if (choices.length > 0) return { ...base, status: "choosing", choices };

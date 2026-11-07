@@ -8,9 +8,20 @@ import { makeTestPlace } from "./test-utils";
 const HOTEL = { lat: 41.7, lng: 44.8 };
 const hotelPlace = makeTestPlace({ id: "hotel-place", category: "hotel", latitude: HOTEL.lat, longitude: HOTEL.lng });
 
+// Distinct category groups, one per position, so the one-per-group rule doesn't hide what a test is about.
+const VARIED = ["restaurant", "spa", "museum", "nature", "winery", "shop", "tour", "other"] as const;
+
 // ~111 m per 0.001° of latitude: n -> about n*111 m north of the hotel.
 const near = (id: string, n: number, extra: Partial<Place> = {}) =>
-  makeTestPlace({ id, name: id, category: "restaurant", latitude: HOTEL.lat + n * 0.001, longitude: HOTEL.lng, visitDurationMinutes: 30, ...extra });
+  makeTestPlace({
+    id,
+    name: id,
+    category: VARIED[Math.abs(Math.round(n)) % VARIED.length],
+    latitude: HOTEL.lat + n * 0.001,
+    longitude: HOTEL.lng,
+    visitDurationMinutes: 30,
+    ...extra,
+  });
 
 const partner = (place: Place, extra: Partial<EligiblePlace> = {}): EligiblePlace => ({
   place,
@@ -39,7 +50,7 @@ function input(eligiblePlaces: EligiblePlace[], extra: Partial<BuildDailyChoices
     hotelPlaceId: hotelPlace.id,
     hotelLocation: HOTEL,
     origin: HOTEL,
-    categories: ["restaurant", "spa"],
+    categories: [...VARIED],
     budget: null,
     preferredMaxDistanceMeters: null,
     excludePlaceIds: new Set(),
@@ -82,9 +93,9 @@ describe("buildDailyChoices", () => {
   });
 
   it("does not offer a featured partner outside the guest's interests", () => {
-    const pool = [partner(near("museum", 1, { category: "museum" }), promoted({ featured: true })), partner(near("p1", 2))];
+    const pool = [partner(near("museum", 2, { category: "museum" }), promoted({ featured: true })), partner(near("p1", 1, { category: "spa" }))];
     assert.deepEqual(
-      buildDailyChoices(input(pool)).map((choice) => choice.placeId),
+      buildDailyChoices(input(pool, { categories: ["restaurant", "spa"] })).map((choice) => choice.placeId),
       ["p1"]
     );
   });
@@ -122,5 +133,28 @@ describe("buildDailyChoices", () => {
 
   it("never offers the hotel itself", () => {
     assert.deepEqual(buildDailyChoices(input([facility(hotelPlace)], { categories: ["hotel"] })), []);
+  });
+
+  it("never offers two places from the same category group at once, keeping the better-ranked one", () => {
+    const pool = [
+      partner(near("restaurant-near", 1, { category: "restaurant" })),
+      partner(near("bar", 2, { category: "nightlife" })),
+      partner(near("restaurant-far", 3, { category: "restaurant" })),
+      partner(near("church", 4, { category: "historical" })),
+    ];
+    const ids = buildDailyChoices(input(pool, { categories: ["restaurant", "nightlife", "historical"] })).map((choice) => choice.placeId);
+    assert.deepEqual(ids.sort(), ["church", "restaurant-near"]);
+  });
+
+  it("offers nothing from a group the day already has", () => {
+    const pool = [partner(near("cafe", 1, { category: "restaurant" })), partner(near("museum", 2, { category: "museum" }))];
+    const ids = buildDailyChoices(input(pool, { usedCategoryGroups: new Set(["food"] as const) })).map((choice) => choice.placeId);
+    assert.deepEqual(ids, ["museum"]);
+  });
+
+  it("does not let a featured partner repeat a group the day already has", () => {
+    const pool = [partner(near("featured-cafe", 1, { category: "restaurant" }), promoted({ featured: true })), partner(near("park", 2, { category: "nature" }))];
+    const ids = buildDailyChoices(input(pool, { usedCategoryGroups: new Set(["food"] as const) })).map((choice) => choice.placeId);
+    assert.deepEqual(ids, ["park"]);
   });
 });

@@ -11,6 +11,7 @@ import { contextFromEligible, evaluatePendingStops, type StopAvailability } from
 import { resolveVisitDuration, savedStopVisitMinutes } from "./visit-duration";
 import { fitsInBudget, remainingBudgetMinutes } from "./time-budget";
 import { chooseStops, resolveCandidateCategories } from "./stop-selection";
+import { groupsUsedBy, onePerGroup } from "./category-groups";
 
 /**
  * Explicit plan repair when a PENDING stop has become unavailable. Two guest actions, both server-enforced:
@@ -139,7 +140,13 @@ export async function replaceUnavailableStopsForUser(
   // Never re-pick a place already in today's plan (completed or pending), nor one of the unavailable stops.
   const exclude = new Set(stops.flatMap((stop) => (stop.placeId ? [stop.placeId] : [])));
   const usageHistory: UsageHistory = await d.getStopUsageHistory(userId, stay.hotel.id);
-  const chosen = chooseStops({ candidates, usageHistory, targetCount: unavailable.length, excludePlaceIds: exclude, preferences: { budget: preferences?.budget ?? null } });
+  // One place per category group per day: a replacement may not repeat a group the rest of today's plan has.
+  const unavailableIds = new Set(unavailable.map((stop) => stop.id));
+  const ranked = chooseStops({ candidates, usageHistory, targetCount: candidates.length, excludePlaceIds: exclude, preferences: { budget: preferences?.budget ?? null } });
+  const chosen = onePerGroup(ranked, (candidate) => candidate.place.category, {
+    used: groupsUsedBy(stops.filter((stop) => !unavailableIds.has(stop.id))),
+    limit: unavailable.length,
+  });
 
   if (chosen.length === 0) {
     // Nothing is changed. The guest is offered an explicit removal of the unavailable stop instead.
@@ -170,7 +177,6 @@ export async function replaceUnavailableStopsForUser(
     },
   }));
 
-  const unavailableIds = new Set(unavailable.map((stop) => stop.id));
   const retained = stops.filter((stop) => stop.visitedAt === null && !unavailableIds.has(stop.id));
 
   /*

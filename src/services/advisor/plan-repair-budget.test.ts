@@ -47,7 +47,8 @@ function makeStop(stopId: string, placeId: string, position: number, overrides: 
     isHotelStop: false,
     checkInMethod: "gps",
     name: `Stop ${position + 1}`,
-    category: "restaurant",
+    // No saved category, so the one-per-group variety rule never decides these time-budget tests.
+    category: null,
     latitude: 41.7004,
     longitude: 44.8004,
     imageUrl: null,

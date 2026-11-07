@@ -2,6 +2,7 @@ import type { BudgetLevel, CheckInMethod, PlaceCategory } from "@/db/schema";
 import type { LatLng } from "@/lib/geo";
 import type { EligiblePlace, EligibilitySource } from "@/services/eligibility/rules";
 import { buildCandidates, type AdvisorCandidate } from "./candidates";
+import { categoryGroupOf, type CategoryGroup } from "./category-groups";
 import { rankCandidates, type UsageHistory } from "./scoring";
 import { estimateWalkMinutes } from "./time-budget";
 import { resolveVisitDuration } from "./visit-duration";
@@ -13,6 +14,9 @@ import { resolveVisitDuration } from "./visit-duration";
  * and distance. An option is offered only if the guest can walk there from where they are, spend its visit time,
  * and walk back to the hotel inside the time they have left. Fewer than three fit -> fewer are offered; nothing
  * is ever added from outside the eligible pool.
+ *
+ * Variety (category-groups.ts): the options are from different category groups, and never from a group the day
+ * already has: no second food place once a restaurant is picked.
  *
  * At most one option is promoted by the hotel. A partner this hotel has FEATURED gets that slot when it fits.
  * Promotion is ranking only: it never makes a Place eligible, and a promoted partner that does not fit the time
@@ -54,6 +58,8 @@ export type BuildDailyChoicesInput = {
   preferredMaxDistanceMeters: number | null;
   /** Places already part of today (picked or visited): never offered twice in a day. */
   excludePlaceIds: ReadonlySet<string>;
+  /** Category groups today already has: one place per group per day. */
+  usedCategoryGroups?: ReadonlySet<CategoryGroup>;
   remainingMinutes: number;
   usageHistory: UsageHistory;
 };
@@ -107,24 +113,28 @@ export function buildDailyChoices(input: BuildDailyChoicesInput): DailyChoice[] 
     preferredMaxDistanceMeters: input.preferredMaxDistanceMeters,
   }).filter(
     (candidate) =>
-      !input.excludePlaceIds.has(candidate.place.id) && fits(candidate, input.origin, input.hotelLocation, input.remainingMinutes)
+      !input.excludePlaceIds.has(candidate.place.id) &&
+      !input.usedCategoryGroups?.has(categoryGroupOf(candidate.place.category)) &&
+      fits(candidate, input.origin, input.hotelLocation, input.remainingMinutes)
   );
 
   const ranked = rankCandidates(candidates, input.usageHistory, { budget: input.budget });
   const isPromoted = (candidate: AdvisorCandidate) => entryById.get(candidate.place.id)?.promotion != null;
 
   const chosen: AdvisorCandidate[] = [];
+  const groupTaken = (candidate: AdvisorCandidate) =>
+    chosen.some((other) => categoryGroupOf(other.place.category) === categoryGroupOf(candidate.place.category));
   const featured = ranked.find((candidate) => entryById.get(candidate.place.id)?.promotion?.featured === true);
   if (featured) chosen.push(featured);
   for (const candidate of ranked) {
     if (chosen.length >= CHOICES_PER_STEP) break;
-    if (chosen.includes(candidate) || (isPromoted(candidate) && chosen.some(isPromoted))) continue;
+    if (chosen.includes(candidate) || groupTaken(candidate) || (isPromoted(candidate) && chosen.some(isPromoted))) continue;
     chosen.push(candidate);
   }
   // Only when the unpromoted pool ran out: a further promoted option rather than an empty slot.
   for (const candidate of ranked) {
     if (chosen.length >= CHOICES_PER_STEP) break;
-    if (!chosen.includes(candidate)) chosen.push(candidate);
+    if (!chosen.includes(candidate) && !groupTaken(candidate)) chosen.push(candidate);
   }
 
   return chosen.map((candidate) => toChoice(candidate, entryById.get(candidate.place.id)!, input.origin, input.hotelLocation));
