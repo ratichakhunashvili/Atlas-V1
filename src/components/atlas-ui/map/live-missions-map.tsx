@@ -47,7 +47,7 @@ export type LivePlace = {
 
 export type LiveHotel = { name: string; address: string | null; at: [number, number] };
 
-/** Business chips. Attractions have their own toggle, so choosing "Partners" or "Hotel" never hides them. */
+/** Business chips. Attractions are always shown: choosing "Partners" or "Hotel" never hides them, and guests cannot turn them off. */
 type Filter = "All" | "Hotel" | "Partners";
 
 const SHEET_HEIGHT = 196;
@@ -90,8 +90,8 @@ function marker(place: LivePlace, selected: boolean, visited: boolean): MarkerIm
   return selected ? "partner-selected" : "partner";
 }
 
-function matches(filter: Filter, attractions: boolean, place: LivePlace) {
-  if (place.source === "attraction") return attractions;
+function matches(filter: Filter, place: LivePlace) {
+  if (place.source === "attraction") return true;
   return filter === "All" || (filter === "Hotel" ? place.source === "facility" : place.source === "partner");
 }
 
@@ -162,9 +162,8 @@ export function LiveMissionsMap({
 }) {
   const places = initialPlaces;
   const [filter, setFilter] = useState<Filter>("All");
-  const [attractions, setAttractions] = useState(true);
   const visited = new Set(visitedPlaceIds);
-  const visible = places.filter((place) => matches(filter, attractions, place));
+  const visible = places.filter((place) => matches(filter, place));
   const [selected, setSelected] = useState<string | null>(places[0]?.id ?? null);
   const short = useShortScreen();
   // The phone sheet rests minimised, as a row of cards, or as a full list ("List" button, or swipe up again).
@@ -208,7 +207,7 @@ export function LiveMissionsMap({
 
   const selectPlace = useCallback(
     (id: string) => {
-      if (places.some((place) => place.id === id && matches(filter, attractions, place))) {
+      if (places.some((place) => place.id === id && matches(filter, place))) {
         setSelected(id);
         setCollapsed(false);
         // After the sheet opens, bring this place's card into view so the tap visibly answers.
@@ -217,7 +216,7 @@ export function LiveMissionsMap({
         );
       }
     },
-    [places, filter, attractions]
+    [places, filter]
   );
 
   useMapScene(
@@ -235,7 +234,7 @@ export function LiveMissionsMap({
   );
 
   const counts: Record<Filter, number> = {
-    All: places.filter((place) => place.source !== "attraction").length,
+    All: places.length,
     Hotel: places.filter((place) => place.source === "facility").length,
     Partners: places.filter((place) => place.source === "partner").length,
   };
@@ -251,7 +250,7 @@ export function LiveMissionsMap({
             aria-pressed={active}
             onClick={() => {
               setFilter(chip);
-              setSelected(places.find((place) => matches(chip, attractions, place))?.id ?? null);
+              setSelected(places.find((place) => matches(chip, place))?.id ?? null);
             }}
             className={`flex h-[44px] shrink-0 items-center gap-[6px] whitespace-nowrap rounded-[22px] border px-[12px] font-manrope text-[13px] leading-[18px] ${
               active ? "border-atlas-teal bg-atlas-teal" : "border-atlas-beige bg-atlas-paper"
@@ -262,19 +261,6 @@ export function LiveMissionsMap({
           </button>
         );
       })}
-      <button
-        type="button"
-        aria-pressed={attractions}
-        onClick={() => setAttractions(!attractions)}
-        className={`flex h-[44px] shrink-0 items-center gap-[6px] whitespace-nowrap rounded-[22px] border px-[12px] font-manrope text-[13px] leading-[18px] ${
-          attractions ? "border-atlas-teal bg-atlas-teal" : "border-atlas-beige bg-atlas-paper"
-        }`}
-      >
-        <span className={`font-semibold ${attractions ? "text-atlas-paper" : "text-atlas-teal"}`}>Attractions</span>
-        <span className={`font-medium ${attractions ? "text-atlas-paper/75" : "text-atlas-teal/75"}`}>
-          {places.filter((place) => place.source === "attraction").length}
-        </span>
-      </button>
     </div>
   );
 
