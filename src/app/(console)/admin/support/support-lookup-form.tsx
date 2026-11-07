@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/shared/button";
-import { lookupGuestAction, type SupportLookupState } from "@/features/support/actions";
+import { lookupGuestAction, moveGuestAction, type MoveGuestState, type SupportLookupState } from "@/features/support/actions";
 
 type Reason = { code: string; label: string };
 
@@ -10,7 +10,7 @@ function date(value: string) {
   return value.slice(0, 10);
 }
 
-export function SupportLookupForm({ reasons }: { reasons: readonly Reason[] }) {
+export function SupportLookupForm({ reasons, hotels }: { reasons: readonly Reason[]; hotels: readonly { id: string; name: string }[] }) {
   const [state, formAction, pending] = useActionState<SupportLookupState, FormData>(lookupGuestAction, null);
   // The form clears after each lookup, so the summary says whose it is.
   const [lookedUp, setLookedUp] = useState("");
@@ -96,6 +96,8 @@ export function SupportLookupForm({ reasons }: { reasons: readonly Reason[] }) {
             )}
           </div>
 
+          <MoveGuestForm key={lookedUp} email={lookedUp} reasons={reasons} hotels={hotels} currentHotel={state.activeStay?.hotelName ?? null} />
+
           <p className="text-slate-700">Places visited (verified, all stays): {state.verifiedPlaceCount}</p>
           <p className="text-xs text-slate-500">
             Stop names, coordinates, routes and location readings are deliberately not shown here.
@@ -103,5 +105,78 @@ export function SupportLookupForm({ reasons }: { reasons: readonly Reason[] }) {
         </section>
       )}
     </div>
+  );
+}
+
+function MoveGuestForm({
+  email,
+  reasons,
+  hotels,
+  currentHotel,
+}: {
+  email: string;
+  reasons: readonly Reason[];
+  hotels: readonly { id: string; name: string }[];
+  currentHotel: string | null;
+}) {
+  const [state, formAction, pending] = useActionState<MoveGuestState, FormData>(moveGuestAction, null);
+  const field = "block min-h-11 w-full rounded-md border border-slate-300 px-3 text-sm";
+
+  return (
+    <form
+      action={formAction}
+      onSubmit={(event) => {
+        const select = event.currentTarget.elements.namedItem("hotelId") as HTMLSelectElement;
+        const target = select.options[select.selectedIndex]?.text ?? "";
+        const question = currentHotel
+          ? `Move ${email} from ${currentHotel} to ${target}? Their stay at ${currentHotel} ends and they start fresh plans at ${target}.`
+          : `Start a stay for ${email} at ${target}?`;
+        if (!window.confirm(question)) event.preventDefault();
+      }}
+      className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3"
+      aria-label="Move guest to another hotel"
+    >
+      <h2 className="font-semibold text-slate-900">Move to another hotel</h2>
+      <p className="text-xs text-slate-500">
+        The chosen hotel becomes the guest&apos;s base straight away. Their current stay is closed and kept in their history. The move is recorded in the audit log.
+      </p>
+      <input type="hidden" name="email" value={email} />
+      <label className="block space-y-1">
+        <span className="text-sm font-medium text-slate-700">New hotel</span>
+        <select name="hotelId" required defaultValue="" className={field}>
+          <option value="" disabled>
+            Choose a hotel…
+          </option>
+          {hotels.map((hotel) => (
+            <option key={hotel.id} value={hotel.id} disabled={hotel.name === currentHotel}>
+              {hotel.name}
+              {hotel.name === currentHotel ? " (current)" : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="text-sm font-medium text-slate-700">Reason (required, recorded)</span>
+        <select name="reason" required defaultValue="stay_problem" className={field}>
+          {reasons.map((reason) => (
+            <option key={reason.code} value={reason.code}>
+              {reason.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="text-sm font-medium text-slate-700">Note (optional)</span>
+        <input name="note" maxLength={200} className={field} />
+      </label>
+      <Button type="submit" disabled={pending}>
+        {pending ? "Moving…" : "Move guest"}
+      </Button>
+      {state && (
+        <p role={state.ok ? "status" : "alert"} className={state.ok ? "text-sm text-green-700" : "text-sm text-red-600"}>
+          {state.message}
+        </p>
+      )}
+    </form>
   );
 }

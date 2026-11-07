@@ -138,6 +138,33 @@ export function PlaceLocationPicker({
     mapRef.current?.setStyle(STYLES[next]);
   };
 
+  // One reading on request, not a watch: the admin is choosing where to look, not being tracked.
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+  const centerOnMe = () => {
+    if (!("geolocation" in navigator)) {
+      setLocateError("This browser can't share your location.");
+      return;
+    }
+    setLocating(true);
+    setLocateError(null);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setLocating(false);
+        mapRef.current?.flyTo({ center: [coords.longitude, coords.latitude], zoom: PIN_ZOOM });
+      },
+      (error) => {
+        setLocating(false);
+        setLocateError(
+          error.code === error.PERMISSION_DENIED
+            ? "Location is blocked for this site. Allow it in the browser's address bar, then try again."
+            : "Couldn't find your location. Try again, or move the map yourself."
+        );
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    );
+  };
+
   const showMap = mapError === null;
 
   return (
@@ -146,7 +173,7 @@ export function PlaceLocationPicker({
       {showMap ? (
         <>
           <p id="place-location-help" className="text-xs text-slate-500">
-            Click the map to drop the pin; it zooms in so you can drag the pin to the exact entrance. Zoom with the buttons, or Ctrl + scroll.
+            Standing at the place? Use Centre on my location. Click the map to drop the pin; it zooms in so you can drag the pin to the exact entrance. Zoom with the buttons, or Ctrl + scroll.
           </p>
           <div className="relative overflow-hidden rounded-md border border-slate-300">
             <div ref={containerRef} className="h-[320px] w-full" aria-label="Map for choosing the place's location" role="application" />
@@ -163,7 +190,20 @@ export function PlaceLocationPicker({
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={centerOnMe}
+              disabled={locating}
+              className="absolute bottom-8 left-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm disabled:opacity-60"
+            >
+              {locating ? "Finding you…" : "Centre on my location"}
+            </button>
           </div>
+          {locateError && (
+            <p role="alert" className="text-xs text-red-600">
+              {locateError}
+            </p>
+          )}
         </>
       ) : (
         <p className="text-xs text-slate-500">

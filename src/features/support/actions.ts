@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { requireAdmin } from "@/lib/authorization";
-import { lookupGuestForSupport } from "@/db/queries/guest-support";
+import { lookupGuestForSupport, moveGuestToHotel } from "@/db/queries/guest-support";
 import { reserveAttempt } from "@/db/queries/rate-limit";
 import { rateLimitedMessage } from "@/services/rate-limit/policy";
 
@@ -70,5 +70,49 @@ export async function lookupGuestAction(_previous: SupportLookupState, formData:
       completedStops: day.completedStops,
     })),
     verifiedPlaceCount: view.verifiedPlaceCount,
+  };
+}
+
+export type MoveGuestState = null | { ok: boolean; message: string };
+
+const moveSchema = z.object({
+  email: z.email("Look the guest up first"),
+  hotelId: z.uuid("Choose a hotel"),
+  reason: z.string().min(1, "Choose why you are moving this guest"),
+  note: z.string().max(200, "Keep the note under 200 characters").optional(),
+});
+
+/**
+ * Moves a guest's active stay to another hotel, so it becomes their base. Admin-only and rate-limited like the lookup;
+ * the hotel is re-checked on the server (published, verified, not archived) and the move is audited with the reason.
+ */
+export async function moveGuestAction(_previous: MoveGuestState, formData: FormData): Promise<MoveGuestState> {
+  const admin = await requireAdmin();
+
+  const parsed = moveSchema.safeParse({
+    email: formData.get("email") ?? "",
+    hotelId: formData.get("hotelId") ?? "",
+    reason: formData.get("reason") ?? "",
+    note: (formData.get("note") as string | null) || undefined,
+  });
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+  const reserved = await reserveAttempt({ scope: "support_lookup", actorId: admin.id, now: new Date() });
+  if (!reserved.allowed) return { ok: false, message: rateLimitedMessage() };
+
+  const result = await moveGuestToHotel({
+    actorUserId: admin.id,
+    email: parsed.data.email,
+    toHotelId: parsed.data.hotelId,
+    reasonCode: parsed.data.reason,
+    note: parsed.data.note,
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+  if (result.status === "already_there") return { ok: true, message: `The guest is already staying at ${result.hotelName}.` };
+  return {
+    ok: true,
+    message: result.fromHotelName
+      ? `Moved from ${result.fromHotelName} to ${result.hotelName}. ${result.hotelName} is now the guest's base.`
+      : `${result.hotelName} is now the guest's base.`,
   };
 }

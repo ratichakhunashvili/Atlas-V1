@@ -38,6 +38,7 @@ export const ADMIN_AUDIT_ACTIONS = [
   "model.deleted",
   "staff.role_changed",
   "support.guest_lookup",
+  "support.guest_moved",
 ] as const;
 export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number];
 
