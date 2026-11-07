@@ -98,17 +98,18 @@ describe("placement comes from geography, not the screen", () => {
   const source = stripComments(read(LAYER));
 
   it("builds each model's matrix from its geographic display anchor, never the screen", () => {
-    assert.match(source, /buildAnchorMatrix\(model\.anchorLongitude, model\.anchorLatitude/);
+    assert.match(source, /buildLocalMatrix\(origin, model\.anchorLongitude, model\.anchorLatitude/);
     assert.doesNotMatch(source, /model\.longitude|model\.latitude/, "the canonical Place coordinates are not used to draw");
     assert.match(source, /matrixAutoUpdate = false/, "the anchor matrix is authoritative");
   });
 
   it("takes the frame's camera matrix from Mapbox", () => {
-    assert.match(source, /projectionMatrix = new THREE\.Matrix4\(\)\.fromArray\(matrix\)/);
+    assert.match(source, /projectionMatrix = new THREE\.Matrix4\(\)\.fromArray\(matrix\)\.multiply\(this\.originMatrix\)/);
+    assert.match(source, /projectionMatrixInverse\.copy\(this\.camera\.projectionMatrix\)\.invert\(\)/, "picking needs the inverse");
   });
 
   it("picks by raycasting, never by nearest marker", () => {
-    assert.match(source, /raycaster\.setFromCamera/);
+    assert.match(source, /this\.raycaster\.set\(near, far\.sub\(near\)\.normalize\(\)\)/);
     assert.match(source, /intersectObjects/);
     assert.doesNotMatch(source, /nearest|closestMarker|distanceTo\(/i);
   });
@@ -156,6 +157,6 @@ describe("no idle repaint loop, and selective loading", () => {
 
   it("applies a placement-only change in place instead of rebuilding the model", () => {
     assert.match(source, /existing\.transformKey !== transformKey/);
-    assert.match(source, /existing\.group\.matrix = matrixFor\(model\)/);
+    assert.match(source, /existing\.group\.matrix = matrixFor\(this\.origin!, model\)/);
   });
 });

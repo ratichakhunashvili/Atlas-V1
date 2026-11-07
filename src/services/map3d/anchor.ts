@@ -13,10 +13,9 @@ import * as THREE from "three";
  *
  *     model +X -> east,  model +Y -> up,  model +Z -> south
  *
- * Mapbox's Mercator space has +Y increasing SOUTHWARD and no vertical axis in the
- * usual sense, so the matrix below flips Y to get a conventional "up" and leaves
- * +Z pointing south. Models authored Y-up (the GLB default) therefore stand
- * upright without per-model fudging.
+ * Mapbox's Mercator space has +x east, +y SOUTH and +z up (altitude). The
+ * matrices below map model Y to Mercator z and model Z to Mercator y, so models
+ * authored Y-up (the glTF default) stand upright without per-model fudging.
  */
 
 /** WGS84 equatorial circumference in metres, as Mapbox uses it. */
@@ -67,49 +66,79 @@ export type ModelTransform = {
 };
 
 /**
- * The model-space -> Mercator-space matrix for one placed object.
+ * Model space -> Mercator space for a model drawn at `origin`: the origin's position, its metre scale, and the axis
+ * swap. Model +X east -> Mercator +x; model +Y up -> Mercator +z (altitude); model +Z south -> Mercator +y.
  *
- * Composed by hand, in this order, because the scale is NON-UNIFORM: the Y flip
- * that turns Mapbox's southward +Y into a conventional "up" has to be part of the
- * scale, not the rotation. three.js's own position/rotation/scale properties
- * compose as T·R·S, which would bake the flip into the rotation and produce a
- * mirrored, subtly wrong result.
- *
- * Crucially this is the ONLY place an object's world position comes from, and it
- * is computed once at placement time from the Place's own longitude and latitude —
- * never from screen pixels. That is what keeps a model pinned to its building
- * while the camera pans, zooms, pitches and rotates around it.
+ * The swap is a reflection (Mercator space is left-handed with z up), which is exactly what keeps a right-handed,
+ * Y-up glTF upright and unmirrored. A plain Y flip would lay the model on its back.
  */
-export function buildAnchorMatrix(
+export function buildOriginMatrix(lng: number, lat: number): THREE.Matrix4 {
+  const origin = lngLatToMercator(lng, lat);
+  const m = meterInMercatorUnits(lat);
+  // Columns: model X -> (m,0,0), model Y -> (0,0,m), model Z -> (0,m,0); then translate.
+  return new THREE.Matrix4().set(
+    m, 0, 0, origin.x,
+    0, 0, m, origin.y,
+    0, m, 0, origin.z,
+    0, 0, 0, 1
+  );
+}
+
+/**
+ * A model's matrix in METRES relative to a render origin (east, up, south). Everything the GPU sees stays in metres
+ * near zero, which float32 holds precisely; the huge Mercator numbers are folded into the camera on the CPU in float64
+ * (see the models layer). Drawing straight in Mercator units is what made models shake as the camera moved.
+ */
+export function buildLocalMatrix(
+  origin: { lng: number; lat: number },
   lng: number,
   lat: number,
   transform: ModelTransform = {}
 ): THREE.Matrix4 {
-  const elevation = transform.elevationOffsetMeters ?? 0;
-  const anchor = lngLatToMercator(lng, lat, elevation);
-  const metersToMercator = meterInMercatorUnits(lat) * (transform.scale ?? 1);
+  const here = lngLatToMercator(lng, lat);
+  const base = lngLatToMercator(origin.lng, origin.lat);
+  const metre = meterInMercatorUnits(origin.lat);
+  const east = (here.x - base.x) / metre;
+  const south = (here.y - base.y) / metre;
+  const up = transform.elevationOffsetMeters ?? 0;
 
-  const translation = new THREE.Matrix4().makeTranslation(anchor.x, anchor.y, anchor.z);
-
-  // Non-uniform on purpose: Y is negated so model-up becomes screen-up.
-  const scale = new THREE.Matrix4().makeScale(metersToMercator, -metersToMercator, metersToMercator);
-
-  // Heading about vertical, then tilt, then roll: yaw is the outermost rotation, so a pitched model still turns about
-  // the vertical axis the way an admin expects when they change its heading.
-  const yaw = new THREE.Matrix4().makeRotationY(THREE.MathUtils.degToRad(transform.rotationDegrees ?? 0));
+  const translation = new THREE.Matrix4().makeTranslation(east, up, south);
+  // Heading is clockwise from north seen from above; about +Y (up) a positive angle turns anticlockwise, hence the minus.
+  const yaw = new THREE.Matrix4().makeRotationY(-THREE.MathUtils.degToRad(transform.rotationDegrees ?? 0));
   const pitch = new THREE.Matrix4().makeRotationX(THREE.MathUtils.degToRad(transform.pitchDegrees ?? 0));
   const roll = new THREE.Matrix4().makeRotationZ(THREE.MathUtils.degToRad(transform.rollDegrees ?? 0));
-  const rotation = yaw.multiply(pitch).multiply(roll);
-
-  // Per-axis scale is the innermost step: it stretches the model along ITS OWN axes before it is rotated or placed.
+  const uniform = transform.scale ?? 1;
   const axis = new THREE.Matrix4().makeScale(
-    transform.axisScale?.x ?? 1,
-    transform.axisScale?.y ?? 1,
-    transform.axisScale?.z ?? 1
+    uniform * (transform.axisScale?.x ?? 1),
+    uniform * (transform.axisScale?.y ?? 1),
+    uniform * (transform.axisScale?.z ?? 1)
   );
+  // T * Ryaw * Rpitch * Rroll * S: stretched along its own axes, turned, then placed.
+  return translation.multiply(yaw).multiply(pitch).multiply(roll).multiply(axis);
+}
 
-  // T · S · R · A — the flip scale is applied after rotation and before translation, never the other way round.
-  return translation.multiply(scale).multiply(rotation).multiply(axis);
+/**
+ * The full model -> Mercator matrix for one model (origin at its own anchor). For maths and tests; the layer draws
+ * with origin-relative matrices instead.
+ */
+export function buildAnchorMatrix(lng: number, lat: number, transform: ModelTransform = {}): THREE.Matrix4 {
+  return buildOriginMatrix(lng, lat).multiply(buildLocalMatrix({ lng, lat }, lng, lat, transform));
+}
+
+/**
+ * Where to put a loaded model inside its placement so its BASE sits on the anchor and its footprint is centred on it,
+ * whatever origin the file was exported with. (Assuming a centred file left models floating or half-buried.)
+ */
+export function groundingPosition(
+  bounds: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } },
+  scale: number
+): { x: number; y: number; z: number } {
+  if (![bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.z, scale].every(Number.isFinite)) return { x: 0, y: 0, z: 0 };
+  return {
+    x: -((bounds.min.x + bounds.max.x) / 2) * scale + 0,
+    y: -bounds.min.y * scale + 0,
+    z: -((bounds.min.z + bounds.max.z) / 2) * scale + 0,
+  };
 }
 
 /**

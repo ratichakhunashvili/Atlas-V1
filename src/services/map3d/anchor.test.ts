@@ -3,6 +3,9 @@ import { describe, it } from "node:test";
 import * as THREE from "three";
 import {
   buildAnchorMatrix,
+  buildLocalMatrix,
+  buildOriginMatrix,
+  groundingPosition,
   groundingOffset,
   lngLatToMercator,
   meterInMercatorUnits,
@@ -99,18 +102,19 @@ describe("the anchor matrix", () => {
     assert.ok(Math.abs(direction.y) < 1e-15, "and must not drift north or south");
   });
 
-  it("points model +Y UP, not south — the flip the convention exists for", () => {
+  it("points model +Y UP (Mercator altitude), never north or south", () => {
     const direction = axisDirection(buildAnchorMatrix(TBILISI.lng, TBILISI.lat), "y");
 
-    // Mercator y grows southward, so "up" must come out NEGATIVE in y.
-    assert.ok(direction.y < 0, "+Y must oppose Mercator's southward y");
+    assert.ok(direction.z > 0, "+Y must raise altitude: a Y-up glTF stands upright");
     assert.ok(Math.abs(direction.x) < 1e-15);
+    assert.ok(Math.abs(direction.y) < 1e-15, "a model lying on its back points up into north or south");
   });
 
   it("points model +Z south", () => {
     const direction = axisDirection(buildAnchorMatrix(TBILISI.lng, TBILISI.lat), "z");
 
-    assert.ok(direction.z > 0, "+Z is south in the z component of Mercator space");
+    assert.ok(direction.y > 0, "+Z is south, Mercator's +y");
+    assert.ok(Math.abs(direction.z) < 1e-15);
   });
 
   /*
@@ -156,7 +160,7 @@ describe("the anchor matrix", () => {
     // either way it must leave the east axis.
     const turnedX = axisDirection(turned, "x");
     assert.ok(Math.abs(turnedX.x) < 1e-15, "after 90 degrees, +X no longer points east");
-    assert.ok(Math.abs(turnedX.z) > 0);
+    assert.ok(turnedX.y > 0, "a 90 degree heading (clockwise from north) turns east-facing to south-facing");
   });
 
   it("lifts the model by the elevation offset, in metres", () => {
@@ -180,6 +184,35 @@ describe("the anchor matrix", () => {
 
     assert.ok(Math.abs(here.x - elsewhere.x) > 1e-6);
     assert.ok(Math.abs(here.y - elsewhere.y) > 1e-6);
+  });
+});
+
+describe("drawing relative to a nearby origin (no jitter)", () => {
+  it("gives the same world position as the full anchor matrix", () => {
+    const origin = { lng: TBILISI.lng + 0.01, lat: TBILISI.lat - 0.005 };
+    const transform = { rotationDegrees: 30, elevationOffsetMeters: 4, scale: 2 };
+    const full = buildAnchorMatrix(TBILISI.lng, TBILISI.lat, transform);
+    const split = buildOriginMatrix(origin.lng, origin.lat).multiply(buildLocalMatrix(origin, TBILISI.lng, TBILISI.lat, transform));
+    const point = new THREE.Vector3(3, 7, -2);
+    const a = point.clone().applyMatrix4(full);
+    const b = point.clone().applyMatrix4(split);
+    assert.ok(a.distanceTo(b) < meterInMercatorUnits(TBILISI.lat) * 2, "within a couple of metres over ~1 km");
+  });
+
+  it("keeps the local matrix in metres, small enough for float32", () => {
+    const local = buildLocalMatrix({ lng: TBILISI.lng, lat: TBILISI.lat }, TBILISI.lng + 0.001, TBILISI.lat);
+    const east = local.elements[12];
+    assert.ok(east > 50 && east < 120, `about 83 m east, got ${east}`);
+  });
+});
+
+describe("standing a model on the ground", () => {
+  it("puts the base on the anchor and centres the footprint, whatever the file's origin", () => {
+    assert.deepEqual(groundingPosition({ min: { x: 2, y: -5, z: -1 }, max: { x: 6, y: 5, z: 3 } }, 2), { x: -8, y: 10, z: -2 });
+  });
+
+  it("does nothing for nonsense", () => {
+    assert.deepEqual(groundingPosition({ min: { x: NaN, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }, 1), { x: 0, y: 0, z: 0 });
   });
 });
 

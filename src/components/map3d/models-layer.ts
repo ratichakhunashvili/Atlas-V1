@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { CustomLayerInterface, Map as MapboxMap, MercatorCoordinate } from "mapbox-gl";
 import type { GuestPlaceModel } from "@/services/map3d";
-import { buildAnchorMatrix, groundingOffset, scaleToTargetHeight } from "@/services/map3d/anchor";
+import { buildLocalMatrix, buildOriginMatrix, groundingPosition, scaleToTargetHeight } from "@/services/map3d/anchor";
 
 /**
  * ONE Mapbox custom layer, ONE Three.js scene, ONE renderer — for every model on
@@ -68,13 +68,15 @@ const transformKeyOf = (model: GuestPlaceModel) =>
     model.scaleZ,
   ].join("|");
 
+type Origin = { lng: number; lat: number };
+
 /**
- * The one matrix that decides where a model is DRAWN: its geographic display anchor and transform. It is built from
- * longitude and latitude, never from screen pixels, so the model stays put through pan, zoom, pitch, bearing, resize
- * and style changes. It is used for drawing and for nothing else.
+ * The one matrix that decides where a model is DRAWN: its geographic display anchor and transform, in metres from the
+ * layer's render origin. It is built from longitude and latitude, never from screen pixels, so the model stays put
+ * through pan, zoom, pitch, bearing, resize and style changes.
  */
-function matrixFor(model: GuestPlaceModel): THREE.Matrix4 {
-  return buildAnchorMatrix(model.anchorLongitude, model.anchorLatitude, {
+function matrixFor(origin: Origin, model: GuestPlaceModel): THREE.Matrix4 {
+  return buildLocalMatrix(origin, model.anchorLongitude, model.anchorLatitude, {
     rotationDegrees: model.rotationDegrees,
     pitchDegrees: model.pitchDegrees,
     rollDegrees: model.rollDegrees,
@@ -107,6 +109,14 @@ export class PlaceModelsLayer implements CustomLayerInterface {
 
   private models: GuestPlaceModel[] = [];
   private disposed = false;
+
+  /**
+   * Every model is drawn in metres relative to this point, and the point itself is folded into the camera matrix on the
+   * CPU, in float64. Without it, positions on the GPU are Mercator numbers (~0.6) moved in steps of ~3e-8 per metre,
+   * which float32 cannot hold: the model visibly shook whenever the camera moved.
+   */
+  private origin: Origin | null = null;
+  private originMatrix = new THREE.Matrix4();
 
   constructor(private readonly options: ModelsLayerOptions = {}) {
     // Enough light to read a model's form without pretending to match the map's
@@ -171,7 +181,8 @@ export class PlaceModelsLayer implements CustomLayerInterface {
 
     // Mapbox supplies the frame's view-projection matrix; the camera is only ever
     // a carrier for it. Nothing here derives position from screen pixels.
-    this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix);
+    this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix).multiply(this.originMatrix);
+    this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
     this.renderer.resetState();
     this.renderer.render(this.scene, this.camera);
@@ -184,6 +195,14 @@ export class PlaceModelsLayer implements CustomLayerInterface {
   /** Replaces the whole set of models. Called when the server sends new lock state, or an editor changes a placement. */
   async setModels(models: GuestPlaceModel[]): Promise<void> {
     this.models = models;
+    const first = models[0];
+    // The origin only needs to be NEAR the models (within a few km keeps float32 exact to millimetres). Keep it while it
+    // is, so editing one model does not move the others' frames.
+    if (first && (!this.origin || Math.abs(this.origin.lat - first.anchorLatitude) > 0.2 || Math.abs(this.origin.lng - first.anchorLongitude) > 0.2)) {
+      this.origin = { lng: first.anchorLongitude, lat: first.anchorLatitude };
+      this.originMatrix = buildOriginMatrix(this.origin.lng, this.origin.lat);
+      for (const placement of this.placed.values()) placement.transformKey = "";
+    }
     if (this.map) await this.syncModels();
   }
 
@@ -233,7 +252,7 @@ export class PlaceModelsLayer implements CustomLayerInterface {
       if (existing && existing.structuralKey === structuralKey) {
         // Same file and look. If only the placement changed, move it in place: no reload, no new GPU resources.
         if (existing.transformKey !== transformKey) {
-          existing.group.matrix = matrixFor(model);
+          existing.group.matrix = matrixFor(this.origin!, model);
           existing.group.matrixWorldNeedsUpdate = true;
           existing.transformKey = transformKey;
           changed = true;
@@ -282,7 +301,8 @@ export class PlaceModelsLayer implements CustomLayerInterface {
     const normalisingScale = scaleToTargetHeight(heightUnits, model.targetHeightMeters);
 
     instance.scale.setScalar(normalisingScale);
-    instance.position.y = groundingOffset(heightUnits, normalisingScale);
+    const ground = groundingPosition(bounds, normalisingScale);
+    instance.position.set(ground.x, ground.y, ground.z);
 
     if (!model.unlocked) this.applyLockedAppearance(instance);
 
@@ -291,7 +311,7 @@ export class PlaceModelsLayer implements CustomLayerInterface {
 
     // World position comes from the geographic display anchor and transform alone.
     group.matrixAutoUpdate = false;
-    group.matrix = matrixFor(model);
+    group.matrix = matrixFor(this.origin!, model);
 
     // Picking resolves a hit mesh back to its LINKED Place through this, not by proximity.
     group.userData.placeId = model.placeId;
@@ -347,7 +367,11 @@ export class PlaceModelsLayer implements CustomLayerInterface {
       -(point.y / canvas.height) * 2 + 1
     );
 
-    this.raycaster.setFromCamera(pointer, this.camera);
+    // Mapbox's camera is a bare projection matrix, which Raycaster.setFromCamera does not accept: unproject the pointer
+    // at the near and far planes by hand (raycaster.setFromCamera only knows perspective and orthographic cameras).
+    const near = new THREE.Vector3(pointer.x, pointer.y, -1).applyMatrix4(this.camera.projectionMatrixInverse);
+    const far = new THREE.Vector3(pointer.x, pointer.y, 1).applyMatrix4(this.camera.projectionMatrixInverse);
+    this.raycaster.set(near, far.sub(near).normalize());
     const hits = this.raycaster.intersectObjects(this.scene.children, true);
 
     for (const hit of hits) {
