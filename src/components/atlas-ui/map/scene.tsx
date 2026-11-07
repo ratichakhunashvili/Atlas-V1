@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { GuestPlaceModel } from "@/services/map3d/guest-models";
 import type { PlaceId, RouteId } from "../fixtures";
 import type { MarkerImage } from "./markers";
 
@@ -37,6 +38,8 @@ export type MapScene = {
   panel: boolean;
   /** Route screens show a flat map; the home screen honours the 2D/3D toggle. */
   allowTilt: boolean;
+  /** The 3D models this guest may see, already filtered and lock-resolved by the server (services/map3d). */
+  models?: GuestPlaceModel[];
 };
 
 export type CameraTarget = "design" | "you" | "hotel";

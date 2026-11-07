@@ -135,6 +135,51 @@ export function AtlasMap() {
     }
   }, [scene, ready, wide, viewportRef, centreOnFirstFix]);
 
+  // 3D models: ONE custom layer (one Three.js scene sharing Mapbox's WebGL context) for every model. Three.js is
+  // downloaded only once a screen actually has a model to draw, and the layer diffs, so an unchanged list costs nothing.
+  const modelsLayerRef = useRef<import("@/components/map3d/models-layer").PlaceModelsLayer | null>(null);
+  const models = scene?.models;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const list = models ?? [];
+    if (modelsLayerRef.current) {
+      void modelsLayerRef.current.setModels(list);
+      return;
+    }
+    if (list.length === 0) return;
+    let cancelled = false;
+    void import("@/components/map3d/models-layer").then(({ PlaceModelsLayer }) => {
+      if (cancelled || modelsLayerRef.current || mapRef.current !== map) return;
+      const layer = new PlaceModelsLayer({ enabled: true });
+      // Under the markers, so a pin is never hidden behind the building it marks.
+      map.addLayer(layer as unknown as Parameters<typeof map.addLayer>[0], map.getLayer("atlas-markers") ? "atlas-markers" : undefined);
+      modelsLayerRef.current = layer;
+      void layer.setModels(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [models, ready]);
+
+  // Tapping a model opens its Place, as tapping its marker does. Picked by ray, never "the nearest model".
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const onClick = (event: { point: { x: number; y: number } }) => {
+      const layer = modelsLayerRef.current;
+      if (!layer || map.queryRenderedFeatures([event.point.x, event.point.y], { layers: ["atlas-markers"] }).length > 0) return;
+      const canvas = map.getCanvas();
+      const ratio = canvas.clientWidth > 0 ? canvas.width / canvas.clientWidth : 1;
+      const placeId = layer.pick({ x: event.point.x * ratio, y: event.point.y * ratio }, { width: canvas.width, height: canvas.height });
+      if (placeId && placeClickRef.current) placeClickRef.current(placeId);
+    };
+    map.on("click", onClick);
+    return () => {
+      map.off("click", onClick);
+    };
+  }, [ready, placeClickRef]);
+
   // 2D / 3D.
   useEffect(() => {
     const map = mapRef.current;

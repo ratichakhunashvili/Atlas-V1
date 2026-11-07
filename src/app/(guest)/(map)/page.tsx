@@ -12,6 +12,7 @@ import { isTestEntryOffered } from "@/features/test-entry/offer";
 import { requireUser } from "@/lib/authorization";
 import { getDailyPlanForUser } from "@/services/advisor/daily-plan";
 import { getEligibleMapPlacesForGuest } from "@/services/eligibility";
+import { listGuestPlaceModels } from "@/services/map3d";
 import { boundsAround } from "@/services/eligibility/viewport";
 
 /*
@@ -41,9 +42,11 @@ export default async function HomePage({
   const user = await requireUser();
   const stay = await findCurrentStayForUser(user.id);
   const opening = stay ? boundsAround({ lat: stay.place.latitude, lng: stay.place.longitude }, OPENING_HALF_SPAN_DEGREES) : undefined;
-  const [map, testEntryOffered] = await Promise.all([
+  const [map, testEntryOffered, models] = await Promise.all([
     getEligibleMapPlacesForGuest({ userId: user.id, bounds: opening }),
     isTestEntryOffered(user.id),
+    // Only enabled models of Places in this guest's own catalogue, grey until they have visited (services/map3d).
+    listGuestPlaceModels(user.id),
   ]);
 
   if (map.status !== "ok" || !stay) {
@@ -105,6 +108,7 @@ export default async function HomePage({
   return (
     <LiveMissionsMap
       summary={summary}
+      models={models}
       hotel={{ name: stay.place.name, address: stay.place.address, at: [map.hotelLocation.lng, map.hotelLocation.lat] }}
       truncated={map.truncated}
       visitedPlaceIds={visits.map((visit) => visit.placeId)}

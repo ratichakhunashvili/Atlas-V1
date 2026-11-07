@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { locationService } from "@/services/location";
+import type { GuestPlaceModel } from "@/services/map3d/guest-models";
 import { AtlasIcon } from "../asset";
 import { AtlasBottomBar } from "../bottom-bar";
 import { PlanSegment, StayHeader } from "../missions-chrome";
@@ -159,6 +160,7 @@ export function LiveMissionsMap({
   truncated: initialTruncated,
   visitedPlaceIds,
   summary,
+  models,
 }: {
   hotel: LiveHotel;
   places: LivePlace[];
@@ -166,6 +168,8 @@ export function LiveMissionsMap({
   /** Places this guest has visited: their attractions show unlocked. */
   visitedPlaceIds: string[];
   summary: string;
+  /** This guest's 3D models (eligible Places only; grey until visited). */
+  models: GuestPlaceModel[];
 }) {
   const [places, setPlaces] = useState(initialPlaces);
   const [truncated, setTruncated] = useState(initialTruncated);
@@ -277,6 +281,7 @@ export function LiveMissionsMap({
       bottomInset: 96 + (collapsed ? SHEET_COLLAPSED : SHEET_HEIGHT),
       allowTilt: true,
       panel: true,
+      models,
     },
     selectPlace
   );
