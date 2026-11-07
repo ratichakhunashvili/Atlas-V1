@@ -332,7 +332,7 @@ export function LiveMissionsMap({
     <>
       {locationBlocked ? (
         <Link
-          href="/permissions"
+          href="/profile/permissions"
           aria-label="Turn on location"
           className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] border border-atlas-beige bg-atlas-paper opacity-60"
         >

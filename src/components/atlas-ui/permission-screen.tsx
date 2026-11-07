@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ScreenKey } from "./screen-hrefs";
 import { AtlasBackButton, AtlasBadge, AtlasButton, AtlasPoints, AtlasTextLink, FlowScreen, Spacer, type } from "./ui";
 
@@ -15,6 +16,8 @@ export type PermissionScreenProps = {
   reassurances: string[];
   allowLabel: string;
   allowTo: ScreenKey;
+  /** Replaces the plain allow link with a control that really asks the browser (location). */
+  allowAction?: ReactNode;
   declineLabel: string;
   declineTo: ScreenKey;
   footnote: string;
@@ -32,7 +35,7 @@ export function PermissionScreen(props: PermissionScreenProps) {
       <AtlasPoints items={props.reassurances.map((text) => ({ icon: "/atlas-ui/icon-check-teal.svg", text }))} />
       <Spacer />
       <div className="flex w-full flex-col items-start gap-[6px]">
-        <AtlasButton to={props.allowTo}>{props.allowLabel}</AtlasButton>
+        {props.allowAction ?? <AtlasButton to={props.allowTo}>{props.allowLabel}</AtlasButton>}
         <AtlasTextLink to={props.declineTo}>{props.declineLabel}</AtlasTextLink>
         <p className={`w-full text-center ${type.caption}`}>{props.footnote}</p>
       </div>

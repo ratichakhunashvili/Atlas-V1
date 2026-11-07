@@ -1,16 +1,58 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { locationService } from "@/services/location";
 import { AtlasIcon } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
-import { AtlasBackButton, type } from "./ui";
+import { AtlasBackButton, AtlasButton, type } from "./ui";
 
 /*
- * Permissions · Profile › Permissions — Figma frame 1:2862, with the Switch component (1:198):
- * tapping toggles between On (teal track) and Off (mist track). A design state only: the switches
- * do not ask the browser for, or change, any permission, and the screen says so. Reading and
- * requesting real permissions is a future integration.
+ * Permissions · Profile › Permissions — Figma frame 1:2862, with the Switch component (1:198).
+ * Location is real: it shows what the browser actually answered, asks again from a tap, and explains how to unblock
+ * it, because a site can never re-open a prompt the guest blocked. The camera switch is still a design state only
+ * (the scanner asks for the camera itself), and the screen says so.
  */
+
+const subscribeLocation = (onChange: () => void) => locationService.onChange(onChange);
+const locationSnapshot = () => locationService.getState();
+
+function LocationPermissionCard() {
+  const location = useSyncExternalStore(subscribeLocation, locationSnapshot, locationSnapshot);
+  const on = location.status === "active";
+  const blocked = location.status === "denied";
+  const status = on
+    ? "On while you use Atlas."
+    : blocked
+      ? "Blocked in your browser."
+      : location.status === "unsupported"
+        ? "This browser can't share your location."
+        : location.status === "locating"
+          ? "Finding your location…"
+          : "Off. Atlas will ask when you allow it.";
+
+  return (
+    <section className="flex w-full flex-col items-start gap-[8px] rounded-[16px] border border-atlas-beige p-[14px]">
+      <h2 className="font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal">Location</h2>
+      <p role="status" className="w-full font-manrope text-[14px] leading-[1.5] text-atlas-ink">
+        {status}
+      </p>
+      <p className="w-full font-manrope text-[13px] leading-[1.5] text-atlas-slate">
+        Shows where you are on the map, walk times, and confirms you are at a place when you check in.
+      </p>
+      {blocked ? (
+        <p className="w-full font-manrope text-[13px] leading-[1.5] text-atlas-slate">
+          To turn it on, open this site&apos;s settings (the icon beside the web address), set Location to Allow, then
+          reload. On iPhone, also check Settings › Privacy &amp; Security › Location Services for your browser.
+        </p>
+      ) : null}
+      {!on && location.status !== "unsupported" ? (
+        <AtlasButton onClick={() => locationService.requestOnce()} disabled={location.status === "locating"}>
+          {blocked ? "Try again" : "Allow location"}
+        </AtlasButton>
+      ) : null}
+    </section>
+  );
+}
 
 function Switch({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
   return (
@@ -49,11 +91,7 @@ export function PermissionsScreen() {
             <h1 className="font-grotesk text-[24px] font-bold leading-[31px] text-atlas-teal">Permissions</h1>
           </div>
         </div>
-        <PermissionCard
-          title="Location"
-          status="On while you use Atlas."
-          detail="Shows walk times and confirms you are at a place when you check in."
-        />
+        <LocationPermissionCard />
         <PermissionCard
           title="Camera"
           status="Atlas asks each time you scan."
@@ -66,7 +104,7 @@ export function PermissionsScreen() {
           </p>
         </div>
         <p className="w-full font-manrope text-[12px] leading-[16px] text-atlas-slate">
-          Prototype: these switches show the design only. They don&apos;t read or change your browser&apos;s permissions.
+          Prototype: the camera switch shows the design only. It doesn&apos;t read or change your browser&apos;s permission.
         </p>
       </div>
       <div className="sticky bottom-0 z-10">

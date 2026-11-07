@@ -79,6 +79,8 @@ class LocationService {
   private watchId: number | null = null;
   /** How many screens currently want the watch; it stops only when the last one leaves. */
   private users = 0;
+  /** False once the watch failed without ever getting a fix; the next successful request starts a fresh one. */
+  private watchHealthy = true;
 
   getState(): LocationState {
     return this.state;
@@ -122,11 +124,18 @@ class LocationService {
       FIRST_FIX_OPTIONS
     );
 
+    this.startWatch();
+  }
+
+  /** The low-power watch itself. A watch that failed before its first fix (denied, say) never recovers on its own. */
+  private startWatch(): void {
+    this.watchHealthy = true;
     this.watchId = navigator.geolocation.watchPosition(
       (position) => this.handlePosition(position),
       (error) => {
         // A transient watch error shouldn't erase a location we already have.
         if (!this.state.coords) {
+          this.watchHealthy = false;
           this.setState({
             status: statusFromError(error),
             coords: null,
@@ -155,7 +164,14 @@ class LocationService {
     });
 
     navigator.geolocation.getCurrentPosition(
-      (position) => this.handlePosition(position, true),
+      (position) => {
+        // Permission was granted after the watch had died (a first denial, say): bring the live watch back.
+        if (!this.watchHealthy && this.users > 0) {
+          if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+          this.startWatch();
+        }
+        this.handlePosition(position, true);
+      },
       (error) =>
         this.setState({
           status: statusFromError(error),
@@ -166,6 +182,25 @@ class LocationService {
         }),
       FIRST_FIX_OPTIONS
     );
+  }
+
+  /**
+   * Asks the browser now — from a tap, which is when browsers most reliably show their prompt — and resolves with the
+   * outcome once the guest has answered (or the request gave up).
+   */
+  requestPermission(): Promise<LocationStatus> {
+    return new Promise((resolve) => {
+      const unsubscribe = this.onChange((state) => {
+        if (state.status === "locating") return;
+        unsubscribe();
+        resolve(state.status);
+      });
+      this.requestOnce();
+      if (this.state.status !== "locating") {
+        unsubscribe();
+        resolve(this.state.status);
+      }
+    });
   }
 
   /** Leaves the watch; it is cleared only when no user is left, so one screen closing never blinds another. */

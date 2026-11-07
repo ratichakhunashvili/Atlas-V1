@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Map as MapboxMap } from "mapbox-gl/esm";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { locationService } from "@/services/location";
@@ -71,18 +71,34 @@ export function AtlasMap() {
   // The guest's live location, for as long as the map lives. The browser asks for permission when the map first
   // opens; the one shared service then keeps a low-power watch, so the dot follows the guest on every map tab.
   const youRef = useRef<LngLat | null>(null);
+  const hotelAtRef = useRef<[number, number] | undefined>(undefined);
   const liveDotRef = useRef(false);
+  // The map opens on the hotel; the first time the guest's position is known on a live map screen, the camera moves
+  // to them once, so they see themselves without hunting for the dot. After that only the locate button moves it.
+  const centredOnYouRef = useRef(false);
+  const reducedMotionRef = useRef(reducedMotion);
+  useEffect(() => {
+    reducedMotionRef.current = reducedMotion;
+  }, [reducedMotion]);
+  const centreOnFirstFix = useCallback(() => {
+    const map = mapRef.current;
+    const engine = engineRef.current;
+    if (centredOnYouRef.current || !map || !engine || !liveDotRef.current || !youRef.current) return;
+    centredOnYouRef.current = true;
+    engine.applyCamera(map, "you", reducedMotionRef.current, hotelAtRef.current, youRef.current);
+  }, []);
   useEffect(() => {
     const unsubscribe = locationService.onChange((state) => {
       youRef.current = state.coords ? [state.coords.longitude, state.coords.latitude] : null;
       if (mapRef.current && engineRef.current && liveDotRef.current) engineRef.current.setLiveYou(mapRef.current, youRef.current);
+      centreOnFirstFix();
     });
     locationService.start();
     return () => {
       unsubscribe();
       locationService.stop();
     };
-  }, []);
+  }, [centreOnFirstFix]);
 
   // Mapbox's logo sits above the screen's sheet. Placed as soon as the scene is known, not after
   // the style has loaded, so the logo doesn't appear at the bottom first and then jump up.
@@ -110,13 +126,14 @@ export function AtlasMap() {
     // design screens draw their own illustrated one.
     liveDotRef.current = Boolean(scene.hotelAt) && !scene.routeLine && !scene.route;
     engine.setLiveYou(map, liveDotRef.current ? youRef.current : null);
+    centreOnFirstFix();
     // A screen coming back to a map that didn't move gets no `moveend`, so report the current area here too
     // (the listening screen ignores an area it has already loaded).
     const bounds = map.getBounds();
     if (bounds && viewportRef.current) {
       viewportRef.current({ south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() });
     }
-  }, [scene, ready, wide, viewportRef]);
+  }, [scene, ready, wide, viewportRef, centreOnFirstFix]);
 
   // 2D / 3D.
   useEffect(() => {
@@ -127,7 +144,6 @@ export function AtlasMap() {
   }, [dimension, ready, scene, reducedMotion]);
 
   // The live scene's hotel, read by camera requests without making every scene change move the camera.
-  const hotelAtRef = useRef<[number, number] | undefined>(undefined);
   useEffect(() => {
     hotelAtRef.current = scene?.hotelAt;
   }, [scene]);
