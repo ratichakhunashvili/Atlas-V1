@@ -9,6 +9,8 @@ import { CheckInPanel } from "./check-in-panel";
 import { PlanSegment, StayHeader } from "./missions-chrome";
 import { PendingSubmit } from "./pending-submit";
 import { type } from "./ui";
+import { CLOCK, categoryLabel } from "@/lib/format";
+import { describePriceLevel } from "@/services/advisor/preference-ranking";
 
 /*
  * MyPlan · Missions › My plan — Figma frame 1:489 — as the guest's "choose 1 of 3" day, on real data.
@@ -20,19 +22,11 @@ import { type } from "./ui";
 
 type Started = Exclude<DailyPlanState, { status: "no_stay" } | { status: "not_started" }>;
 
-// Atlas starts in Georgia; the server runs in UTC, so times are shown in Tbilisi time explicitly.
-const CLOCK = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tbilisi" });
-const PRICE: Record<number, string> = { 1: "Budget", 2: "Moderate", 3: "Luxury" };
 const DOT = "flex size-[28px] shrink-0 items-center justify-center rounded-[14px]";
 const NOTICES: Record<string, string> = {
   saved: "Saved. Your new choices apply to your next plan.",
   "pick-failed": "That option isn't available any more. Here are your current options.",
 };
-
-function label(value: string | null) {
-  if (!value) return "";
-  return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ");
-}
 
 function duration(minutes: number) {
   const m = Math.max(0, Math.round(minutes));
@@ -128,7 +122,7 @@ function CurrentRow({ state, testFinish }: { state: Extract<Started, { status: "
           <span className="shrink-0 font-manrope text-[12px] font-semibold leading-[16px] text-atlas-teal">Go here now</span>
         </div>
         <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">
-          {label(current.category)} · about {duration(current.visitMinutes)} there
+          {categoryLabel(current.category)} · about {duration(current.visitMinutes)} there
         </p>
         <p className="font-manrope text-[13px] leading-[18px] text-atlas-ink">
           When you get there, scan the place&apos;s Atlas QR code or check in with your location to unlock its achievement.
@@ -151,7 +145,7 @@ function ChoiceCard({ choice }: { choice: DailyChoice }) {
   const meta = [
     choice.source === "facility" ? "At your hotel" : `${choice.walkMinutes} min walk`,
     `${duration(choice.visitMinutes)} there`,
-    choice.priceLevel ? PRICE[choice.priceLevel] : null,
+    describePriceLevel(choice.priceLevel),
   ].filter(Boolean);
   return (
     <li className="w-full">
@@ -170,7 +164,7 @@ function ChoiceCard({ choice }: { choice: DailyChoice }) {
             </span>
           ) : null}
           <span className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
-            {choice.source === "facility" ? "Hotel" : choice.source === "attraction" ? "Attraction" : "Partner"} · {label(choice.category)}
+            {choice.source === "facility" ? "Hotel" : choice.source === "attraction" ? "Attraction" : "Partner"} · {categoryLabel(choice.category)}
           </span>
         </div>
         <p className={`w-full font-grotesk font-bold text-atlas-teal [overflow-wrap:anywhere] ${big ? "text-[22px] leading-[28px]" : "text-[17px] leading-[22px]"}`}>

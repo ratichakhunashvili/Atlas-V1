@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AtlasAsset, AtlasIcon } from "./asset";
+import { CLOCK } from "@/lib/format";
 
 /*
  * Unlocked · Achievement unlocked — Figma frame 1:466 — on real data, shown after a verified check-in in the
@@ -7,8 +8,6 @@ import { AtlasAsset, AtlasIcon } from "./asset";
  * guest on to their next three options. A badge earned on an earlier day is shown as already in the collection —
  * it is never unlocked twice.
  */
-
-const CLOCK = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tbilisi" });
 
 export function LiveUnlocked({
   achievementName,

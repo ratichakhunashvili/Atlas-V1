@@ -20,6 +20,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local QA output, scratch files and an old standalone prototype: not part of the app.
+    "output/**",
+    "tmp/**",
+    "atlas-guest-prototype/**",
   ]),
 ]);
 

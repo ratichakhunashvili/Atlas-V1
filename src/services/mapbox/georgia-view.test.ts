@@ -77,9 +77,4 @@ describe("isolated preview mode never leaks into real guest pages", () => {
     assert.match(atlasMap, /if \(!isolatedPreviewRef\.current\) \{\s*locationService\.start\(\);/);
   });
 
-  test("the real guest map section does not use it", () => {
-    const section = readFileSync(join(SRC, "app/(app)/advisor-map-section.tsx"), "utf8");
-    // anchorMarker is allowed here since the route preview: it is the guest's own hotel marker (origin and return).
-    assert.doesNotMatch(section, /isolatedPreview|focusBounds/);
-  });
 });

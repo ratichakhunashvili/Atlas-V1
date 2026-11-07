@@ -59,15 +59,16 @@ describe("confirmPartnershipSchema", () => {
 describe("partner / facility candidate validation keeps the two concepts distinct", () => {
   const place = { id: "p", archivedAt: null, kind: "business" as const };
   const facts = { isHotelAnchor: false };
+  const partnerFacts = { ...facts, hasContractInForce: true };
 
   test("a normal external Place can be proposed as a partner", () => {
-    assert.equal(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: false, ...facts }), null);
+    assert.equal(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: false, ...partnerFacts }), null);
   });
 
   test("an archived Place, the hotel itself, or a hotel-owned facility can't be an external partner", () => {
-    assert.ok(validatePartnerCandidate({ hotelPlaceId: "hotel", place: { ...place, archivedAt: NOW }, isHotelFacility: false, ...facts }));
-    assert.ok(validatePartnerCandidate({ hotelPlaceId: "p", place, isHotelFacility: false, ...facts }));
-    assert.ok(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: true, ...facts }));
+    assert.ok(validatePartnerCandidate({ hotelPlaceId: "hotel", place: { ...place, archivedAt: NOW }, isHotelFacility: false, ...partnerFacts }));
+    assert.ok(validatePartnerCandidate({ hotelPlaceId: "p", place, isHotelFacility: false, ...partnerFacts }));
+    assert.ok(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: true, ...partnerFacts }));
   });
 
   test("a Place with partnership records, an archived Place, or the hotel itself can't be a hotel-owned facility", () => {
@@ -77,10 +78,17 @@ describe("partner / facility candidate validation keeps the two concepts distinc
     assert.ok(validateFacilityCandidate({ hotelPlaceId: "p", place, hasPartnershipRows: false, ...facts }));
   });
 
+  test("a Place without an Atlas contract in force can't be promoted: a partnership only promotes an Atlas partner", () => {
+    assert.match(
+      validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: false, ...facts, hasContractInForce: false }) ?? "",
+      /Atlas contract/
+    );
+  });
+
   test("another hotel is never a partner or a facility, whether marked by its kind or as a hotel's own place", () => {
     const hotelKind = { ...place, kind: "hotel" as const };
-    assert.match(validatePartnerCandidate({ hotelPlaceId: "hotel", place: hotelKind, isHotelFacility: false, isHotelAnchor: false }) ?? "", /hotel/);
-    assert.match(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: false, isHotelAnchor: true }) ?? "", /hotel/);
+    assert.match(validatePartnerCandidate({ hotelPlaceId: "hotel", place: hotelKind, isHotelFacility: false, isHotelAnchor: false, hasContractInForce: true }) ?? "", /hotel/);
+    assert.match(validatePartnerCandidate({ hotelPlaceId: "hotel", place, isHotelFacility: false, isHotelAnchor: true, hasContractInForce: true }) ?? "", /hotel/);
     assert.match(validateFacilityCandidate({ hotelPlaceId: "hotel", place: hotelKind, hasPartnershipRows: false, isHotelAnchor: false }) ?? "", /hotel/);
     assert.match(validateFacilityCandidate({ hotelPlaceId: "hotel", place, hasPartnershipRows: false, isHotelAnchor: true }) ?? "", /hotel/);
   });

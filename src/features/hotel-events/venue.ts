@@ -2,12 +2,14 @@ import type { EligiblePlace } from "@/services/eligibility/rules";
 
 /**
  * Whether an event's venue is allowed to host it, judged AT THE EVENT'S OWN TIME — not at the moment an admin presses
- * save. A partnership that is active today but ends before the event, or has not started by the event, does not make
- * the venue eligible for it; and one whose window opens before the event starts but closes before it ends does not
- * either, because a guest attending the end of it would be sent to a venue the hotel no longer approves.
+ * save. The venue must be in the Atlas catalogue for this hotel's guests (docs/catalogue-model-plan.md): the hotel's
+ * own facility, an attraction, or a business whose Atlas contract is in force. An Atlas contract that is active today
+ * but ends before the event, or has not started by it, does not make the venue eligible; nor does one that ends in the
+ * middle of the event, because a guest attending the end of it would be sent to a place that has left the catalogue.
+ * A hotel partnership plays no part: it only promotes.
  *
  * `eligibleAtStart` / `eligibleAtEnd` come from the one eligibility service, evaluated at those two instants (the end
- * instant is the last moment of the event, since a partnership window is half-open). A hotel's own facility has no
+ * instant is the last moment of the event, since a contract window is half-open). A facility or attraction has no
  * window, so it is eligible at both whenever it is active and published.
  */
 export function isVenueEligibleForEvent(input: {

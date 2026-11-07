@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { ATLAS_CONTRACT_STATUSES } from "@/db/schema";
 import {
   canTransitionContract,
+  isContractInForce,
   contractStatusesThatCanTransitionTo,
   validateContractCandidate,
   validateKindChange,
@@ -26,6 +27,23 @@ describe("Atlas contract transitions", () => {
 
   it("never goes back to pending_review", () => {
     assert.deepEqual(contractStatusesThatCanTransitionTo("pending_review"), []);
+  });
+});
+
+describe("a contract in force", () => {
+  const NOW = new Date("2026-11-07T12:00:00Z");
+  const active = { status: "active" as const, confirmedAt: new Date("2026-11-01T00:00:00Z"), startsAt: null, endsAt: null };
+
+  it("is active, confirmed and inside its half-open window", () => {
+    assert.equal(isContractInForce(active, NOW), true);
+    assert.equal(isContractInForce({ ...active, startsAt: NOW }, NOW), true);
+    assert.equal(isContractInForce({ ...active, endsAt: NOW }, NOW), false);
+    assert.equal(isContractInForce({ ...active, startsAt: new Date(NOW.getTime() + 1) }, NOW), false);
+  });
+
+  it("is never pending, suspended, ended or unconfirmed", () => {
+    for (const status of ["pending_review", "suspended", "ended"] as const) assert.equal(isContractInForce({ ...active, status }, NOW), false, status);
+    assert.equal(isContractInForce({ ...active, confirmedAt: null }, NOW), false);
   });
 });
 

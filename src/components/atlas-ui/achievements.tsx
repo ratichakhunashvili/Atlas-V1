@@ -3,6 +3,7 @@ import type { GuestAchievementsView } from "@/features/achievements/guest-view";
 import { AtlasIcon } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
 import { AtlasBackButton, type } from "./ui";
+import { DAY_MONTH as DAY } from "@/lib/format";
 
 /*
  * Achievements · Profile › Achievements — Figma frame 1:624. Achievements are unlocks earned by
@@ -10,8 +11,6 @@ import { AtlasBackButton, type } from "./ui";
  * at places their current hotel has approved. Both lists come from the server (loadGuestAchievements).
  */
 
-/** Atlas starts in Georgia, so dates read in Tbilisi time whatever the server's clock is set to. */
-const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Asia/Tbilisi" });
 
 function unlockedOn(date: Date, now: Date): string {
   const day = DAY.format(date);

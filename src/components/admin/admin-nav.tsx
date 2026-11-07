@@ -22,7 +22,7 @@ const GROUPS: readonly { label: string; items: readonly NavItem[] }[] = [
       { href: SCREEN_HREFS.AdminHotels, label: "Hotels", section: "/admin/hotels" },
       { href: SCREEN_HREFS.AdminPlaces, label: "Places", section: SCREEN_HREFS.AdminPlaces },
       { href: "/admin/contracts", label: "Atlas contracts", section: "/admin/contracts" },
-      { href: SCREEN_HREFS.AdminPartnerships, label: "Hotel partnerships", section: SCREEN_HREFS.AdminPartnerships },
+      { href: SCREEN_HREFS.AdminPartnerships, label: "Promotion", section: SCREEN_HREFS.AdminPartnerships },
       { href: SCREEN_HREFS.AdminFacilities, label: "Hotel facilities", section: SCREEN_HREFS.AdminFacilities },
       { href: "/admin/attractions", label: "Guest reach", section: "/admin/attractions" },
     ],

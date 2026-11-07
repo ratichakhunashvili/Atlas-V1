@@ -11,6 +11,8 @@ import type { MarkerImage } from "./markers";
 import { useMapScene, useMapViewport, useSceneContext, type MapViewport, type ScenePlace } from "./scene";
 import { useShortScreen, useWideLayout } from "../use-layout";
 import { useSheetSwipe } from "../use-sheet-swipe";
+import { categoryLabel } from "@/lib/format";
+import { describePriceLevel } from "@/services/advisor/preference-ranking";
 
 /*
  * Main · Missions › Map (home) — Figma frame 1:205 — on real data.
@@ -85,12 +87,7 @@ function useListHeight(): number {
   }, []);
   return height;
 }
-const PRICE_LEVELS: Record<number, string> = { 1: "Budget", 2: "Moderate", 3: "Luxury" };
 const TOP = "top-[calc(var(--top)+env(safe-area-inset-top))]";
-
-function label(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ");
-}
 
 function marker(place: LivePlace, selected: boolean, visited: boolean): MarkerImage {
   if (place.source === "facility") return selected ? "facility-selected" : "facility";
@@ -129,7 +126,7 @@ function LivePlaceCard({ place, selected, hotelName }: { place: LivePlace; selec
       )}
       <span className="flex min-w-0 flex-1 flex-col items-start gap-[3px]">
         <span className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
-          {place.source === "facility" ? "At your hotel" : place.source === "attraction" ? "Attraction" : "Partner"} · {label(place.category)}
+          {place.source === "facility" ? "At your hotel" : place.source === "attraction" ? "Attraction" : "Partner"} · {categoryLabel(place.category)}
         </span>
         <span className="w-full font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal [overflow-wrap:anywhere]">
           {place.name}
@@ -147,7 +144,7 @@ function LivePlaceCard({ place, selected, hotelName }: { place: LivePlace; selec
           ) : null}
           {place.priceLevel ? (
             <span className="rounded-[9px] bg-atlas-beige px-[8px] py-px font-manrope text-[12px] font-semibold leading-[16px] text-atlas-teal">
-              {PRICE_LEVELS[place.priceLevel]}
+              {describePriceLevel(place.priceLevel)}
             </span>
           ) : null}
         </span>

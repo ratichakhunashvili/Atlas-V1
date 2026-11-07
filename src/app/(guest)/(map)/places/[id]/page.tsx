@@ -12,6 +12,7 @@ import { describePriceLevel } from "@/services/advisor/preference-ranking";
 import { estimateWalkMinutes } from "@/services/advisor/time-budget";
 import { resolveVisitDuration } from "@/services/advisor/visit-duration";
 import { listEligibleExperiencesForGuest } from "@/services/eligibility";
+import { categoryLabel } from "@/lib/format";
 
 /*
  * One place's details, opened from a card on the home map or from Achievements.
@@ -28,10 +29,6 @@ import { listEligibleExperiencesForGuest } from "@/services/eligibility";
 export const metadata: Metadata = { title: "Place" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function categoryLabel(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ");
-}
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (

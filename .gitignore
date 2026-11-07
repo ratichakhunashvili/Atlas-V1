@@ -44,3 +44,9 @@ next-env.d.ts
 # local-only test QR sheet (contains one-time check-in codes)
 *.local.html
 .neon
+
+# Local QA reports, scratch files and an old standalone prototype (not part of the app)
+/output/
+/tmp/
+/atlas-guest-prototype/
+/.omc/

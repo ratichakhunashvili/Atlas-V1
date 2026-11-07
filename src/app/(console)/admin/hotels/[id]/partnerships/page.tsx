@@ -39,7 +39,7 @@ function effectiveLabel(status: keyof typeof STATUS_LABEL, startsAt: Date | null
   return "Active";
 }
 
-export const metadata = { title: "Hotel partnerships" };
+export const metadata = { title: "Promotion" };
 
 export default async function HotelPartnershipsPage({
   params,
@@ -56,8 +56,9 @@ export default async function HotelPartnershipsPage({
   const [rows, places] = await Promise.all([listPartnershipsForAdmin(hotel.id), listPlaces()]);
   const existingPlaceIds = new Set(rows.map((row) => row.place.id));
   const proposable = places.filter(
-    // Another hotel is never a partner (the server refuses it too); facilities are managed on their own page.
-    (place) => place.archivedAt === null && place.kind !== "hotel" && !existingPlaceIds.has(place.id)
+    // Only businesses can be Atlas partners, so only they can be promoted. The server also refuses any Place without an
+    // Atlas contract in force; facilities are managed on their own page.
+    (place) => place.archivedAt === null && place.kind === "business" && !existingPlaceIds.has(place.id)
   );
   const now = new Date();
 
@@ -67,10 +68,11 @@ export default async function HotelPartnershipsPage({
         <Link href={`/admin/hotels/${hotel.id}`} className="atlas-hit inline-block text-sm text-slate-600 underline">
           ← {hotel.place.name}
         </Link>
-        <h1 className="mt-2 text-xl font-semibold">Hotel partnerships — {hotel.place.name}</h1>
+        <h1 className="mt-2 text-xl font-semibold">Promotion — {hotel.place.name}</h1>
         <p className="text-sm text-slate-500">
-          Only partners you confirm here (active, inside their dates) are shown to this hotel&apos;s guests. A partnership with
-          another hotel never carries over. The hotel&apos;s own facilities are managed on their own page.
+          Promote Atlas partners to this hotel&apos;s guests with priority, a featured spot and an offer. Promotion never decides
+          whether guests see a place: its Atlas contract does. Only places with an active Atlas contract can be promoted, and
+          a promotion never carries over to another hotel. The hotel&apos;s own facilities are managed on their own page.
         </p>
       </div>
 
@@ -78,8 +80,10 @@ export default async function HotelPartnershipsPage({
       {ok && <Alert variant="success">{ok}</Alert>}
 
       <Card className="space-y-3">
-        <h2 className="font-medium">Propose a partner</h2>
-        <p className="text-xs text-slate-500">Hotels are not listed: a hotel can&apos;t be another hotel&apos;s partner.</p>
+        <h2 className="font-medium">Promote an Atlas partner</h2>
+        <p className="text-xs text-slate-500">
+          Businesses only. A place without an active Atlas contract is refused: confirm its contract under Atlas contracts first.
+        </p>
         <form action={addPartnershipAction.bind(null, hotel.id)} className="flex flex-wrap items-end gap-2">
           <div className="w-full sm:w-auto sm:min-w-[16rem] sm:flex-1">
             <Select label="Place" name="placeId" defaultValue="" required>
@@ -98,7 +102,7 @@ export default async function HotelPartnershipsPage({
       </Card>
 
       {rows.length === 0 ? (
-        <EmptyState title="No partners yet" description="Propose a place above, then confirm it to make it visible to guests." />
+        <EmptyState title="No promotions yet" description="Add an Atlas partner above, then confirm it to promote it to this hotel's guests." />
       ) : (
         <div className="space-y-4">
           {rows.map(({ partnership, place }) => (
@@ -142,8 +146,9 @@ export default async function HotelPartnershipsPage({
                 </Button>
               </form>
               <p className="text-xs text-slate-500">
-                A featured partner always takes one of a guest&apos;s three options when it fits their time and interests, and is
-                shown larger with a &quot;Featured&quot; label. It only applies while the partnership is active.
+                A featured place can take one of a guest&apos;s three options when it fits their time and interests, and is shown
+                larger with a &quot;Featured&quot; label. It only applies while this promotion is active and the place&apos;s Atlas
+                contract is in force.
               </p>
               </>
               )}
@@ -153,21 +158,21 @@ export default async function HotelPartnershipsPage({
                   <Field label="Starts (UTC date, optional)" name="startsAt" id={`startsAt-${partnership.id}`} type="date" defaultValue={dateInputValue(partnership.startsAt)} />
                   <Field label="Ends (UTC date, optional)" name="endsAt" id={`endsAt-${partnership.id}`} type="date" defaultValue={dateInputValue(partnership.endsAt)} />
                   <Field label="Priority (optional)" name="priority" id={`priority-${partnership.id}`} type="number" min={1} max={1000} defaultValue={partnership.priority ?? ""} />
-                  <Button type="submit">{partnership.status === "suspended" ? "Resume partnership" : "Confirm partnership"}</Button>
+                  <Button type="submit">{partnership.status === "suspended" ? "Resume promotion" : "Confirm promotion"}</Button>
                 </form>
               )}
 
               <div className="flex flex-wrap gap-2">
                 {partnership.status === "active" && (
                   <form action={suspendPartnershipAction.bind(null, partnership.id)}>
-                    <ConfirmSubmit variant="secondary" confirm={`Suspend the partnership with ${place.name}? This hotel's guests stop seeing it until you resume it.`}>
+                    <ConfirmSubmit variant="secondary" confirm={`Suspend the promotion of ${place.name}? This hotel's guests still see it, without the promotion, until you resume it.`}>
                       Suspend
                     </ConfirmSubmit>
                   </form>
                 )}
                 {partnership.status !== "revoked" && (
                   <form action={revokePartnershipAction.bind(null, partnership.id)}>
-                    <ConfirmSubmit confirm={`Revoke the partnership with ${place.name}? It can only come back as a new pending review.`}>
+                    <ConfirmSubmit confirm={`Revoke the promotion of ${place.name}? It can only come back as a new pending review.`}>
                       Revoke
                     </ConfirmSubmit>
                   </form>

@@ -12,6 +12,7 @@ import {
   proposeContract,
   setPlaceKind,
   transitionContract,
+  withinBounds,
 } from "./operations/atlas-contracts";
 
 /** Migration 0024 against the real migrations: Atlas contracts, Place kinds, their constraints and the approved backfill. */
@@ -152,11 +153,60 @@ describe("Place kinds", () => {
     assert.equal(endedFacts.hasLiveContract, false);
   });
 
+  it("reports a contract in force only while it is active, confirmed and in its window (the gate for hotel promotion)", async () => {
+    const cafe = await insertPlace("Promotable Cafe", "restaurant");
+    const now = new Date("2026-11-07T12:00:00Z");
+    assert.equal((await loadContractFacts(database.db, cafe.id, now)).hasContractInForce, false, "no contract");
+    const proposed = await proposeContract(database.db, cafe.id);
+    assert.ok(proposed);
+    assert.equal((await loadContractFacts(database.db, cafe.id, now)).hasContractInForce, false, "pending");
+    await transitionContract(database.db, proposed.id, ["pending_review"], {
+      status: "active",
+      confirmedAt: now,
+      confirmedBy: adminId,
+      endsAt: new Date("2026-12-01T00:00:00Z"),
+    });
+    assert.equal((await loadContractFacts(database.db, cafe.id, now)).hasContractInForce, true, "active and confirmed");
+    assert.equal((await loadContractFacts(database.db, cafe.id, new Date("2026-12-01T00:00:00Z"))).hasContractInForce, false, "expired");
+  });
+
   it("lists businesses and attractions with their contracts for admins, and leaves hotels out", async () => {
     const rows = await listCatalogueForAdmin(database.db);
     assert.ok(rows.every((row) => row.place.kind !== "hotel"));
     const pending = rows.find((row) => row.place.name === "Pending Cafe");
     assert.equal(pending?.contracts.length, 1);
+  });
+});
+
+describe("migration 0027: the map's geographic index (phase C3)", () => {
+  it("creates a GiST index the viewport query can use, and the query includes the box's edges", async () => {
+    const [index] = (
+      await database.db.execute(sql`select indexdef from pg_indexes where indexname = 'places_location_gist_idx'`)
+    ).rows as { indexdef: string }[];
+    assert.match(index?.indexdef ?? "", /USING gist \(point\(longitude, latitude\)\)/);
+
+    // With sequential scans off, the planner must be able to answer the viewport filter from the index.
+    // If the query's expression ever drifts from the index's, this plan falls back to a scan and the test fails.
+    const plan = await database.db.transaction(async (tx) => {
+      await tx.execute(sql`set local enable_seqscan = off`);
+      const { rows } = await tx.execute(
+        sql`explain select id from places where ${withinBounds({ south: 41.6, west: 44.7, north: 41.8, east: 44.9 })}`
+      );
+      return rows.map((row) => Object.values(row)[0]).join("\n");
+    });
+    assert.match(plan, /places_location_gist_idx/);
+
+    const edge = await insertPlace("Edge Cafe", "restaurant"); // at 41.7, 44.8
+    const proposed = await proposeContract(database.db, edge.id);
+    assert.ok(proposed);
+    await transitionContract(database.db, proposed.id, ["pending_review"], { status: "active", confirmedAt: new Date(), confirmedBy: adminId });
+    const onEdge = await listContractRowsForCatalogue(database.db, "00000000-0000-0000-0000-000000000000", {
+      south: 41.7,
+      west: 44.8,
+      north: 41.71,
+      east: 44.81,
+    });
+    assert.ok(onEdge.some((row) => row.placeId === edge.id), "a Place exactly on the box's corner is inside");
   });
 });
 

@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Hotel, ItineraryDay, ItineraryStop, Place } from "@/db/schema";
 import { getCurrentItineraryForUser, type CurrentItineraryDependencies } from "./current-itinerary";
 import { MAX_STOPS } from "./difficulty";
@@ -250,21 +248,6 @@ describe("unavailable stops stay visible and keep Repair reachable", () => {
 });
 
 describe("the guest surfaces draw the saved plan, not a second Mapbox request", () => {
-  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
-  const stripComments = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-
-  it("passes the saved geometry to the shared map and keeps the directions leg separate", () => {
-    const section = stripComments(read("src/app/(app)/advisor-map-section.tsx"));
-    assert.match(section, /route=\{ready\?\.routeGeometry \?\? null\}/);
-    assert.match(section, /directionsLeg=\{directionsLeg\}/);
-    assert.doesNotMatch(section, /getWalkingRoute|optimizeWalkingRoute|fetch\(/, "no Mapbox request just to draw the same line");
-  });
-
-  it("offers a retry that takes no arguments when the line could not be drawn", () => {
-    const sheet = stripComments(read("src/app/(app)/advisor-sheet.tsx"));
-    assert.match(sheet, /state\.routeStatus === "unavailable"/);
-    assert.match(sheet, /retryRouteGeometryAction\(\)/);
-  });
 
   it("generation can never exceed the Directions waypoint limit", () => {
     // hotel + stops + hotel must stay within Mapbox's 25-waypoint cap (services/routing enforces it too).

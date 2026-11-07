@@ -3,6 +3,8 @@ import { AdminTable, MutedCell, RowAction, RowTitleLink } from "@/components/adm
 import { AdminFlash, AdminHeaderAction, AdminNote, AdminPageHeader } from "@/components/admin/page-parts";
 import { StatusPill, type AdminStatus } from "@/components/admin/status-pill";
 import { listPlaces } from "@/db/queries/places";
+import { categoryLabel } from "@/lib/format";
+import { describePriceLevel } from "@/services/advisor/preference-ranking";
 
 /*
  * AdminPlaces · Places — Figma frame 70:978, on real data: every Place Atlas knows about. A Place
@@ -12,12 +14,6 @@ import { listPlaces } from "@/db/queries/places";
 
 export const metadata: Metadata = { title: "Places" };
 export const dynamic = "force-dynamic";
-
-const PRICE_LEVELS: Record<number, string> = { 1: "Budget", 2: "Moderate", 3: "Luxury" };
-
-function label(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ");
-}
 
 function placeStatus(place: { archivedAt: Date | null; publicationStatus: string }): AdminStatus {
   if (place.archivedAt) return "Archived";
@@ -58,8 +54,8 @@ export default async function AdminPlacesPage({ searchParams }: { searchParams: 
                 {place.name}
               </RowTitleLink>,
               place.kindConfirmedAt ? KIND_LABEL[place.kind] : <MutedCell>{KIND_LABEL[place.kind]}?</MutedCell>,
-              label(place.category),
-              place.priceLevel ? PRICE_LEVELS[place.priceLevel] : <MutedCell>Not set</MutedCell>,
+              categoryLabel(place.category),
+              describePriceLevel(place.priceLevel) ?? <MutedCell>Not set</MutedCell>,
               place.verificationStatus === "verified" ? <StatusPill status="Verified" /> : <MutedCell>Not verified</MutedCell>,
               <StatusPill key="status" status={placeStatus(place)} />,
               <RowAction key="edit" href={`/admin/places/${place.id}`} label={`Edit ${place.name}`}>

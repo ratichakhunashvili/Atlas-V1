@@ -52,7 +52,7 @@ export default async function EditHotelPage({
       {error && <Alert>{error}</Alert>}
       <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         <Link href={`/admin/hotels/${hotel.id}/partnerships`} className="atlas-hit text-slate-700 underline">
-          Hotel partnerships
+          Promotion
         </Link>
         <Link href={`/admin/hotels/${hotel.id}/facilities`} className="atlas-hit text-slate-700 underline">
           Hotel facilities

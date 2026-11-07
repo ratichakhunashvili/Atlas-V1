@@ -45,7 +45,7 @@ export default async function HotelFacilitiesPage({
         <h1 className="mt-2 text-xl font-semibold">Hotel facilities — {hotel.place.name}</h1>
         <p className="text-sm text-slate-500">
           What the hotel itself owns (pool, spa, restaurant…). Shown to this hotel&apos;s guests only, with no partnership needed.
-          Outside businesses belong under Hotel partnerships instead.
+          Outside businesses need an Atlas contract (Atlas contracts); this hotel can then promote them under Promotion.
         </p>
       </div>
 

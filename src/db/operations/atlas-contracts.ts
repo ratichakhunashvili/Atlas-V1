@@ -1,4 +1,4 @@
-import { and, between, desc, eq, inArray, isNull, ne, notExists, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, notExists, sql, type SQL } from "drizzle-orm";
 import { PG_UNIQUE_VIOLATION, hasPgErrorCode } from "@/db/errors";
 import {
   atlasPartnerContracts,
@@ -10,6 +10,7 @@ import {
   type Place,
   type PlaceKind,
 } from "@/db/schema";
+import { isContractInForce } from "@/features/contracts/rules";
 import type { ContractRow } from "@/services/eligibility/rules";
 import type { MapBounds } from "@/services/eligibility/viewport";
 import type { AtlasDatabase } from "./types";
@@ -40,11 +41,16 @@ export async function listContractsForPlace(db: AtlasDatabase, placeId: string):
 }
 
 /** The facts the pure rules in features/contracts/rules.ts need about one Place. */
-export async function loadContractFacts(db: AtlasDatabase, placeId: string) {
+export async function loadContractFacts(db: AtlasDatabase, placeId: string, now: Date = new Date()) {
   const [anchor] = await db.select({ id: hotels.id }).from(hotels).where(eq(hotels.placeId, placeId)).limit(1);
   const [facility] = await db.select({ id: hotelFacilities.id }).from(hotelFacilities).where(eq(hotelFacilities.placeId, placeId)).limit(1);
   const statuses = await db
-    .select({ status: atlasPartnerContracts.status })
+    .select({
+      status: atlasPartnerContracts.status,
+      confirmedAt: atlasPartnerContracts.confirmedAt,
+      startsAt: atlasPartnerContracts.startsAt,
+      endsAt: atlasPartnerContracts.endsAt,
+    })
     .from(atlasPartnerContracts)
     .where(eq(atlasPartnerContracts.placeId, placeId));
   return {
@@ -52,6 +58,8 @@ export async function loadContractFacts(db: AtlasDatabase, placeId: string) {
     isHotelFacility: facility !== undefined,
     hasOpenContract: statuses.some((row) => OPEN_STATUSES.includes(row.status)),
     hasLiveContract: statuses.some((row) => LIVE_STATUSES.includes(row.status)),
+    /** An Atlas contract in force at `now`: the only thing a hotel partnership may promote. */
+    hasContractInForce: statuses.some((row) => isContractInForce(row, now)),
   };
 }
 
@@ -170,11 +178,12 @@ export async function listAttractionPlacesForCatalogue(db: AtlasDatabase, hotelI
 
 /**
  * Optional map-area narrowing (phase C3), done in the database so a city-wide catalogue isn't read for one viewport.
- * A plain range over places_coordinates_idx (latitude, longitude); services/eligibility re-checks the box and caps.
+ * Same expression as places_location_gist_idx, so the planner can answer it from that 2-D index; `<@` includes the
+ * box's edges. services/eligibility re-checks the box and caps the result.
  */
-function withinBounds(bounds: MapBounds | undefined): SQL | undefined {
+export function withinBounds(bounds: MapBounds | undefined): SQL | undefined {
   if (!bounds) return undefined;
-  return and(between(places.latitude, bounds.south, bounds.north), between(places.longitude, bounds.west, bounds.east));
+  return sql`point(${places.longitude}, ${places.latitude}) <@ box(point(${bounds.west}, ${bounds.south}), point(${bounds.east}, ${bounds.north}))`;
 }
 
 /** The Place is not a facility of any hotel other than `hotelId` (decision 5: other hotels' facilities never appear). */

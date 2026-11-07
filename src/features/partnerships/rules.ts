@@ -42,7 +42,10 @@ function isAHotel(place: PlaceFacts, isHotelAnchor: boolean) {
   return isHotelAnchor || place.kind === "hotel";
 }
 
-/** Whether `place` may be proposed as an EXTERNAL partner of `hotel`. */
+/**
+ * Whether `place` may get a promotion (a hotel partnership) from `hotel`, when it is proposed and again when it is
+ * confirmed. Under the catalogue rule (docs/catalogue-model-plan.md §4) the Place must already be an Atlas partner.
+ */
 export function validatePartnerCandidate(input: {
   hotelPlaceId: string;
   place: PlaceFacts;
@@ -50,11 +53,16 @@ export function validatePartnerCandidate(input: {
   isHotelFacility: boolean;
   /** True if the Place is the anchor of any hotel. */
   isHotelAnchor: boolean;
+  /** True if the Place has an Atlas contract in force now. A partnership only promotes an Atlas partner. */
+  hasContractInForce: boolean;
 }): string | null {
   if (input.place.archivedAt !== null) return "This place is archived. Unarchive it before partnering with it.";
   if (input.place.id === input.hotelPlaceId) return "A hotel can't be a partner of itself.";
   if (isAHotel(input.place, input.isHotelAnchor)) return "A hotel can't be another hotel's partner.";
   if (input.isHotelFacility) return "This place is a hotel-owned facility, not an external partner.";
+  if (!input.hasContractInForce) {
+    return "This place has no active Atlas contract. A hotel can only promote an Atlas partner: confirm its contract under Atlas contracts first.";
+  }
   return null;
 }
 

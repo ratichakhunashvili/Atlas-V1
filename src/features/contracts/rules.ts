@@ -28,6 +28,9 @@ export function contractStatusesThatCanTransitionTo(to: AtlasContractStatus): At
   return (Object.keys(CONTRACT_TRANSITIONS) as AtlasContractStatus[]).filter((from) => canTransitionContract(from, to));
 }
 
+/** Whether a contract is in force at `now`. The guest catalogue's own test, shared so admin decisions (hotel promotion) agree with it. */
+export { isContractInForce } from "@/services/eligibility/rules";
+
 /** Whether a NEW contract may be proposed for this Place. */
 export function validateContractCandidate(input: {
   place: { kind: PlaceKind; archivedAt: Date | null };

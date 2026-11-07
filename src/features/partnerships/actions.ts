@@ -47,16 +47,18 @@ export async function addPartnershipAction(hotelId: string, formData: FormData) 
   if (!place) finish(hotel.id, { error: "That place no longer exists." });
 
   const facility = await findFacilityByPlaceId(place.id);
+  const contractFacts = await loadContractFacts(db, place.id);
   const problem = validatePartnerCandidate({
     hotelPlaceId: hotel.placeId,
     place,
     isHotelFacility: facility !== null,
-    isHotelAnchor: (await loadContractFacts(db, place.id)).isHotelAnchor,
+    isHotelAnchor: contractFacts.isHotelAnchor,
+    hasContractInForce: contractFacts.hasContractInForce,
   });
   if (problem) finish(hotel.id, { error: problem });
 
   const created = await createPendingPartnership({ hotelId: hotel.id, placeId: place.id });
-  if (!created) finish(hotel.id, { error: "This place already has a partnership record with this hotel." });
+  if (!created) finish(hotel.id, { error: "This place already has a promotion record with this hotel." });
 
   await recordAdminAudit({
     actorUserId: admin.id,
@@ -67,7 +69,7 @@ export async function addPartnershipAction(hotelId: string, formData: FormData) 
     after: { status: "pending_review", placeId: place.id },
   });
 
-  finish(hotel.id, { ok: "Partner added as pending review. It is not visible to guests until you confirm it." });
+  finish(hotel.id, { ok: "Promotion added as pending review. It takes effect for this hotel's guests once you confirm it." });
 }
 
 /** The explicit admin confirmation: the ONLY path that makes a partnership `active` (and therefore eligible). */
@@ -94,11 +96,13 @@ export async function confirmPartnershipAction(partnershipId: string, formData: 
   const hotel = await findHotelById(existing.hotelId);
   if (!place || !hotel) finish(existing.hotelId, { error: "The hotel or place no longer exists." });
   const facility = await findFacilityByPlaceId(place.id);
+  const contractFacts = await loadContractFacts(db, place.id, now);
   const candidateProblem = validatePartnerCandidate({
     hotelPlaceId: hotel.placeId,
     place,
     isHotelFacility: facility !== null,
-    isHotelAnchor: (await loadContractFacts(db, place.id)).isHotelAnchor,
+    isHotelAnchor: contractFacts.isHotelAnchor,
+    hasContractInForce: contractFacts.hasContractInForce,
   });
   if (candidateProblem) finish(existing.hotelId, { error: candidateProblem });
 
@@ -111,7 +115,7 @@ export async function confirmPartnershipAction(partnershipId: string, formData: 
     confirmedAt: now,
     revokedAt: null,
   });
-  if (!updated) finish(existing.hotelId, { error: "This partnership can't be confirmed from its current status." });
+  if (!updated) finish(existing.hotelId, { error: "This promotion can't be confirmed from its current status." });
 
   await recordAdminAudit({
     actorUserId: admin.id,
@@ -128,7 +132,7 @@ export async function confirmPartnershipAction(partnershipId: string, formData: 
     },
   });
 
-  finish(existing.hotelId, { ok: "Partnership confirmed. It is now eligible for this hotel's guests." });
+  finish(existing.hotelId, { ok: "Promotion confirmed. This hotel's guests now see this Atlas partner promoted." });
 }
 
 /** Which audited action each transition target maps to. "active" is only ever reached through confirm, which audits itself. */
@@ -153,7 +157,7 @@ async function simpleTransition(
   if (!existing) redirect("/admin/hotels");
 
   const updated = await transitionPartnership(existing.id, statusesThatCanTransitionTo(to), { status: to, ...patch });
-  if (!updated) finish(existing.hotelId, { error: `This partnership can't move to "${to}" from its current status.` });
+  if (!updated) finish(existing.hotelId, { error: `This promotion can't move to "${to}" from its current status.` });
 
   await recordAdminAudit({
     actorUserId: admin.id,
@@ -169,11 +173,11 @@ async function simpleTransition(
 }
 
 export async function suspendPartnershipAction(partnershipId: string) {
-  return simpleTransition(partnershipId, "suspended", {}, "Partnership suspended. Guests no longer see it.");
+  return simpleTransition(partnershipId, "suspended", {}, "Promotion suspended. The place stays visible to guests, without this hotel's promotion.");
 }
 
 export async function revokePartnershipAction(partnershipId: string) {
-  return simpleTransition(partnershipId, "revoked", { revokedAt: new Date() }, "Partnership revoked. Guests no longer see it.");
+  return simpleTransition(partnershipId, "revoked", { revokedAt: new Date() }, "Promotion revoked. The place stays visible to guests, without this hotel's promotion.");
 }
 
 /** Re-open a revoked partnership as pending_review (clearing the old confirmation) — it needs a fresh explicit confirmation. */
@@ -182,7 +186,7 @@ export async function reopenPartnershipAction(partnershipId: string) {
     partnershipId,
     "pending_review",
     { confirmedAt: null, confirmedBy: null, revokedAt: null },
-    "Partnership re-opened as pending review."
+    "Promotion re-opened as pending review."
   );
 }
 
@@ -205,7 +209,7 @@ export async function updatePartnershipPromotionAction(partnershipId: string, fo
   if (!parsed.success) finish(existing.hotelId, { error: parsed.error.issues[0]?.message ?? "Invalid input" });
 
   const updated = await updatePartnershipPromotion(existing.id, parsed.data);
-  if (!updated) finish(existing.hotelId, { error: "That partnership no longer exists." });
+  if (!updated) finish(existing.hotelId, { error: "That promotion no longer exists." });
 
   await recordAdminAudit({
     actorUserId: admin.id,
@@ -217,5 +221,5 @@ export async function updatePartnershipPromotionAction(partnershipId: string, fo
     after: parsed.data,
   });
 
-  finish(existing.hotelId, { ok: parsed.data.featured ? "Saved. This partner is featured for this hotel's guests." : "Saved." });
+  finish(existing.hotelId, { ok: parsed.data.featured ? "Saved. This place is featured for this hotel's guests." : "Saved." });
 }

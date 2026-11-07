@@ -15,7 +15,7 @@ import { listAllPartnershipsForAdmin } from "@/db/queries/hotel-partnerships";
  * to do it.
  */
 
-export const metadata: Metadata = { title: "Hotel partnerships" };
+export const metadata: Metadata = { title: "Promotion" };
 export const dynamic = "force-dynamic";
 
 const DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -40,15 +40,15 @@ export default async function AdminPartnershipsPage({ searchParams }: { searchPa
   return (
     <>
       <AdminPageHeader
-        title="Hotel partnerships"
-        description="Which places each hotel has partnered with. A partnership applies to that hotel only."
+        title="Promotion"
+        description="Which Atlas partners each hotel promotes to its own guests (priority, featured, offer). A promotion applies to that hotel only."
       />
       <AdminFlash error={error} />
       {rows.length === 0 ? (
-        <AdminNote>No partnerships yet.</AdminNote>
+        <AdminNote>No promotions yet.</AdminNote>
       ) : (
         <AdminTable
-          caption="Hotel partnerships"
+          caption="Promotion"
           columns={[
             { label: "Hotel", width: 160 },
             { label: "Place", width: 220 },
@@ -74,7 +74,7 @@ export default async function AdminPartnershipsPage({ searchParams }: { searchPa
               <RowAction
                 key="edit"
                 href={`/admin/hotels/${hotelId}/partnerships`}
-                label={`Manage ${hotelName} partnership with ${place.name}`}
+                label={`Manage ${hotelName} promotion of ${place.name}`}
               >
                 Manage
               </RowAction>,
@@ -82,8 +82,8 @@ export default async function AdminPartnershipsPage({ searchParams }: { searchPa
           }))}
         />
       )}
-      <AdminNote>Guests only see a partner place while its status is Active and today is inside its window.</AdminNote>
-      <AdminNote>To add a partnership, open the hotel from Hotels and choose Hotel partnerships.</AdminNote>
+      <AdminNote>A promotion only applies while its status is Active, today is inside its window, and the place has an Atlas contract in force. It never decides whether guests see the place.</AdminNote>
+      <AdminNote>To add a promotion, open the hotel from Hotels and choose Promotion.</AdminNote>
     </>
   );
 }

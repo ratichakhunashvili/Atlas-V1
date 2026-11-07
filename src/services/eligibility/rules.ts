@@ -85,11 +85,19 @@ function isInWindow(row: { startsAt: Date | null; endsAt: Date | null }, now: Da
   return true;
 }
 
-/** An Atlas contract puts a business in the catalogue only while active, explicitly confirmed and in its window. */
+/** A contract is in force only while active, explicitly confirmed and inside its half-open window. */
+export function isContractInForce(
+  contract: { status: AtlasContractStatus; confirmedAt: Date | null; startsAt: Date | null; endsAt: Date | null },
+  now: Date
+): boolean {
+  if (contract.status !== "active") return false; // pending_review / suspended / ended
+  if (contract.confirmedAt === null) return false;
+  return isInWindow(contract, now);
+}
+
+/** An Atlas contract puts a business in the catalogue only while it is in force. */
 export function isContractEligible(row: ContractRow, now: Date): boolean {
-  if (row.status !== "active") return false; // pending_review / suspended / ended
-  if (row.confirmedAt === null) return false;
-  if (!isInWindow(row, now)) return false;
+  if (!isContractInForce(row, now)) return false;
   if (row.place.kind !== "business") return false; // an attraction needs no contract; a hotel never gets one
   return isPlaceRecommendable(row.place);
 }
