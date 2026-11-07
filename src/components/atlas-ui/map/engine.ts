@@ -155,6 +155,16 @@ export function createAtlasMap(
         },
       });
     }
+    if (!map.getSource("atlas-you")) {
+      // The guest's live position, on its own source above the places so a moving dot never re-sends the places.
+      map.addSource("atlas-you", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: "atlas-you-dot",
+        type: "symbol",
+        source: "atlas-you",
+        layout: { "icon-image": markerImageId("you"), "icon-allow-overlap": true, "icon-ignore-placement": true },
+      });
+    }
     onReady();
   });
 
@@ -239,10 +249,18 @@ export function applyDimension(map: MapboxMap, tilted: boolean, reducedMotion: b
   if (map.getLayer("atlas-buildings-3d")) map.setLayoutProperty("atlas-buildings-3d", "visibility", tilted ? "visible" : "none");
 }
 
-/** Moves the camera to a map-control target. */
-export function applyCamera(map: MapboxMap, target: CameraTarget, reducedMotion: boolean, hotelAt?: LngLat): void {
+/** Draws the guest's live position, or clears it with null. */
+export function setLiveYou(map: MapboxMap, at: LngLat | null): void {
+  (map.getSource("atlas-you") as GeoJSONSource | undefined)?.setData({
+    type: "FeatureCollection",
+    features: at ? [point(at, "you")] : [],
+  });
+}
+
+/** Moves the camera to a map-control target. `youAt` is the live position; design screens fall back to the drawn one. */
+export function applyCamera(map: MapboxMap, target: CameraTarget, reducedMotion: boolean, hotelAt?: LngLat, youAt?: LngLat): void {
   const hotel = hotelAt ?? HOTEL_LNGLAT;
-  const center = target === "you" ? YOU_LNGLAT : target === "hotel" ? hotel : hotelAt ?? MAP_CENTER;
+  const center = target === "you" ? youAt ?? YOU_LNGLAT : target === "hotel" ? hotel : hotelAt ?? MAP_CENTER;
   const options = { center, zoom: target === "design" ? DESIGN_ZOOM : 15.2 };
   if (reducedMotion) map.jumpTo(options);
   else map.flyTo({ ...options, duration: 800 });

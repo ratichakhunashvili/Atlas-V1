@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { locationService } from "@/services/location";
 import { AtlasIcon } from "../asset";
 import { AtlasBottomBar } from "../bottom-bar";
 import { PlanSegment, StayHeader } from "../missions-chrome";
@@ -20,10 +21,13 @@ import { useSheetSwipe } from "../use-sheet-swipe";
  * MAP_RESULT_CAP of them; moving the map asks /api/places/viewport for the new area. This
  * component only narrows what it was sent, with the chips; it never adds or substitutes anything.
  *
- * Not connected yet (shown honestly rather than faked): the guest's live location, photos, plan
- * positions and achievement status. The "you" dot and the locate control are left out until the
- * shared geolocation service is wired in.
+ * The guest's live location comes from the shared geolocation service, which AtlasMap starts when
+ * the map opens; this screen only adds the locate control. Not connected yet (shown honestly rather
+ * than faked): photos, plan positions and achievement status.
  */
+
+const subscribeLocation = (onChange: () => void) => locationService.onChange(onChange);
+const locationSnapshot = () => locationService.getState();
 
 export type LivePlace = {
   id: string;
@@ -187,6 +191,23 @@ export function LiveMissionsMap({
   // At the top of the list a downward drag moves the sheet; once scrolled, the list scrolls both ways.
   const [listAtTop, setListAtTop] = useState(true);
   const { moveCamera } = useSceneContext();
+  const location = useSyncExternalStore(subscribeLocation, locationSnapshot, locationSnapshot);
+  const locationBlocked = location.status === "denied" || location.status === "unsupported";
+  const wantsCentre = useRef(false);
+  // A tap before the first fix asks again, then centres once the position arrives.
+  useEffect(() => {
+    if (wantsCentre.current && location.coords) {
+      wantsCentre.current = false;
+      moveCamera("you");
+    }
+  }, [location.coords, moveCamera]);
+  const centreOnMe = () => {
+    if (location.coords) moveCamera("you");
+    else {
+      wantsCentre.current = true;
+      locationService.requestOnce();
+    }
+  };
 
   const scenePlaces: ScenePlace[] = visible.map((place) => ({
     id: place.id,
@@ -309,6 +330,24 @@ export function LiveMissionsMap({
 
   const controls = (
     <>
+      {locationBlocked ? (
+        <Link
+          href="/permissions"
+          aria-label="Turn on location"
+          className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] border border-atlas-beige bg-atlas-paper opacity-60"
+        >
+          <AtlasIcon src="/atlas-ui/icon-locate.svg" size={19} />
+        </Link>
+      ) : (
+        <button
+          type="button"
+          aria-label={location.status === "locating" && !location.coords ? "Finding your location" : "Centre on my location"}
+          onClick={centreOnMe}
+          className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] border border-atlas-beige bg-atlas-paper"
+        >
+          <AtlasIcon src="/atlas-ui/icon-locate.svg" size={19} />
+        </button>
+      )}
       <button
         type="button"
         aria-label={`Show ${hotel.name}`}

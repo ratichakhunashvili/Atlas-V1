@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Map as MapboxMap } from "mapbox-gl/esm";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { locationService } from "@/services/location";
+import type { LngLat } from "./geo";
 import { useSceneContext } from "./scene";
 import { useReducedMotion, useWideLayout } from "../use-layout";
 
@@ -66,6 +68,22 @@ export function AtlasMap() {
     };
   }, [placeClickRef, viewportRef]);
 
+  // The guest's live location, for as long as the map lives. The browser asks for permission when the map first
+  // opens; the one shared service then keeps a low-power watch, so the dot follows the guest on every map tab.
+  const youRef = useRef<LngLat | null>(null);
+  const liveDotRef = useRef(false);
+  useEffect(() => {
+    const unsubscribe = locationService.onChange((state) => {
+      youRef.current = state.coords ? [state.coords.longitude, state.coords.latitude] : null;
+      if (mapRef.current && engineRef.current && liveDotRef.current) engineRef.current.setLiveYou(mapRef.current, youRef.current);
+    });
+    locationService.start();
+    return () => {
+      unsubscribe();
+      locationService.stop();
+    };
+  }, []);
+
   // Mapbox's logo sits above the screen's sheet. Placed as soon as the scene is known, not after
   // the style has loaded, so the logo doesn't appear at the bottom first and then jump up.
   useEffect(() => {
@@ -88,6 +106,10 @@ export function AtlasMap() {
     const engine = engineRef.current;
     if (!map || !engine || !ready || !scene) return;
     framedRouteRef.current = engine.applyScene(map, containerRef.current, scene, { wide, framedRoute: framedRouteRef.current });
+    // The live dot belongs to screens on real data (they know the hotel). A live route draws its own walker, and
+    // design screens draw their own illustrated one.
+    liveDotRef.current = Boolean(scene.hotelAt) && !scene.routeLine && !scene.route;
+    engine.setLiveYou(map, liveDotRef.current ? youRef.current : null);
     // A screen coming back to a map that didn't move gets no `moveend`, so report the current area here too
     // (the listening screen ignores an area it has already loaded).
     const bounds = map.getBounds();
@@ -115,7 +137,7 @@ export function AtlasMap() {
     const map = mapRef.current;
     const engine = engineRef.current;
     if (!map || !engine || !ready || camera.seq === 0) return;
-    engine.applyCamera(map, camera.target, reducedMotion, hotelAtRef.current);
+    engine.applyCamera(map, camera.target, reducedMotion, hotelAtRef.current, youRef.current ?? undefined);
   }, [camera, ready, reducedMotion]);
 
   return (

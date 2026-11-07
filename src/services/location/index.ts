@@ -77,6 +77,8 @@ class LocationService {
 
   private listeners = new Set<Listener>();
   private watchId: number | null = null;
+  /** How many screens currently want the watch; it stops only when the last one leaves. */
+  private users = 0;
 
   getState(): LocationState {
     return this.state;
@@ -92,8 +94,12 @@ class LocationService {
     for (const listener of this.listeners) listener(this.state);
   }
 
-  /** Call once per mounted map. Gets a first fix, then keeps a low-power watch running. Idempotent — a second call while already watching is a no-op. */
+  /**
+   * Call once per mounted user (a map, a route screen), paired with stop(). Gets a first fix, then keeps a low-power
+   * watch running. Only the first user starts the watch; later calls just join it.
+   */
   start(): void {
+    this.users += 1;
     if (this.watchId !== null) return;
 
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
@@ -162,7 +168,10 @@ class LocationService {
     );
   }
 
+  /** Leaves the watch; it is cleared only when no user is left, so one screen closing never blinds another. */
   stop(): void {
+    this.users = Math.max(0, this.users - 1);
+    if (this.users > 0) return;
     if (this.watchId !== null) {
       navigator.geolocation.clearWatch(this.watchId);
       this.watchId = null;
