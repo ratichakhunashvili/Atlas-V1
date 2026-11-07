@@ -9,7 +9,7 @@ import { AtlasBottomBar } from "../bottom-bar";
 import { PlanSegment, StayHeader } from "../missions-chrome";
 import { DimensionSwitch } from "./dimension-switch";
 import type { MarkerImage } from "./markers";
-import { useMapScene, useMapViewport, useSceneContext, type MapViewport, type ScenePlace } from "./scene";
+import { useMapScene, useSceneContext, type ScenePlace } from "./scene";
 import { useShortScreen, useWideLayout } from "../use-layout";
 import { useSheetSwipe } from "../use-sheet-swipe";
 import { categoryLabel } from "@/lib/format";
@@ -20,9 +20,8 @@ import { describePriceLevel } from "@/services/advisor/preference-ranking";
  *
  * Every place here arrives from the server already filtered by services/eligibility for the
  * guest's own active stay (the Atlas catalogue: attractions, Atlas partners and the hotel's own
- * facilities). The server sends only the places inside the visible map area, at most
- * MAP_RESULT_CAP of them; moving the map asks /api/places/viewport for the new area. This
- * component only narrows what it was sent, with the chips; it never adds or substitutes anything.
+ * facilities). The server sends every one within 15 km of the hotel (at most MAP_RESULT_CAP)
+ * once; moving or zooming the map never removes any from the list. This component only narrows what it was sent, with the chips; it never adds or substitutes anything.
  *
  * The guest's live location comes from the shared geolocation service, which AtlasMap starts when
  * the map opens; this screen only adds the locate control. Not connected yet (shown honestly rather
@@ -50,16 +49,6 @@ export type LiveHotel = { name: string; address: string | null; at: [number, num
 
 /** Business chips. Attractions have their own toggle, so choosing "Partners" or "Hotel" never hides them. */
 type Filter = "All" | "Hotel" | "Partners";
-
-/** How long the map must rest before the new area is fetched. */
-const VIEWPORT_DEBOUNCE_MS = 250;
-
-type ViewportResponse = { places: (Omit<LivePlace, "at"> & { latitude: number; longitude: number })[]; truncated: boolean };
-
-/** Rounded to ~10 m so a tiny nudge of the map doesn't refetch the same area. */
-function viewportKey(viewport: MapViewport): string {
-  return [viewport.south, viewport.west, viewport.north, viewport.east].map((value) => value.toFixed(4)).join(",");
-}
 
 const SHEET_HEIGHT = 196;
 const SHEET_COLLAPSED = 64;
@@ -157,7 +146,7 @@ function LivePlaceCard({ place, selected, hotelName }: { place: LivePlace; selec
 export function LiveMissionsMap({
   hotel,
   places: initialPlaces,
-  truncated: initialTruncated,
+  truncated,
   visitedPlaceIds,
   summary,
   models,
@@ -171,9 +160,7 @@ export function LiveMissionsMap({
   /** This guest's 3D models (eligible Places only; grey until visited). */
   models: GuestPlaceModel[];
 }) {
-  const [places, setPlaces] = useState(initialPlaces);
-  const [truncated, setTruncated] = useState(initialTruncated);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const places = initialPlaces;
   const [filter, setFilter] = useState<Filter>("All");
   const [attractions, setAttractions] = useState(true);
   const visited = new Set(visitedPlaceIds);
@@ -216,47 +203,8 @@ export function LiveMissionsMap({
     at: place.at,
   }));
 
-  // Load the catalogue Places for the area the guest is looking at, once the map comes to rest. A newer move
-  // cancels the older request, so a slow answer never overwrites the current area.
-  const lastKey = useRef<string | null>(null);
-  const pending = useRef<{ timer: ReturnType<typeof setTimeout> | null; controller: AbortController | null }>({ timer: null, controller: null });
-  const onViewport = useCallback((viewport: MapViewport) => {
-    const key = viewportKey(viewport);
-    if (key === lastKey.current) return;
-    if (pending.current.timer) clearTimeout(pending.current.timer);
-    pending.current.timer = setTimeout(async () => {
-      pending.current.controller?.abort();
-      const controller = new AbortController();
-      pending.current.controller = controller;
-      const query = new URLSearchParams({
-        south: String(viewport.south),
-        west: String(viewport.west),
-        north: String(viewport.north),
-        east: String(viewport.east),
-      });
-      try {
-        const response = await fetch(`/api/places/viewport?${query}`, { signal: controller.signal });
-        if (!response.ok) throw new Error(`Places request failed (${response.status})`);
-        const body = (await response.json()) as ViewportResponse;
-        lastKey.current = key;
-        setPlaces(body.places.map(({ latitude, longitude, ...place }) => ({ ...place, at: [longitude, latitude] as [number, number] })));
-        setTruncated(body.truncated);
-        setLoadFailed(false);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        console.error(error);
-        setLoadFailed(true);
-      }
-    }, VIEWPORT_DEBOUNCE_MS);
-  }, []);
-  useEffect(() => {
-    const current = pending.current;
-    return () => {
-      if (current.timer) clearTimeout(current.timer);
-      current.controller?.abort();
-    };
-  }, []);
-  useMapViewport(onViewport);
+  // The page sends every eligible Place within 15 km of the hotel once. Zooming or panning never reloads or
+  // drops them, so the list always shows the whole catalogue around the guest's hotel.
 
   const selectPlace = useCallback(
     (id: string) => {
@@ -399,11 +347,11 @@ export function LiveMissionsMap({
           <div className="flex min-h-[44px] w-full shrink-0 items-center justify-between pl-[16px] pr-[12px] wide:px-[4px]">
             <div className="flex min-w-0 flex-col">
               <h2 className="font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal">
-                {visible.length} {visible.length === 1 ? "place" : "places"} in this area
+                {visible.length} {visible.length === 1 ? "place" : "places"} within 15 km
               </h2>
-              {loadFailed || truncated ? (
+              {truncated ? (
                 <p role="status" className="font-manrope text-[12px] leading-[16px] text-atlas-slate">
-                  {loadFailed ? "Couldn't update the places. Move the map to try again." : "Zoom in to see every place here."}
+                  Showing the nearest places to your hotel.
                 </p>
               ) : null}
             </div>

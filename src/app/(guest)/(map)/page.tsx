@@ -23,12 +23,14 @@ import { boundsAround } from "@/services/eligibility/viewport";
  * facilities). No request parameter widens that, and no valid stay means no Places at all — the
  * guest is asked to join their hotel instead of being shown "everything nearby".
  *
- * The first render sends only the area around the hotel; the map then asks /api/places/viewport
- * for whatever area the guest moves to (catalogue plan §4, phase C3).
+ * The page sends every eligible Place within 15 km of the hotel once; zooming or panning the map
+ * never removes any of them from the list.
  */
 
-/** About the area the map opens on around the hotel (DESIGN_ZOOM on a phone), in degrees either side. */
-const OPENING_HALF_SPAN_DEGREES = 0.015;
+/** Every eligible Place within this distance of the hotel is loaded once and stays in the list whatever the map shows. */
+const CATALOGUE_RADIUS_METERS = 15_000;
+/** A box that contains the 15 km circle at Georgia's latitudes (lets the database skip far Places); the radius then trims it. */
+const CATALOGUE_HALF_SPAN_DEGREES = 0.2;
 
 export const metadata: Metadata = { title: "Map" };
 export const dynamic = "force-dynamic";
@@ -41,9 +43,9 @@ export default async function HomePage({
   const { checkinError } = await searchParams;
   const user = await requireUser();
   const stay = await findCurrentStayForUser(user.id);
-  const opening = stay ? boundsAround({ lat: stay.place.latitude, lng: stay.place.longitude }, OPENING_HALF_SPAN_DEGREES) : undefined;
+  const area = stay ? boundsAround({ lat: stay.place.latitude, lng: stay.place.longitude }, CATALOGUE_HALF_SPAN_DEGREES) : undefined;
   const [map, testEntryOffered, models] = await Promise.all([
-    getEligibleMapPlacesForGuest({ userId: user.id, bounds: opening }),
+    getEligibleMapPlacesForGuest({ userId: user.id, bounds: area, radiusMeters: CATALOGUE_RADIUS_METERS }),
     isTestEntryOffered(user.id),
     // Only enabled models of Places in this guest's own catalogue, grey until they have visited (services/map3d).
     listGuestPlaceModels(user.id),
