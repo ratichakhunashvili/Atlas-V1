@@ -397,10 +397,10 @@ export function PlacementEditor({
   const distanceFromPlaceToCamera = anchorIsSet ? distanceMeters({ lat: place.latitude, lng: place.longitude }, { lat: drawLat, lng: drawLng }) : 0;
 
   return (
-    <div className="space-y-6">
-      <section aria-label="Placement map" className="space-y-2">
+    <div className="space-y-6 lg:grid lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start lg:gap-6 lg:space-y-0">
+      <section aria-label="Placement map" className="space-y-2 lg:sticky lg:top-4">
         <div className="relative overflow-hidden rounded-xl border border-slate-300">
-          <div ref={containerRef} className="h-[22rem] w-full sm:h-[28rem]" />
+          <div ref={containerRef} className="h-[22rem] w-full sm:h-[28rem] lg:h-[calc(100vh-16rem)] lg:min-h-[28rem]" />
           {mapError && (
             <p role="alert" className="absolute inset-x-3 top-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
               The live map is unavailable ({mapError}). You can still edit every value below and save; the server checks
@@ -459,7 +459,7 @@ export function PlacementEditor({
         </p>
       </section>
 
-      <form action={action} className="space-y-6">
+      <form action={action} className="space-y-6 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
         <fieldset className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
           <legend className="px-1 text-sm font-semibold text-slate-900">Anchor (where it is drawn)</legend>
           <div className="grid grid-cols-2 gap-3">

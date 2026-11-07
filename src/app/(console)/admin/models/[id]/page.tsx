@@ -35,7 +35,7 @@ export default async function ModelPlacementPage({
   const place = await findPlaceById(model.placeId);
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="w-full max-w-7xl space-y-6">
       <div>
         <Link href="/admin/models" className="atlas-hit inline-block text-sm text-slate-600 underline">
           ← 3D models
