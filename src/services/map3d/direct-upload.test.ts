@@ -60,16 +60,17 @@ describe("the upload routes guard themselves", () => {
   const actions = readFileSync("src/features/place-models/actions.ts", "utf8");
 
   it("the token route checks the admin role from the database before issuing anything", () => {
-    const before = route.slice(route.indexOf("onBeforeGenerateToken"));
+    const before = route.slice(route.indexOf("getSignedToken"));
     assert.ok(before.indexOf("await assertAdmin()") > -1);
-    assert.ok(before.indexOf("await assertAdmin()") < before.indexOf("allowedContentTypes"));
+    assert.ok(before.indexOf("await assertAdmin()") < before.indexOf("issueSignedToken("));
     assert.match(route, /findUserById[\s\S]*role !== "admin"/);
   });
 
-  it("the token only allows a GLB of the size limit, at this Place's own path", () => {
+  it("the token only allows a PUT of a GLB within the size limit, at this Place's own path", () => {
     assert.match(route, /allowedContentTypes: \[\.\.\.ALLOWED_MODEL_CONTENT_TYPES\]/);
     assert.match(route, /maximumSizeInBytes: MAX_MODEL_BYTES/);
     assert.match(route, /pathname !== modelStorageKey\(place\.id\)/);
+    assert.match(route, /issueSignedToken\(\{ pathname, operations: \["put"\]/);
   });
 
   it("attaching re-checks the admin, the URL and the stored file, and deletes a file that fails", () => {

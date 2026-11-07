@@ -1,6 +1,6 @@
 "use client";
 
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import { useRef, useState } from "react";
 import { Button } from "@/components/shared/button";
 import { Select } from "@/components/shared/select";
@@ -44,7 +44,7 @@ export function ModelUploadForm({
     setError(null);
     setProgress(0);
     try {
-      const blob = await upload(modelPath.replace("{placeId}", placeId), file, {
+      const blob = await uploadPresigned(modelPath.replace("{placeId}", placeId), file, {
         access: "public",
         handleUploadUrl: "/api/admin/models/upload",
         clientPayload: placeId,

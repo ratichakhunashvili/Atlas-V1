@@ -4,11 +4,12 @@ import type { StorageService } from "./index";
 
 /**
  * Vercel Blob behind the StorageService interface. Files are public (a guest's browser downloads a model straight
- * onto the map); writes and deletes need the store's read-write token, which only the server holds.
+ * onto the map); writes and deletes are authenticated on the server by the SDK itself (Vercel OIDC with
+ * BLOB_STORE_ID, or BLOB_READ_WRITE_TOKEN for older stores).
  *
  * Each upload gets a random suffix, so a replaced model gets a new URL and no phone keeps a cached old file.
  */
-export function createVercelBlobStorage(token: string): StorageService {
+export function createVercelBlobStorage(): StorageService {
   return {
     configured: true,
 
@@ -18,7 +19,6 @@ export function createVercelBlobStorage(token: string): StorageService {
           access: "public",
           contentType: input.contentType,
           addRandomSuffix: true,
-          token,
         });
         return { ok: true, key: blob.pathname, url: blob.url };
       } catch (error) {
@@ -29,7 +29,7 @@ export function createVercelBlobStorage(token: string): StorageService {
 
     async delete(key) {
       try {
-        await del(key, { token });
+        await del(key);
         return { ok: true };
       } catch (error) {
         console.error("[storage] delete failed", error instanceof Error ? error.message : error);
@@ -39,9 +39,9 @@ export function createVercelBlobStorage(token: string): StorageService {
 
     async inspect(url) {
       try {
-        // head() answers only for files in THIS store (it is authenticated with our token), so a URL from anywhere
+        // head() answers only for files in THIS store (it is authenticated as this deployment), so a URL from anywhere
         // else is refused here even if it looks right.
-        const meta = await head(url, { token });
+        const meta = await head(url);
         const response = await fetch(meta.url, { headers: { Range: "bytes=0-3" }, cache: "no-store" });
         if (!response.ok) return null;
         const firstBytes = new Uint8Array(await response.arrayBuffer()).subarray(0, 4);
