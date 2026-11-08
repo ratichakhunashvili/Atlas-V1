@@ -189,8 +189,10 @@ export function AtlasMap() {
   }, [dimension, ready, scene, reducedMotion]);
 
   // The live scene's hotel, read by camera requests without making every scene change move the camera.
+  const bottomInsetRef = useRef(0);
   useEffect(() => {
     hotelAtRef.current = scene?.hotelAt;
+    bottomInsetRef.current = scene?.bottomInset ?? 0;
   }, [scene]);
 
   // Camera requests from the map controls.
@@ -198,8 +200,16 @@ export function AtlasMap() {
     const map = mapRef.current;
     const engine = engineRef.current;
     if (!map || !engine || !ready || camera.seq === 0) return;
-    engine.applyCamera(map, camera.target, reducedMotion, hotelAtRef.current, youRef.current ?? undefined, camera.at);
-  }, [camera, ready, reducedMotion]);
+    engine.applyCamera(
+      map,
+      camera.target,
+      reducedMotion,
+      hotelAtRef.current,
+      youRef.current ?? undefined,
+      camera.at,
+      wide ? 0 : bottomInsetRef.current
+    );
+  }, [camera, ready, reducedMotion, wide]);
 
   return (
     // Hidden (not unmounted) on screens without a scene. Mapbox only draws when something changes,

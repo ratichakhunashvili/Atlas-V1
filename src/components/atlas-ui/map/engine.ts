@@ -200,7 +200,12 @@ export function applyScene(
   // Beside a side panel (wide layout) the camera centre and Mapbox's logo move right of the
   // panel; under a phone sheet the attribution sits above the sheet.
   const panelEdge = wide && scene.panel ? sidePanelWidth() + 32 : 0;
-  map.setPadding({ left: panelEdge, top: 0, right: 0, bottom: 0 });
+  // setPadding is a jump in Mapbox: it would cancel a camera flight in progress (for example to a place the guest
+  // just picked, which also changes the scene), so it runs only when the padding actually changes.
+  const padding = map.getPadding();
+  if (padding.left !== panelEdge || padding.top !== 0 || padding.right !== 0 || padding.bottom !== 0) {
+    map.setPadding({ left: panelEdge, top: 0, right: 0, bottom: 0 });
+  }
   container?.style.setProperty(
     "--atlas-map-inset",
     wide ? "0px" : `calc(${scene.bottomInset}px + env(safe-area-inset-bottom))`
@@ -245,7 +250,9 @@ export function applyScene(
 
 /** Tilts the map for 3D and shows the building extrusions, or flattens it for 2D. */
 export function applyDimension(map: MapboxMap, tilted: boolean, reducedMotion: boolean): void {
-  map.easeTo({ pitch: tilted ? TILT : 0, duration: reducedMotion ? 0 : 600 });
+  // Only when the pitch must change: an easeTo would cancel a camera flight in progress.
+  const pitch = tilted ? TILT : 0;
+  if (Math.abs(map.getPitch() - pitch) > 0.5) map.easeTo({ pitch, duration: reducedMotion ? 0 : 600 });
   if (map.getLayer("atlas-buildings-3d")) map.setLayoutProperty("atlas-buildings-3d", "visibility", tilted ? "visible" : "none");
 }
 
@@ -264,7 +271,9 @@ export function applyCamera(
   reducedMotion: boolean,
   hotelAt?: LngLat,
   youAt?: LngLat,
-  placeAt?: LngLat
+  placeAt?: LngLat,
+  /** Height of the sheet covering the bottom of the map, so a chosen place lands in the visible part above it. */
+  bottomInset = 0
 ): void {
   const hotel = hotelAt ?? HOTEL_LNGLAT;
   if (target === "place" && !placeAt) return;
@@ -272,7 +281,8 @@ export function applyCamera(
     target === "place" && placeAt ? placeAt : target === "you" ? youAt ?? YOU_LNGLAT : target === "hotel" ? hotel : hotelAt ?? MAP_CENTER;
   // A chosen place comes in close, keeping the current zoom if the guest is already closer.
   const zoom = target === "design" ? DESIGN_ZOOM : target === "place" ? Math.max(map.getZoom(), 16) : 15.2;
-  const options = { center, zoom };
+  const offset: [number, number] = target === "place" && bottomInset > 0 ? [0, -bottomInset / 2] : [0, 0];
+  const options = { center, zoom, offset };
   if (reducedMotion) map.jumpTo(options);
   else map.flyTo({ ...options, duration: 800 });
 }

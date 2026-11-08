@@ -52,6 +52,8 @@ export type LiveHotel = { name: string; address: string | null; at: [number, num
 type Filter = "All" | "Hotel" | "Partners";
 
 const SHEET_HEIGHT = 196;
+/** A picked place's details need a little more room than the card row, so its buttons are in view. */
+const DETAILS_HEIGHT = 300;
 const SHEET_COLLAPSED = 64;
 const MINIMISED = 0;
 const CARDS = 1;
@@ -232,7 +234,11 @@ export function LiveMissionsMap({
   const list = level === LIST;
   const setCollapsed = (value: boolean) => setLevel(value ? MINIMISED : CARDS);
   const listHeight = useListHeight();
-  const swipe = useSheetSwipe({ level, setLevel: (l) => setLevel(l as SheetLevel), heights: [SHEET_COLLAPSED, SHEET_HEIGHT, Math.max(SHEET_HEIGHT, listHeight)], enabled: !wide });
+  // The place whose details the sheet shows. Picking one (a card or its marker) flies the one map to it.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = places.find((place) => place.id === openId && matches(filter, place)) ?? null;
+  const restingHeight = open ? DETAILS_HEIGHT : SHEET_HEIGHT;
+  const swipe = useSheetSwipe({ level, setLevel: (l) => setLevel(l as SheetLevel), heights: [SHEET_COLLAPSED, restingHeight, Math.max(restingHeight, listHeight)], enabled: !wide });
   // At the top of the list a downward drag moves the sheet; once scrolled, the list scrolls both ways.
   const [listAtTop, setListAtTop] = useState(true);
   const { moveCamera } = useSceneContext();
@@ -263,9 +269,6 @@ export function LiveMissionsMap({
   // The page sends every eligible Place within 15 km of the hotel once. Zooming or panning never reloads or
   // drops them, so the list always shows the whole catalogue around the guest's hotel.
 
-  // The place whose details the sheet shows. Picking one (a card or its marker) flies the one map to it.
-  const [openId, setOpenId] = useState<string | null>(null);
-  const open = places.find((place) => place.id === openId && matches(filter, place)) ?? null;
   const selectPlace = useCallback(
     (id: string) => {
       const place = places.find((candidate) => candidate.id === id && matches(filter, candidate));
@@ -290,7 +293,7 @@ export function LiveMissionsMap({
       hotel: true,
       hotelAt: hotel.at,
       you: false,
-      bottomInset: 96 + (collapsed ? SHEET_COLLAPSED : SHEET_HEIGHT),
+      bottomInset: 96 + (collapsed ? SHEET_COLLAPSED : restingHeight),
       allowTilt: true,
       panel: true,
       models,
