@@ -245,7 +245,31 @@ export class PlaceModelsLayer implements CustomLayerInterface {
     );
   }
 
-  private async syncModels(): Promise<void> {
+  private syncing: Promise<void> | null = null;
+  private resyncRequested = false;
+
+  /**
+   * One sync at a time. A change that arrives while a sync is running (typically while a large file is still loading)
+   * only asks for another pass, which then applies the LATEST models. Overlapping syncs used to each build their own
+   * copy, leaving stale copies behind that no later edit could move.
+   */
+  private syncModels(): Promise<void> {
+    if (this.syncing) {
+      this.resyncRequested = true;
+      return this.syncing;
+    }
+    this.syncing = (async () => {
+      do {
+        this.resyncRequested = false;
+        await this.syncOnce();
+      } while (this.resyncRequested && !this.disposed);
+    })().finally(() => {
+      this.syncing = null;
+    });
+    return this.syncing;
+  }
+
+  private async syncOnce(): Promise<void> {
     const keep = this.modelsToKeep();
     const wanted = new Set(keep.map((model) => model.placeId));
     let changed = false;

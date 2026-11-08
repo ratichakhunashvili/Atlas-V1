@@ -164,3 +164,12 @@ describe("no idle repaint loop, and selective loading", () => {
     assert.match(source, /existing\.baseMatrix = matrixFor\(this\.origin!, model\)/);
   });
 });
+
+describe("live edits while a model is loading", () => {
+  const source = stripComments(read(LAYER));
+
+  it("runs one sync at a time and re-runs with the latest models, so no stale copy is left behind", () => {
+    assert.match(source, /if \(this\.syncing\) \{\s+this\.resyncRequested = true;/);
+    assert.match(source, /while \(this\.resyncRequested && !this\.disposed\)/);
+  });
+});
