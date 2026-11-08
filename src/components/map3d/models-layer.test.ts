@@ -86,11 +86,11 @@ describe("one scene, one renderer, one context", () => {
 
   it("frees per-model GPU resources when a model goes", () => {
     assert.match(source, /geometry\?\.dispose\?\.\(\)/);
-    assert.match(source, /material\.dispose\?\.\(\)/);
+    assert.match(source, /material\?\.dispose\?\.\(\)/);
   });
 
-  it("never disposes the shared locked material", () => {
-    assert.match(source, /material !== LOCKED_MATERIAL/, "disposing it would blank every other locked model");
+  it("shows every guest the model's own textures, never a grey stand-in", () => {
+    assert.doesNotMatch(source, /LOCKED_MATERIAL|applyLockedAppearance|model\.unlocked/);
   });
 });
 

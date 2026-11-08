@@ -23,13 +23,6 @@ import { bobOffsetMeters, buildLocalMatrix, buildOriginMatrix, effectiveElevatio
  * `onRemove`.
  */
 
-/** Grey, unlit, slightly transparent: a silhouette of something not yet earned. */
-const LOCKED_MATERIAL = new THREE.MeshBasicMaterial({
-  color: 0x9aa3af,
-  transparent: true,
-  opacity: 0.55,
-});
-
 /** Below this zoom the models are a few pixels of noise, so they are skipped entirely. */
 const MIN_MODEL_ZOOM = 14;
 
@@ -55,7 +48,7 @@ type PlacedModel = {
   transformKey: string;
 };
 
-const structuralKeyOf = (model: GuestPlaceModel) => [model.fileUrl, model.unlocked, model.targetHeightMeters].join("|");
+const structuralKeyOf = (model: GuestPlaceModel) => [model.fileUrl, model.targetHeightMeters].join("|");
 
 const transformKeyOf = (model: GuestPlaceModel) =>
   [
@@ -336,7 +329,7 @@ export class PlaceModelsLayer implements CustomLayerInterface {
     const ground = groundingPosition(bounds, normalisingScale);
     instance.position.set(ground.x, ground.y, ground.z);
 
-    if (!model.unlocked) this.applyLockedAppearance(instance);
+    // Every guest sees the model in its own colours and textures, visited or not: it is what invites them there.
 
     const group = new THREE.Group();
     group.add(instance);
@@ -374,13 +367,6 @@ export class PlaceModelsLayer implements CustomLayerInterface {
     loading.catch(() => this.cache.delete(url));
 
     return loading;
-  }
-
-  /** Grey silhouette for something not yet earned. The server already decided this; the material only shows it. */
-  private applyLockedAppearance(object: THREE.Object3D): void {
-    object.traverse((child) => {
-      if (child instanceof THREE.Mesh) child.material = LOCKED_MATERIAL;
-    });
   }
 
   /**
@@ -423,11 +409,9 @@ export class PlaceModelsLayer implements CustomLayerInterface {
 
       child.geometry?.dispose?.();
 
-      // The shared locked material is reused by every locked model, so it is never
-      // disposed here — doing so would blank every other locked model on the map.
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const material of materials) {
-        if (material && material !== LOCKED_MATERIAL) material.dispose?.();
+        material?.dispose?.();
       }
     });
   }
