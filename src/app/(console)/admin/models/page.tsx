@@ -28,7 +28,7 @@ export default async function AdminModelsPage({
 
   const taken = new Set(rows.map((row) => row.model.placeId));
   const available = places.filter(
-    (place) => place.category !== "hotel" && place.archivedAt === null && !taken.has(place.id)
+    (place) => place.archivedAt === null && !taken.has(place.id)
   );
 
   const maxMegabytes = Math.round(MAX_MODEL_BYTES / (1024 * 1024));
@@ -38,8 +38,7 @@ export default async function AdminModelsPage({
       <div>
         <h1 className="text-xl font-semibold">3D models</h1>
         <p className="text-sm text-slate-600">
-          A model stands at its Place on the map. Guests see it in grey until they have actually visited there;
-          colour is earned, not given.
+          A model stands at its Place on the map. A hotel&apos;s model is shown only to that hotel&apos;s own guests.
         </p>
       </div>
 

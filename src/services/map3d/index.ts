@@ -11,7 +11,8 @@ export * from "./upload";
  * Both inputs are resolved from the session on the server:
  *
  *  - the eligible Places come from `services/eligibility`, which derives the hotel
- *    from the guest's own active stay;
+ *    from the guest's own active stay, plus that hotel's own Place (their base, which
+ *    the map already shows). Never another hotel;
  *  - the unlocked Places come from that guest's own permanent verified visits.
  *
  * No request parameter widens either. A guest with no valid stay gets nothing,
@@ -33,7 +34,8 @@ async function loadDefaultDependencies(): Promise<GuestModelDependencies> {
   return {
     listEligiblePlaceIds: async (userId) => {
       const result = await eligibilityM.getEligibleMapPlacesForGuest({ userId });
-      return result.places.map((place) => place.id);
+      if (result.status !== "ok") return [];
+      return [result.hotelPlaceId, ...result.places.map((place) => place.id)];
     },
     listModelsForPlaces: (placeIds) => modelsQ.listModelsForPlaces(placeIds),
     listVisitedPlaceIds: async (userId) => {

@@ -164,7 +164,7 @@ export type GuestExperienceFilter = {
 };
 
 export type GuestExperiencesResult =
-  | { status: "ok"; hotelLocation: LatLng; experiences: EligiblePlace[]; truncated: boolean }
+  | { status: "ok"; hotelLocation: LatLng; /** The Place of the guest's own hotel: their base, never a catalogue entry. */ hotelPlaceId: string; experiences: EligiblePlace[]; truncated: boolean }
   | { status: StayFailureReason; experiences: [] };
 
 export function clampMapRadius(radiusMeters: number): number {
@@ -203,7 +203,7 @@ export async function listEligibleExperiencesForGuest(
   let truncated = false;
   if (bounds) ({ places: experiences, truncated } = selectForViewport(experiences, bounds));
 
-  return { status: "ok", hotelLocation, experiences, truncated };
+  return { status: "ok", hotelLocation, hotelPlaceId: stay.place.id, experiences, truncated };
 }
 
 /**
@@ -245,7 +245,7 @@ export type EligibleMapPoint = {
 };
 
 export type GuestMapPlacesResult =
-  | { status: "ok"; places: EligibleMapPoint[]; hotelLocation: LatLng; truncated: boolean }
+  | { status: "ok"; places: EligibleMapPoint[]; hotelLocation: LatLng; hotelPlaceId: string; truncated: boolean }
   | { status: "no_active_stay"; places: []; truncated: false };
 
 export type GuestMapPlacesInput = {
@@ -273,6 +273,7 @@ export async function getEligibleMapPlacesForGuest(
   return {
     status: "ok",
     hotelLocation: result.hotelLocation,
+    hotelPlaceId: result.hotelPlaceId,
     truncated: result.truncated,
     places: result.experiences.map(({ place, source, promotion }) => ({
       id: place.id,

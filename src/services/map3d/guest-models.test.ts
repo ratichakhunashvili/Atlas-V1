@@ -232,3 +232,22 @@ describe("the floating switch reaches guests", () => {
     assert.equal(grounded?.floating, false);
   });
 });
+
+describe("hotel models", () => {
+  it("a guest gets their OWN hotel's Place, taken from their stay on the server, never another hotel", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("src/services/map3d/index.ts", "utf8");
+    assert.match(source, /if \(result\.status !== "ok"\) return \[\];/);
+    assert.match(source, /return \[result\.hotelPlaceId, \.\.\.result\.places\.map\(\(place\) => place\.id\)\];/);
+  });
+
+  it("a hotel model passes through like any other eligible model", () => {
+    const hotel = { id: PLACE_B, latitude: 41.7, longitude: 44.8 };
+    const models = buildGuestModels({
+      sources: [source({ status: "enabled" }, hotel)],
+      eligiblePlaceIds: new Set([PLACE_B]),
+      visitedPlaceIds: new Set(),
+    });
+    assert.equal(models[0]?.placeId, PLACE_B);
+  });
+});
