@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 
 /** Picking a place in the list (or its marker) flies the one map there and shows its details in the sheet. */
 
-type Call = { kind: "fly" | "jump" | "ease"; center?: [number, number]; zoom?: number; offset?: [number, number] };
+type Call = { kind: "fly" | "jump" | "ease"; center?: [number, number]; zoom?: number; offset?: [number, number]; bearing?: number };
 
 function fakeMap(zoom: number, pitch = 0) {
   const calls: Call[] = [];
@@ -12,7 +12,7 @@ function fakeMap(zoom: number, pitch = 0) {
     getZoom: () => zoom,
     getPitch: () => pitch,
     getLayer: () => undefined,
-    flyTo: (o: Call) => calls.push({ kind: "fly", center: o.center, zoom: o.zoom, offset: o.offset }),
+    flyTo: (o: Call) => calls.push({ kind: "fly", center: o.center, zoom: o.zoom, offset: o.offset, ...(o.bearing === undefined ? {} : { bearing: o.bearing }) }),
     jumpTo: (o: Call) => calls.push({ kind: "jump", center: o.center, zoom: o.zoom, offset: o.offset }),
     easeTo: () => calls.push({ kind: "ease" }),
   };
@@ -34,6 +34,15 @@ describe("the camera on a chosen place", () => {
     applyCamera(map as never, "place", true, undefined, undefined, [45.71, 41.74]);
     applyCamera(map as never, "place", true);
     assert.deepEqual(calls, [{ kind: "jump", center: [45.71, 41.74], zoom: 18, offset: [0, 0] }]);
+  });
+
+  it("turns a rotated map back to north for the hotel and the guest, but not for a picked place", async () => {
+    const { applyCamera } = await import("./engine");
+    const { map, calls } = fakeMap(15);
+    applyCamera(map as never, "hotel", false, [45.7, 41.7]);
+    applyCamera(map as never, "you", false, [45.7, 41.7], [45.71, 41.71]);
+    applyCamera(map as never, "place", false, undefined, undefined, [45.72, 41.72]);
+    assert.deepEqual(calls.map((call) => call.bearing), [0, 0, undefined]);
   });
 
   it("isn't interrupted by re-applying the tilt the map already has", async () => {

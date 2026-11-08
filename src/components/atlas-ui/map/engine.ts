@@ -108,11 +108,12 @@ export function createAtlasMap(
     pitch: 0,
     attributionControl: false,
     logoPosition: "bottom-left",
-    dragRotate: false,
-    pitchWithRotate: false,
+    // Guests turn the map to see a place's 3D model from every side: two fingers twist (and slide up/down to tilt) on
+    // a phone; right-drag or Ctrl+drag with a mouse. The hotel and locate buttons turn it back to north.
+    dragRotate: true,
+    pitchWithRotate: true,
   });
   map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
-  map.touchZoomRotate.disableRotation();
   // Development only: lets browser tooling inspect the map.
   if (process.env.NODE_ENV !== "production") (window as unknown as { __atlasMap?: MapboxMap }).__atlasMap = map;
 
@@ -282,7 +283,8 @@ export function applyCamera(
   // A chosen place comes in close, keeping the current zoom if the guest is already closer.
   const zoom = target === "design" ? DESIGN_ZOOM : target === "place" ? Math.max(map.getZoom(), 16) : 15.2;
   const offset: [number, number] = target === "place" && bottomInset > 0 ? [0, -bottomInset / 2] : [0, 0];
-  const options = { center, zoom, offset };
+  // Showing the hotel or the guest also turns a rotated map back to north; a picked place keeps the guest's angle.
+  const options = target === "place" ? { center, zoom, offset } : { center, zoom, offset, bearing: 0 };
   if (reducedMotion) map.jumpTo(options);
   else map.flyTo({ ...options, duration: 800 });
 }
