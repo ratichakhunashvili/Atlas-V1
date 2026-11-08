@@ -34,6 +34,7 @@ const locationSnapshot = () => locationService.getState();
 export type LivePlace = {
   id: string;
   name: string;
+  description: string | null;
   source: "facility" | "partner" | "attraction";
   category: string;
   address: string | null;
@@ -95,12 +96,13 @@ function matches(filter: Filter, place: LivePlace) {
   return filter === "All" || (filter === "Hotel" ? place.source === "facility" : place.source === "partner");
 }
 
-/** A card opens the place's details; tapping its marker on the map highlights it and scrolls it into view. */
-function LivePlaceCard({ place, selected, hotelName }: { place: LivePlace; selected: boolean; hotelName: string }) {
+/** Tapping a card (or its marker) flies the map to the place and shows its details in the sheet. */
+function LivePlaceCard({ place, selected, hotelName, onOpen }: { place: LivePlace; selected: boolean; hotelName: string; onOpen: (id: string) => void }) {
   return (
-    <Link
+    <button
+      type="button"
       id={`live-place-${place.id}`}
-      href={`/places/${place.id}`}
+      onClick={() => onOpen(place.id)}
       aria-current={selected ? "true" : undefined}
       className={`flex w-[268px] shrink-0 snap-start items-start gap-[10px] rounded-[16px] bg-atlas-paper px-[12px] py-[10px] text-left wide:w-full ${
         selected ? "border-2 border-atlas-teal" : "border border-atlas-beige"
@@ -116,7 +118,7 @@ function LivePlaceCard({ place, selected, hotelName }: { place: LivePlace; selec
       )}
       <span className="flex min-w-0 flex-1 flex-col items-start gap-[3px]">
         <span className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
-          {place.source === "facility" ? "At your hotel" : place.source === "attraction" ? "Attraction" : "Partner"} · {categoryLabel(place.category)}
+          {sourceLabel(place)} · {categoryLabel(place.category)}
         </span>
         <span className="w-full font-grotesk text-[16px] font-bold leading-[20px] text-atlas-teal [overflow-wrap:anywhere]">
           {place.name}
@@ -139,7 +141,63 @@ function LivePlaceCard({ place, selected, hotelName }: { place: LivePlace; selec
           ) : null}
         </span>
       </span>
-    </Link>
+    </button>
+  );
+}
+
+function sourceLabel(place: LivePlace): string {
+  return place.source === "facility" ? "At your hotel" : place.source === "attraction" ? "Attraction" : "Partner";
+}
+
+/** One place's details in the sheet, after the guest picked it in the list or on the map. */
+function LivePlaceDetails({ place, hotelName, onBack }: { place: LivePlace; hotelName: string; onBack: () => void }) {
+  return (
+    <div className="flex w-full flex-col items-start gap-[8px]" aria-live="polite">
+      <div className="flex w-full items-start gap-[10px]">
+        {place.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- admin-entered URLs from any host; next/image would need each host allowlisted
+          <img src={place.imageUrl} alt="" className="size-[64px] shrink-0 rounded-[12px] object-cover" />
+        ) : null}
+        <div className="flex min-w-0 flex-1 flex-col items-start gap-[3px]">
+          <p className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
+            {sourceLabel(place)} · {categoryLabel(place.category)}
+          </p>
+          <h3 className="w-full font-grotesk text-[18px] font-bold leading-[22px] text-atlas-teal [overflow-wrap:anywhere]">{place.name}</h3>
+          {place.recommended ? (
+            <p className="flex items-center gap-[5px] font-manrope text-[12px] font-semibold leading-[16px] text-atlas-teal">
+              <span aria-hidden className="size-[6px] shrink-0 rounded-full bg-atlas-bronze" />
+              Recommended by {hotelName}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      {place.description ? <p className="w-full font-manrope text-[14px] leading-[1.45] text-atlas-ink">{place.description}</p> : null}
+      {place.address || place.priceLevel ? (
+        <p className="flex w-full flex-wrap items-center gap-[6px] font-manrope text-[13px] leading-[18px] text-atlas-ink">
+          {place.address ? <span className="min-w-0">{place.address}</span> : null}
+          {place.priceLevel ? (
+            <span className="rounded-[9px] bg-atlas-beige px-[8px] py-px text-[12px] font-semibold leading-[16px] text-atlas-teal">
+              {describePriceLevel(place.priceLevel)}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+      <div className="flex w-full items-center gap-[8px]">
+        <Link
+          href={`/places/${place.id}`}
+          className="flex h-[44px] items-center rounded-[22px] bg-atlas-teal px-[16px] font-manrope text-[14px] font-semibold text-atlas-paper"
+        >
+          Full details
+        </Link>
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex h-[44px] items-center rounded-[22px] border border-atlas-beige px-[16px] font-manrope text-[14px] font-semibold text-atlas-ink"
+        >
+          All places
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -205,19 +263,26 @@ export function LiveMissionsMap({
   // The page sends every eligible Place within 15 km of the hotel once. Zooming or panning never reloads or
   // drops them, so the list always shows the whole catalogue around the guest's hotel.
 
+  // The place whose details the sheet shows. Picking one (a card or its marker) flies the one map to it.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = places.find((place) => place.id === openId && matches(filter, place)) ?? null;
   const selectPlace = useCallback(
     (id: string) => {
-      if (places.some((place) => place.id === id && matches(filter, place))) {
-        setSelected(id);
-        setCollapsed(false);
-        // After the sheet opens, bring this place's card into view so the tap visibly answers.
-        requestAnimationFrame(() =>
-          document.getElementById(`live-place-${id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" })
-        );
-      }
+      const place = places.find((candidate) => candidate.id === id && matches(filter, candidate));
+      if (!place) return;
+      setSelected(id);
+      setOpenId(id);
+      setLevel(CARDS);
+      moveCamera("place", place.at);
     },
-    [places, filter]
+    [places, filter, moveCamera]
   );
+  const closeDetails = () => {
+    const id = openId;
+    setOpenId(null);
+    // Back in the list, keep the place just viewed in sight.
+    if (id) requestAnimationFrame(() => document.getElementById(`live-place-${id}`)?.scrollIntoView({ block: "nearest", inline: "start" }));
+  };
 
   useMapScene(
     {
@@ -250,6 +315,7 @@ export function LiveMissionsMap({
             aria-pressed={active}
             onClick={() => {
               setFilter(chip);
+              setOpenId(null);
               setSelected(places.find((place) => matches(chip, place))?.id ?? null);
             }}
             className={`flex h-[44px] shrink-0 items-center gap-[6px] whitespace-nowrap rounded-[22px] border px-[12px] font-manrope text-[13px] leading-[18px] ${
@@ -356,10 +422,14 @@ export function LiveMissionsMap({
             hidden={collapsed && !swipe.dragging}
             onScroll={list ? (event) => setListAtTop(event.currentTarget.scrollTop <= 0) : undefined}
             className={`flex w-full items-start gap-[10px] px-[16px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
-              list || (swipe.dragging && swipe.height > SHEET_HEIGHT) ? `min-h-0 flex-1 flex-col overflow-y-auto pb-[12px] [&>*]:w-full ${listAtTop ? "touch-pan-down" : "touch-pan-y"}` : "atlas-scroll-fade snap-x overflow-x-auto scroll-px-[16px] pb-[6px]"
+              open
+                ? "min-h-0 flex-1 flex-col overflow-y-auto pb-[12px]"
+                : list || (swipe.dragging && swipe.height > SHEET_HEIGHT) ? `min-h-0 flex-1 flex-col overflow-y-auto pb-[12px] [&>*]:w-full ${listAtTop ? "touch-pan-down" : "touch-pan-y"}` : "atlas-scroll-fade snap-x overflow-x-auto scroll-px-[16px] pb-[6px]"
             } wide:min-h-0 wide:flex-1 wide:snap-none wide:flex-col wide:overflow-y-auto wide:overflow-x-hidden wide:px-[4px] wide:[mask-image:none] wide:[scrollbar-width:thin]`}
           >
-            {visible.length === 0 ? (
+            {open ? (
+              <LivePlaceDetails place={open} hotelName={hotel.name} onBack={closeDetails} />
+            ) : visible.length === 0 ? (
               <p className="w-full font-manrope text-[14px] leading-[1.45] text-atlas-slate">
                 {places.length === 0
                   ? "Nothing to show in this part of the map. Move the map or zoom out to see more."
@@ -367,7 +437,7 @@ export function LiveMissionsMap({
               </p>
             ) : (
               visible.map((place) => (
-                <LivePlaceCard key={place.id} place={place} selected={place.id === selected} hotelName={hotel.name} />
+                <LivePlaceCard key={place.id} place={place} selected={place.id === selected} hotelName={hotel.name} onOpen={selectPlace} />
               ))
             )}
           </div>

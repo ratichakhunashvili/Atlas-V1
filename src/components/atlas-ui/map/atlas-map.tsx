@@ -198,7 +198,7 @@ export function AtlasMap() {
     const map = mapRef.current;
     const engine = engineRef.current;
     if (!map || !engine || !ready || camera.seq === 0) return;
-    engine.applyCamera(map, camera.target, reducedMotion, hotelAtRef.current, youRef.current ?? undefined);
+    engine.applyCamera(map, camera.target, reducedMotion, hotelAtRef.current, youRef.current ?? undefined, camera.at);
   }, [camera, ready, reducedMotion]);
 
   return (

@@ -258,10 +258,21 @@ export function setLiveYou(map: MapboxMap, at: LngLat | null): void {
 }
 
 /** Moves the camera to a map-control target. `youAt` is the live position; design screens fall back to the drawn one. */
-export function applyCamera(map: MapboxMap, target: CameraTarget, reducedMotion: boolean, hotelAt?: LngLat, youAt?: LngLat): void {
+export function applyCamera(
+  map: MapboxMap,
+  target: CameraTarget,
+  reducedMotion: boolean,
+  hotelAt?: LngLat,
+  youAt?: LngLat,
+  placeAt?: LngLat
+): void {
   const hotel = hotelAt ?? HOTEL_LNGLAT;
-  const center = target === "you" ? youAt ?? YOU_LNGLAT : target === "hotel" ? hotel : hotelAt ?? MAP_CENTER;
-  const options = { center, zoom: target === "design" ? DESIGN_ZOOM : 15.2 };
+  if (target === "place" && !placeAt) return;
+  const center =
+    target === "place" && placeAt ? placeAt : target === "you" ? youAt ?? YOU_LNGLAT : target === "hotel" ? hotel : hotelAt ?? MAP_CENTER;
+  // A chosen place comes in close, keeping the current zoom if the guest is already closer.
+  const zoom = target === "design" ? DESIGN_ZOOM : target === "place" ? Math.max(map.getZoom(), 16) : 15.2;
+  const options = { center, zoom };
   if (reducedMotion) map.jumpTo(options);
   else map.flyTo({ ...options, duration: 800 });
 }

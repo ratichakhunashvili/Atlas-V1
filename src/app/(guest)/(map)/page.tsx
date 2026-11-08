@@ -122,6 +122,7 @@ export default async function HomePage({
       places={map.places.map((place) => ({
         id: place.id,
         name: place.name,
+        description: place.description,
         source: place.source,
         category: place.category,
         address: place.address,

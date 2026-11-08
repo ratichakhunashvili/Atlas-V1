@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { GuestPlaceModel } from "@/services/map3d/guest-models";
 import type { PlaceId, RouteId } from "../fixtures";
 import type { MarkerImage } from "./markers";
+import type { LngLat } from "./geo";
 
 /*
  * What the single shared map shows. Map screens (home, route, next stop) describe a scene and
@@ -42,7 +43,9 @@ export type MapScene = {
   models?: GuestPlaceModel[];
 };
 
-export type CameraTarget = "design" | "you" | "hotel";
+export type CameraTarget = "design" | "you" | "hotel" | "place";
+/** What the camera was asked to show; `at` is the Place for target "place". */
+export type CameraRequest = { target: CameraTarget; seq: number; at?: LngLat };
 /** The visible map area, reported when the guest stops moving the map. */
 export type MapViewport = { south: number; west: number; north: number; east: number };
 export type MapDimension = "2D" | "3D";
@@ -58,8 +61,8 @@ type SceneContextValue = {
   setScene: (scene: MapScene | null) => void;
   placeClickRef: React.RefObject<((id: string) => void) | null>;
   viewportRef: React.RefObject<((viewport: MapViewport) => void) | null>;
-  camera: { target: CameraTarget; seq: number };
-  moveCamera: (target: CameraTarget) => void;
+  camera: CameraRequest;
+  moveCamera: (target: CameraTarget, at?: LngLat) => void;
   dimension: MapDimension;
   setDimension: (dimension: MapDimension) => void;
 };
@@ -68,13 +71,13 @@ const SceneContext = createContext<SceneContextValue | null>(null);
 
 export function MapSceneProvider({ children }: { children: ReactNode }) {
   const [scene, setScene] = useState<MapScene | null>(null);
-  const [camera, setCamera] = useState<{ target: CameraTarget; seq: number }>({ target: "design", seq: 0 });
+  const [camera, setCamera] = useState<CameraRequest>({ target: "design", seq: 0 });
   const [dimension, setDimension] = useState<MapDimension>(INITIAL_DIMENSION);
   const placeClickRef = useRef<((id: string) => void) | null>(null);
   const viewportRef = useRef<((viewport: MapViewport) => void) | null>(null);
 
-  const moveCamera = useCallback((target: CameraTarget) => {
-    setCamera((current) => ({ target, seq: current.seq + 1 }));
+  const moveCamera = useCallback((target: CameraTarget, at?: LngLat) => {
+    setCamera((current) => ({ target, seq: current.seq + 1, at }));
   }, []);
 
   const value = useMemo(
