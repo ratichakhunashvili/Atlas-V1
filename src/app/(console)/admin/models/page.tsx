@@ -5,8 +5,8 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { listModelsForAdmin } from "@/db/queries/place-models";
 import { listPlaces } from "@/db/queries/places";
 import { storageService } from "@/services/storage/server";
-import { MAX_MODEL_BYTES, modelStorageKey } from "@/services/map3d";
-import { deletePlaceModelAction } from "@/features/place-models/actions";
+import { COMPRESS_OFFER_FROM_BYTES, MAX_MODEL_BYTES, modelStorageKey } from "@/services/map3d";
+import { compressModelAction, deletePlaceModelAction } from "@/features/place-models/actions";
 import { ModelUploadForm } from "@/components/admin/model-upload-form";
 import { ConfirmSubmit } from "@/components/admin/confirm-submit";
 
@@ -17,6 +17,9 @@ import { ConfirmSubmit } from "@/components/admin/confirm-submit";
  * not offered — an admin should find out before choosing a file, not after.
  */
 export const metadata = { title: "3D models" };
+
+/** Attaching a model compresses it on the server (a large file can take up to a minute). */
+export const maxDuration = 300;
 
 export default async function AdminModelsPage({
   searchParams,
@@ -97,6 +100,14 @@ export default async function AdminModelsPage({
                     <Link href={`/admin/models/${model.id}`} className="text-sm text-slate-700 underline">
                       Placement
                     </Link>
+                    {model.fileSizeBytes > COMPRESS_OFFER_FROM_BYTES && (
+                      <form action={compressModelAction}>
+                        <input type="hidden" name="id" value={model.id} />
+                        <ConfirmSubmit variant="secondary" confirm="Compress this model so it loads quickly? It can take up to a minute.">
+                          Compress
+                        </ConfirmSubmit>
+                      </form>
+                    )}
                     <form action={deletePlaceModelAction}>
                       <input type="hidden" name="id" value={model.id} />
                       <ConfirmSubmit variant="secondary" confirm="Remove this 3D model? Guests stop seeing it on the map.">

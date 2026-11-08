@@ -13,7 +13,7 @@ import {
 } from "@/db/queries/place-models";
 import { STORAGE_NOT_CONFIGURED_MESSAGE } from "@/services/storage";
 import { storageService } from "@/services/storage/server";
-import { isOwnModelUrl, validateModelShape } from "@/services/map3d";
+import { isOwnModelUrl, modelStorageKey, validateModelShape } from "@/services/map3d";
 import { anchorSeparationMeters, validateAnchor } from "@/services/map3d/placement";
 import { modelIdSchema, modelSettingsSchema, placeIdSchema } from "./schema";
 
@@ -72,11 +72,14 @@ export async function attachUploadedModelAction(formData: FormData) {
     back({ error: validation.message });
   }
 
+  // Make it light enough to appear on a phone at once. If compression fails, the checked original is used as is.
+  const file = (await compressStoredModel(place.id, stored)) ?? stored;
+
   const saved = await upsertPlaceModel({
     placeId: place.id,
-    storageKey: stored.key,
-    fileUrl: stored.url,
-    fileSizeBytes: stored.size,
+    storageKey: file.key,
+    fileUrl: file.url,
+    fileSizeBytes: file.size,
     contentType: stored.contentType,
     uploadedByUserId: admin.id,
   });
@@ -87,11 +90,93 @@ export async function attachUploadedModelAction(formData: FormData) {
     targetType: "place_model",
     targetId: saved.id,
     // The storage key and URL are privileged/irrelevant here: the trail records that a file was attached, not where it lives.
-    after: { placeId: place.id, uploaded: true, fileSizeBytes: stored.size, status: saved.status },
+    after: { placeId: place.id, uploaded: true, uploadedBytes: stored.size, fileSizeBytes: file.size, status: saved.status },
   });
 
   revalidatePath(LIST_PATH);
-  back({ ok: `Model uploaded for ${place.name}. It stays a draft until you enable it.` });
+  const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+  back({
+    ok:
+      file === stored
+        ? `Model uploaded for ${place.name}, but it couldn't be compressed, so it may load slowly. It stays a draft until you enable it.`
+        : `Model uploaded for ${place.name} and compressed from ${megabytes(stored.size)} MB to ${megabytes(file.size)} MB. It stays a draft until you enable it.`,
+  });
+}
+
+/**
+ * Replaces a freshly uploaded model with a compressed copy (see services/map3d/optimize). The copy is stored under the
+ * same Place's model path, and the original is deleted once the copy is safely stored, so no unused file is left.
+ * Returns null — keeping the original — when anything fails.
+ */
+async function compressStoredModel(
+  placeId: string,
+  stored: { key: string; url: string; size: number; contentType: string },
+  options: { deleteOriginal: boolean } = { deleteOriginal: true }
+): Promise<{ key: string; url: string; size: number } | null> {
+  try {
+    const { optimizeModel } = await import("@/services/map3d/optimize");
+    const response = await fetch(stored.url, { cache: "no-store" });
+    if (!response.ok) return null;
+    const optimized = await optimizeModel(new Uint8Array(await response.arrayBuffer()));
+    if (optimized.byteLength === 0 || optimized.byteLength >= stored.size) return null;
+
+    const uploaded = await storageService.upload({ data: optimized, key: modelStorageKey(placeId), contentType: stored.contentType });
+    if (!uploaded.ok) return null;
+    if (options.deleteOriginal) await storageService.delete(stored.key);
+    return { key: uploaded.key, url: uploaded.url, size: optimized.byteLength };
+  } catch (error) {
+    console.error("[models] compression failed", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/**
+ * Compresses a model that is already attached, keeping its placement and status. For models uploaded before uploads
+ * were compressed automatically; the row is switched to the compressed file, then the old file is deleted.
+ */
+export async function compressModelAction(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const id = modelIdSchema.safeParse(formData.get("id") ?? "");
+  if (!id.success) back({ error: "Model not found." });
+
+  const existing = await findModelById(id.data);
+  if (!existing) back({ error: "Model not found." });
+  if (!storageService.configured) back({ error: STORAGE_NOT_CONFIGURED_MESSAGE });
+
+  const before = existing.fileSizeBytes;
+  const file = await compressStoredModel(existing.placeId, {
+    key: existing.storageKey,
+    url: existing.fileUrl,
+    size: existing.fileSizeBytes,
+    contentType: existing.contentType,
+  }, { deleteOriginal: false });
+  if (!file) back({ error: "This model couldn't be compressed further. It is unchanged." });
+
+  await upsertPlaceModel({
+    placeId: existing.placeId,
+    storageKey: file.key,
+    fileUrl: file.url,
+    fileSizeBytes: file.size,
+    contentType: existing.contentType,
+    uploadedByUserId: admin.id,
+  });
+  // Only now that nothing points at it.
+  await storageService.delete(existing.storageKey);
+
+  await recordAdminAudit({
+    actorUserId: admin.id,
+    action: "model.saved",
+    targetType: "place_model",
+    targetId: existing.id,
+    before: { fileSizeBytes: before },
+    after: { compressed: true, fileSizeBytes: file.size },
+  });
+
+  revalidatePath(LIST_PATH);
+  revalidatePath(`${LIST_PATH}/${existing.id}`);
+  const megabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+  back({ ok: `Compressed from ${megabytes(before)} MB to ${megabytes(file.size)} MB. Placement and status are unchanged.` });
 }
 
 export async function updateModelSettingsAction(modelId: string, formData: FormData) {

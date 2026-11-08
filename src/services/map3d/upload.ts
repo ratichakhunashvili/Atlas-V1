@@ -14,6 +14,9 @@ export const ALLOWED_MODEL_CONTENT_TYPES = ["model/gltf-binary"] as const;
 /** 100 MB. Room for a detailed landmark; compress models (Draco/Meshopt, smaller textures) so phones load them quickly. */
 export const MAX_MODEL_BYTES = 100 * 1024 * 1024;
 
+/** Above this, the admin list offers to compress a model that was uploaded before compression existed. */
+export const COMPRESS_OFFER_FROM_BYTES = 5 * 1024 * 1024;
+
 /** The first four bytes of every GLB file: "glTF". */
 const GLB_MAGIC = [0x67, 0x6c, 0x54, 0x46];
 

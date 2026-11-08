@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { preload } from "react-dom";
 import { LiveMissionsMap } from "@/components/atlas-ui/map/live-missions-map";
 import { AtlasButton, AtlasField, type } from "@/components/atlas-ui/ui";
 import { findCurrentStayForUser } from "@/db/queries/hotel-stays";
@@ -47,9 +48,13 @@ export default async function HomePage({
   const [map, testEntryOffered, models] = await Promise.all([
     getEligibleMapPlacesForGuest({ userId: user.id, bounds: area, radiusMeters: CATALOGUE_RADIUS_METERS }),
     isTestEntryOffered(user.id),
-    // Only enabled models of Places in this guest's own catalogue, grey until they have visited (services/map3d).
+    // Only enabled models of Places in this guest's own catalogue, plus their own hotel's (services/map3d).
     listGuestPlaceModels(user.id),
   ]);
+
+  // Start downloading this guest's model files while the page and map are still loading, so they are ready (or close)
+  // by the time the map wants to draw them. Same credentials mode as the loader's own fetch, so the download is reused.
+  for (const model of models) preload(model.fileUrl, { as: "fetch", crossOrigin: "anonymous" });
 
   if (map.status !== "ok" || !stay) {
     // A stay that exists but is outside its dates gets its own words; either way, no places are shown.

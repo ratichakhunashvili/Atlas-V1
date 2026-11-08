@@ -2,6 +2,7 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import type { CustomLayerInterface, Map as MapboxMap, MercatorCoordinate } from "mapbox-gl";
 import type { GuestPlaceModel } from "@/services/map3d";
 import { bobOffsetMeters, buildLocalMatrix, buildOriginMatrix, effectiveElevation, groundingPosition, scaleToTargetHeight } from "@/services/map3d/anchor";
@@ -95,7 +96,8 @@ export class PlaceModelsLayer implements CustomLayerInterface {
   private readonly raycaster = new THREE.Raycaster();
 
   private readonly placed = new Map<string, PlacedModel>();
-  private readonly loader = new GLTFLoader();
+  // Uploaded models are Meshopt-compressed on the server (services/map3d/optimize); the decoder unpacks them in a few ms.
+  private readonly loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
   /**
    * Parsed GLBs, keyed by URL and shared between Places that use the same file.
