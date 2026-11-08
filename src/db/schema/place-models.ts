@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, doublePrecision, integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, doublePrecision, integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { places } from "./places";
 import { enumCheck } from "./sql-helpers";
 
@@ -69,6 +69,11 @@ export const placeModels = pgTable(
     scaleX: doublePrecision("scale_x").notNull().default(1),
     scaleY: doublePrecision("scale_y").notNull().default(1),
     scaleZ: doublePrecision("scale_z").notNull().default(1),
+    /**
+     * Floating models hover in the sky with a gentle bob instead of standing on the ground. Off by default, so every
+     * existing model keeps standing where it was placed. Display only, like the rest of this row.
+     */
+    floating: boolean("floating").notNull().default(false),
     uploadedByUserId: uuid("uploaded_by_user_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

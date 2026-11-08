@@ -28,6 +28,8 @@ export const modelSettingsSchema = z.object({
   scaleX: z.coerce.number().finite().gt(0).max(100),
   scaleY: z.coerce.number().finite().gt(0).max(100),
   scaleZ: z.coerce.number().finite().gt(0).max(100),
+  /** A checkbox: present ("on") means floating, absent means standing on the ground. */
+  floating: z.preprocess((value) => value === "on" || value === "1" || value === "true" || value === true, z.boolean()),
   /** Blank = draw at the Place. Both or neither; checked again, with the Place, by validateAnchor. */
   anchorLatitude: optionalNumber(SUPPORTED_MODEL_REGION.minLat, SUPPORTED_MODEL_REGION.maxLat, "Anchor latitude"),
   anchorLongitude: optionalNumber(SUPPORTED_MODEL_REGION.minLng, SUPPORTED_MODEL_REGION.maxLng, "Anchor longitude"),

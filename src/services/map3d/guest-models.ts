@@ -42,6 +42,8 @@ export type GuestPlaceModel = {
   scaleX: number;
   scaleY: number;
   scaleZ: number;
+  /** Hovers in the sky with a gentle bob, instead of standing on the ground. */
+  floating: boolean;
   /** True only when THIS guest has a permanent verified visit to this Place. */
   unlocked: boolean;
 };
@@ -87,6 +89,7 @@ export function buildGuestModels(input: {
       scaleX: model.scaleX,
       scaleY: model.scaleY,
       scaleZ: model.scaleZ,
+      floating: model.floating,
       // The one source of unlock state: this guest's own verified visit.
       unlocked: input.visitedPlaceIds.has(place.id),
       };

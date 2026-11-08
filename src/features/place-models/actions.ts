@@ -122,6 +122,7 @@ export async function updateModelSettingsAction(modelId: string, formData: FormD
     scaleX: formData.get("scaleX") ?? "1",
     scaleY: formData.get("scaleY") ?? "1",
     scaleZ: formData.get("scaleZ") ?? "1",
+    floating: formData.get("floating"),
     anchorLatitude: formData.get("anchorLatitude") ?? "",
     anchorLongitude: formData.get("anchorLongitude") ?? "",
     confirmLargeSeparation: formData.get("confirmLargeSeparation"),
@@ -162,6 +163,7 @@ export async function updateModelSettingsAction(modelId: string, formData: FormD
       anchorLongitude: existing.anchorLongitude,
       rotationDegrees: existing.rotationDegrees,
       elevationOffsetMeters: existing.elevationOffsetMeters,
+      floating: existing.floating,
     },
     after: {
       status: saved!.status,
@@ -169,6 +171,7 @@ export async function updateModelSettingsAction(modelId: string, formData: FormD
       anchorLongitude: saved!.anchorLongitude,
       rotationDegrees: saved!.rotationDegrees,
       elevationOffsetMeters: saved!.elevationOffsetMeters,
+      floating: saved!.floating,
       displacementMeters: Math.round(anchorSeparationMeters(saved!, { latitude: place!.latitude, longitude: place!.longitude })),
     },
   });

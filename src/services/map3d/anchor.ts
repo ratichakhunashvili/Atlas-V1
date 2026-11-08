@@ -125,6 +125,26 @@ export function buildAnchorMatrix(lng: number, lat: number, transform: ModelTran
   return buildOriginMatrix(lng, lat).multiply(buildLocalMatrix({ lng, lat }, lng, lat, transform));
 }
 
+/** How high a floating model hovers when the admin has not raised it themselves. */
+export const FLOATING_DEFAULT_LIFT_METERS = 15;
+/** How far a floating model drifts up and down, and how long one full bob takes. */
+export const FLOATING_BOB_AMPLITUDE_METERS = 0.8;
+export const FLOATING_BOB_PERIOD_MS = 4000;
+
+/**
+ * The height a model is drawn at. Grounded models use the admin's offset as is. Floating models hover: at the admin's
+ * height when it is above the ground, otherwise at a default lift so the switch alone is enough.
+ */
+export function effectiveElevation(elevationOffsetMeters: number, floating: boolean): number {
+  if (!floating) return elevationOffsetMeters;
+  return elevationOffsetMeters > 0 ? elevationOffsetMeters : FLOATING_DEFAULT_LIFT_METERS;
+}
+
+/** The bob's vertical offset at a moment in time, in metres: a slow sine, zero at time zero. */
+export function bobOffsetMeters(timeMs: number): number {
+  return Math.sin((timeMs / FLOATING_BOB_PERIOD_MS) * 2 * Math.PI) * FLOATING_BOB_AMPLITUDE_METERS;
+}
+
 /**
  * Where to put a loaded model inside its placement so its BASE sits on the anchor and its footprint is centred on it,
  * whatever origin the file was exported with. (Assuming a centred file left models floating or half-buried.)

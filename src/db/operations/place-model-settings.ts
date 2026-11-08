@@ -13,6 +13,7 @@ export type ModelPlacementInput = {
   scaleX: number;
   scaleY: number;
   scaleZ: number;
+  floating: boolean;
   /** Both null = drawn at the Place's own coordinates. */
   anchorLatitude: number | null;
   anchorLongitude: number | null;

@@ -1,0 +1,1 @@
+ALTER TABLE "place_models" ADD COLUMN "floating" boolean DEFAULT false NOT NULL;

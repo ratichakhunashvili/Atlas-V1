@@ -140,9 +140,13 @@ describe("failure and performance behaviour", () => {
 describe("no idle repaint loop, and selective loading", () => {
   const source = stripComments(read(LAYER));
 
-  it("never requests another frame from inside render()", () => {
+  it("requests another frame from inside render() only while a floating model is bobbing", () => {
     const render = source.slice(source.indexOf("render(_gl"), source.indexOf("async setModels"));
-    assert.doesNotMatch(render, /triggerRepaint/, "a repaint from render() is a loop that never idles");
+    const repaints = render.match(/triggerRepaint/g) ?? [];
+    assert.equal(repaints.length, 1, "a repaint from render() is a loop; only the bob may ask for one");
+    assert.match(render, /if \(bobbing\) this\.map\.triggerRepaint\(\)/);
+    assert.match(render, /if \(!placement\.floating\) continue;\n\s+bobbing = true;/, "grounded models never start the loop");
+    assert.match(render, /if \(!this\.reducedMotion\)/, "reduced motion keeps the map idle");
   });
 
   it("requests a repaint only when the models actually changed", () => {
@@ -157,6 +161,6 @@ describe("no idle repaint loop, and selective loading", () => {
 
   it("applies a placement-only change in place instead of rebuilding the model", () => {
     assert.match(source, /existing\.transformKey !== transformKey/);
-    assert.match(source, /existing\.group\.matrix = matrixFor\(this\.origin!, model\)/);
+    assert.match(source, /existing\.baseMatrix = matrixFor\(this\.origin!, model\)/);
   });
 });

@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as THREE from "three";
 import {
+  bobOffsetMeters,
   buildAnchorMatrix,
+  effectiveElevation,
+  FLOATING_BOB_AMPLITUDE_METERS,
+  FLOATING_BOB_PERIOD_MS,
+  FLOATING_DEFAULT_LIFT_METERS,
   buildLocalMatrix,
   buildOriginMatrix,
   groundingPosition,
@@ -243,5 +248,25 @@ describe("grounding", () => {
   it("returns zero for nonsense rather than flinging the model into orbit", () => {
     assert.equal(groundingOffset(NaN, 2), 0);
     assert.equal(groundingOffset(2, Infinity), 0);
+  });
+});
+
+describe("floating models", () => {
+  it("grounded models keep the admin's height exactly", () => {
+    assert.equal(effectiveElevation(0, false), 0);
+    assert.equal(effectiveElevation(-2, false), -2);
+    assert.equal(effectiveElevation(30, false), 30);
+  });
+
+  it("floating models hover at a default lift unless the admin raised them higher", () => {
+    assert.equal(effectiveElevation(0, true), FLOATING_DEFAULT_LIFT_METERS);
+    assert.equal(effectiveElevation(-5, true), FLOATING_DEFAULT_LIFT_METERS);
+    assert.equal(effectiveElevation(40, true), 40);
+  });
+
+  it("the bob is small, slow and starts level", () => {
+    assert.equal(bobOffsetMeters(0), 0);
+    assert.ok(Math.abs(bobOffsetMeters(FLOATING_BOB_PERIOD_MS / 4) - FLOATING_BOB_AMPLITUDE_METERS) < 1e-9);
+    for (let t = 0; t < 10_000; t += 137) assert.ok(Math.abs(bobOffsetMeters(t)) <= FLOATING_BOB_AMPLITUDE_METERS + 1e-9);
   });
 });

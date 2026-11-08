@@ -26,6 +26,7 @@ const placement = (overrides: Partial<ModelPlacementInput> = {}): ModelPlacement
   scaleX: 1,
   scaleY: 1,
   scaleZ: 1,
+  floating: false,
   anchorLatitude: null,
   anchorLongitude: null,
   ...overrides,

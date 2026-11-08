@@ -67,6 +67,7 @@ export default async function ModelPlacementPage({
             scaleX: model.scaleX,
             scaleY: model.scaleY,
             scaleZ: model.scaleZ,
+            floating: model.floating,
             anchorLatitude: model.anchorLatitude,
             anchorLongitude: model.anchorLongitude,
           }}

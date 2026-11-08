@@ -211,6 +211,13 @@
       "when": 1794060374603,
       "tag": "0029_admin_audit_guest_moved",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794122593822,
+      "tag": "0030_place_models_floating",
+      "breakpoints": true
     }
   ]
 }

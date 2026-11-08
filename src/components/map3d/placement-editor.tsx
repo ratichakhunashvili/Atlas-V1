@@ -15,6 +15,7 @@ import {
   requiresSeparationConfirmation,
 } from "@/services/map3d/placement";
 import { distanceMeters } from "@/lib/geo";
+import { FLOATING_DEFAULT_LIFT_METERS } from "@/services/map3d/anchor";
 import { locationService, type Coordinates as GeoCoordinates } from "@/services/location";
 import type { RouteGeometry } from "@/services/routing";
 
@@ -30,6 +31,7 @@ export type EditorModel = {
   scaleX: number;
   scaleY: number;
   scaleZ: number;
+  floating: boolean;
   anchorLatitude: number | null;
   anchorLongitude: number | null;
 };
@@ -48,6 +50,7 @@ type Values = {
   scaleX: string;
   scaleY: string;
   scaleZ: string;
+  floating: boolean;
 };
 
 const toValues = (model: EditorModel): Values => ({
@@ -62,6 +65,7 @@ const toValues = (model: EditorModel): Values => ({
   scaleX: String(model.scaleX),
   scaleY: String(model.scaleY),
   scaleZ: String(model.scaleZ),
+  floating: model.floating,
 });
 
 /** A field that is blank or half-typed must not blow the preview up: it falls back to the saved value until it parses. */
@@ -231,6 +235,7 @@ export function PlacementEditor({
       scaleX: Math.max(numberOr(values.scaleX, model.scaleX), 0.01),
       scaleY: Math.max(numberOr(values.scaleY, model.scaleY), 0.01),
       scaleZ: Math.max(numberOr(values.scaleZ, model.scaleZ), 0.01),
+      floating: values.floating,
       // The editor always shows the model in colour: an admin is placing it, not earning it.
       unlocked: true,
     }),
@@ -525,6 +530,21 @@ export function PlacementEditor({
               ))}
             </div>
           </div>
+          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              name="floating"
+              checked={values.floating}
+              onChange={(event) => setValues((current) => ({ ...current, floating: event.target.checked }))}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-slate-900"
+            />
+            <span>
+              <span className="block text-sm font-medium text-slate-700">Floating in the sky</span>
+              <span className="block text-xs text-slate-500">
+                On: the model hovers and gently bobs, {FLOATING_DEFAULT_LIFT_METERS} m up unless you set &ldquo;Raise / lower&rdquo; higher. Off: it stands on the ground.
+              </span>
+            </span>
+          </label>
           <SliderRow label="Raise / lower" name="elevationOffsetMeters" unit="m" value={values.elevationOffsetMeters} onChange={(v) => set("elevationOffsetMeters", v)} min={-20} max={50} step={0.1} nudge={0.5} hint="0 = standing on the ground" />
           <SliderRow label="Size" name="scale" unit="×" value={values.scale} onChange={(v) => set("scale", v)} min={0.1} max={5} step={0.05} nudge={0.1} hint="Multiplier on top of the height" />
 

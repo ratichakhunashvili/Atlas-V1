@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { CustomLayerInterface, Map as MapboxMap, MercatorCoordinate } from "mapbox-gl";
 import type { GuestPlaceModel } from "@/services/map3d";
-import { buildLocalMatrix, buildOriginMatrix, groundingPosition, scaleToTargetHeight } from "@/services/map3d/anchor";
+import { bobOffsetMeters, buildLocalMatrix, buildOriginMatrix, effectiveElevation, groundingPosition, scaleToTargetHeight } from "@/services/map3d/anchor";
 
 /**
  * ONE Mapbox custom layer, ONE Three.js scene, ONE renderer — for every model on
@@ -48,6 +48,9 @@ type PlacedModel = {
   group: THREE.Group;
   /** Anything that needs the file re-read or the object rebuilt: the file, the lock look, the height normalisation. */
   structuralKey: string;
+  /** The placement without the bob; floating models are drawn at this plus a small vertical offset each frame. */
+  baseMatrix: THREE.Matrix4;
+  floating: boolean;
   /** Anything that only moves, turns or stretches the object — cheap to apply in place, no reload. */
   transformKey: string;
 };
@@ -66,6 +69,7 @@ const transformKeyOf = (model: GuestPlaceModel) =>
     model.scaleX,
     model.scaleY,
     model.scaleZ,
+    model.floating,
   ].join("|");
 
 type Origin = { lng: number; lat: number };
@@ -80,7 +84,7 @@ function matrixFor(origin: Origin, model: GuestPlaceModel): THREE.Matrix4 {
     rotationDegrees: model.rotationDegrees,
     pitchDegrees: model.pitchDegrees,
     rollDegrees: model.rollDegrees,
-    elevationOffsetMeters: model.elevationOffsetMeters,
+    elevationOffsetMeters: effectiveElevation(model.elevationOffsetMeters, model.floating),
     scale: model.scale,
     axisScale: { x: model.scaleX, y: model.scaleY, z: model.scaleZ },
   });
@@ -184,12 +188,31 @@ export class PlaceModelsLayer implements CustomLayerInterface {
     this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix).multiply(this.originMatrix);
     this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
+    // Floating models bob: their base placement lifted by a small, slow sine. The base matrix is in metres with Y up,
+    // so the lift is a plain translation applied before it (in the model's own up direction after placement).
+    let bobbing = false;
+    if (!this.reducedMotion) {
+      const lift = bobOffsetMeters(performance.now());
+      for (const placement of this.placed.values()) {
+        if (!placement.floating) continue;
+        bobbing = true;
+        placement.group.matrix.makeTranslation(0, lift, 0).multiply(placement.baseMatrix);
+        placement.group.matrixWorldNeedsUpdate = true;
+      }
+    }
+
     this.renderer.resetState();
     this.renderer.render(this.scene, this.camera);
 
-    // Deliberately NO triggerRepaint() here: asking for another frame from inside render() is an idle loop that
-    // never stops. Mapbox already repaints when the camera moves; a repaint is requested only when the set of
-    // models or one of them changes (syncModels), which is when there is genuinely something new to draw.
+    // A repaint is requested from here ONLY while a floating model is loaded and in view (it was dropped from
+    // `placed` otherwise), and never under reduced motion. With no floating model the map stays idle between camera
+    // moves, exactly as before: Mapbox repaints when the camera moves, and syncModels when the models change.
+    if (bobbing) this.map.triggerRepaint();
+  }
+
+  /** Respects the visitor's "reduce motion" setting: floating models then hover perfectly still. */
+  private get reducedMotion(): boolean {
+    return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
   /** Replaces the whole set of models. Called when the server sends new lock state, or an editor changes a placement. */
@@ -252,7 +275,9 @@ export class PlaceModelsLayer implements CustomLayerInterface {
       if (existing && existing.structuralKey === structuralKey) {
         // Same file and look. If only the placement changed, move it in place: no reload, no new GPU resources.
         if (existing.transformKey !== transformKey) {
-          existing.group.matrix = matrixFor(this.origin!, model);
+          existing.baseMatrix = matrixFor(this.origin!, model);
+          existing.floating = model.floating;
+          existing.group.matrix.copy(existing.baseMatrix);
           existing.group.matrixWorldNeedsUpdate = true;
           existing.transformKey = transformKey;
           changed = true;
@@ -275,7 +300,14 @@ export class PlaceModelsLayer implements CustomLayerInterface {
         }
 
         this.scene.add(group);
-        this.placed.set(model.placeId, { placeId: model.placeId, group, structuralKey, transformKey });
+        this.placed.set(model.placeId, {
+          placeId: model.placeId,
+          group,
+          baseMatrix: group.matrix.clone(),
+          floating: model.floating,
+          structuralKey,
+          transformKey,
+        });
         changed = true;
       } catch {
         /*

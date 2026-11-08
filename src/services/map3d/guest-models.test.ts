@@ -37,6 +37,7 @@ function model(overrides: Partial<PlaceModel> = {}): PlaceModel {
     scaleX: 1,
     scaleY: 1,
     scaleZ: 1,
+  floating: false,
     uploadedByUserId: "admin-1",
     createdAt: NOW,
     updatedAt: NOW,
@@ -217,5 +218,17 @@ describe("a model's display anchor never becomes the Place's location", () => {
     const serialised = JSON.stringify(guestModel);
     assert.equal(serialised.includes("secret-key"), false);
     assert.equal(serialised.includes("storageKey"), false);
+  });
+});
+
+describe("the floating switch reaches guests", () => {
+  it("passes the model's floating flag through unchanged", () => {
+    const [floater, grounded] = buildGuestModels({
+      sources: [source({ status: "enabled", floating: true }), source({ status: "enabled" }, { id: PLACE_B, latitude: 41.7, longitude: 44.8 })],
+      eligiblePlaceIds: new Set([PLACE_A, PLACE_B]),
+      visitedPlaceIds: new Set(),
+    });
+    assert.equal(floater?.floating, true);
+    assert.equal(grounded?.floating, false);
   });
 });
