@@ -36,5 +36,21 @@ describe("adminRedirect", () => {
 
   it("takes an admin who is already signed in past the sign-in form", () => {
     assert.equal(adminRedirect("/admin/sign-in", admin), "/admin");
+    assert.equal(adminRedirect("/admin/sign-in", admin, { search: "?callbackUrl=%2Fadmin%2Fstaff" }), "/admin");
+  });
+
+  it("does not loop a token whose session the server ended between sign-in and the console", () => {
+    // requireAdmin sends such a token to /admin/sign-in?reason=session-ended; the token still says admin.
+    assert.equal(adminRedirect("/admin/sign-in", admin, { search: "?reason=session-ended" }), null);
+    assert.equal(adminRedirect("/admin/sign-in", admin, { search: "?callbackUrl=%2Fadmin&reason=session-ended" }), null);
+  });
+
+  it("keeps the query string in the callback and marks an ended session", () => {
+    assert.equal(adminRedirect("/admin/analytics", null, { search: "?days=7" }), "/admin/sign-in?callbackUrl=%2Fadmin%2Fanalytics%3Fdays%3D7");
+    assert.equal(
+      adminRedirect("/admin", null, { sessionEnded: true }),
+      "/admin/sign-in?callbackUrl=%2Fadmin&reason=session-ended"
+    );
+    assert.equal(adminRedirect("/admin", guest, { sessionEnded: true }), "/admin/denied", "only a missing session can have ended");
   });
 });

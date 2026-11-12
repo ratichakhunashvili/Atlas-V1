@@ -84,9 +84,10 @@ describe("rate limiting stays inside the approved scopes", () => {
   it("defines exactly the approved buckets", () => {
     // route_retry (a guest's redraw can cost a Mapbox request) and support_lookup (admin guest-stay lookup) were
     // added by the 2026-10-19 master prompt, which asks for sensitive and expensive operations to be throttled.
+    // data_export bounds "Download my data", which reads every table about the account (2026-11 audit fix CAND-01).
     assert.deepEqual(
       [...RATE_LIMIT_SCOPES],
-      ["place_check_in", "hotel_entry", "qr_credential_issue", "route_retry", "support_lookup"]
+      ["place_check_in", "hotel_entry", "qr_credential_issue", "route_retry", "support_lookup", "data_export"]
     );
   });
 
@@ -97,6 +98,7 @@ describe("rate limiting stays inside the approved scopes", () => {
       "src/features/advisor/actions.ts",
       "src/features/hotel-stays/actions.ts",
       "src/features/qr-credentials/actions.ts",
+      "src/app/api/account/export/route.ts",
     ];
 
     for (const file of callers) {

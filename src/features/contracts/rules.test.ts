@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { ATLAS_CONTRACT_STATUSES } from "@/db/schema";
 import {
   canTransitionContract,
+  confirmMissOutcome,
   isContractInForce,
   contractStatusesThatCanTransitionTo,
   validateContractCandidate,
@@ -73,5 +74,16 @@ describe("changing a Place's kind", () => {
     assert.notEqual(validateKindChange({ to: "attraction", isHotelAnchor: false, hasLiveContract: true }), null);
     assert.equal(validateKindChange({ to: "attraction", isHotelAnchor: false, hasLiveContract: false }), null);
     assert.equal(validateKindChange({ to: "business", isHotelAnchor: false, hasLiveContract: true }), null);
+  });
+});
+
+describe("a confirm that matched nothing", () => {
+  it("is success when the contract is now active (a double click or second tab confirmed it first)", () => {
+    assert.equal(confirmMissOutcome({ status: "active" }), "already_confirmed");
+  });
+
+  it("is a real refusal for any other status, or a contract that is gone", () => {
+    for (const status of ["pending_review", "suspended", "ended"] as const) assert.equal(confirmMissOutcome({ status }), "refused", status);
+    assert.equal(confirmMissOutcome(null), "refused");
   });
 });

@@ -55,7 +55,11 @@ export default async function EditPlacePage({
       {query.error && <Alert>{query.error}</Alert>}
       <Card className="space-y-3">
         <h2 className="font-medium">Atlas catalogue</h2>
-        <p className="text-sm text-slate-500">Not live for guests yet: this starts deciding what guests see in the next phase.</p>
+        <p className="text-sm text-slate-500">
+          Live for guests: kind and contract decide who sees this place. An attraction is shown to guests of every hotel with no
+          contract; a business only while its Atlas contract is active, confirmed and within its dates. The kind counts as soon as
+          it is set, even before it is confirmed.
+        </p>
         <PlaceKindForm placeId={place.id} kind={place.kind} confirmed={place.kindConfirmedAt !== null} returnTo={returnTo} />
         {place.kind === "business" || contracts.length > 0 ? (
           <ContractControls placeId={place.id} placeName={place.name} kind={place.kind} contracts={contracts} now={new Date()} returnTo={returnTo} />

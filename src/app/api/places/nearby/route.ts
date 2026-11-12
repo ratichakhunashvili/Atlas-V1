@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { currentSession } from "@/lib/authorization";
 import { DEFAULT_NEARBY_RADIUS_METERS, nearbyQuerySchema } from "@/features/places/nearby-schema";
 import { getEligibleMapPlacesForGuest } from "@/services/eligibility";
 
@@ -13,8 +13,9 @@ import { getEligibleMapPlacesForGuest } from "@/services/eligibility";
 // and no hotelId/placeId is read from the request at all. No valid stay =>
 // an empty list, never "everything nearby".
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user) {
+  // A token whose session was ended (signed out elsewhere, password reset, account deleted) is refused like no token.
+  const session = await currentSession();
+  if (session.status !== "signed-in") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

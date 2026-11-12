@@ -21,3 +21,4 @@ export * from "./itinerary-days";
 export * from "./itinerary-stops";
 export * from "./admin-audit-events";
 export * from "./guest-principals";
+export * from "./password-reset-tokens";

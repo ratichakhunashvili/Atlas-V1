@@ -23,7 +23,7 @@ export default async function ConfirmHotelSwitchPage() {
   const pending = await getPendingHotelSwitch();
 
   if (!pending) {
-    redirect("/?checkinError=That+request+expired.+Scan+the+hotel%27s+code+again.");
+    redirect("/?checkinError=expired");
   }
 
   return (

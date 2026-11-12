@@ -9,6 +9,7 @@ import { CheckInPanel } from "./check-in-panel";
 import { PlanSegment, StayHeader } from "./missions-chrome";
 import { PendingSubmit } from "./pending-submit";
 import { type } from "./ui";
+import { finishedCopy } from "@/features/plan/finished-copy";
 import { CLOCK, categoryLabel } from "@/lib/format";
 import { describePriceLevel } from "@/services/advisor/preference-ranking";
 
@@ -191,16 +192,20 @@ function ChoiceCard({ choice }: { choice: DailyChoice }) {
 }
 
 function Finished({ state }: { state: Extract<Started, { status: "finished" }> }) {
-  const text =
-    state.reason === "limit"
-      ? "That's your four activities for today. New options tomorrow."
-      : state.reason === "no_time"
-        ? "Nothing else fits the time you have left, including the walk back. Enjoy the rest of your day."
-        : `You've done everything that fits your interests today.`;
+  // "Your day is done" only after something was done; with nothing done, say nothing fits (features/plan/finished-copy.ts).
+  const copy = finishedCopy(state.reason, state.completed.length);
   return (
     <div className="flex w-full flex-col items-start gap-[6px] rounded-[14px] bg-atlas-sand p-[14px]">
-      <p className="font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">Your day is done</p>
-      <p className="font-manrope text-[14px] leading-[19px] text-atlas-ink">{text}</p>
+      <p className="font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">{copy.title}</p>
+      <p className="font-manrope text-[14px] leading-[19px] text-atlas-ink">{copy.text}</p>
+      {copy.offerPreferences ? (
+        <Link
+          href="/preferences/edit"
+          className="mt-[4px] flex h-[44px] items-center justify-center rounded-[12px] border border-atlas-teal px-[16px] font-manrope text-[14px] font-semibold text-atlas-teal"
+        >
+          Change interests
+        </Link>
+      ) : null}
     </div>
   );
 }

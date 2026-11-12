@@ -22,6 +22,8 @@ export const RATE_LIMIT_SCOPES = [
   "route_retry",
   /** An admin looking up a guest stay for support — sensitive access, bounded so it cannot become bulk browsing. */
   "support_lookup",
+  /** A guest downloading their own data ("Download my data") — each export reads every table about them. */
+  "data_export",
 ] as const;
 export type RateLimitScope = (typeof RATE_LIMIT_SCOPES)[number];
 

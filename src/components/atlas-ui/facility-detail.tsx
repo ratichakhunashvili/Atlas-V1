@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
+import { RECEPTION_FALLBACK } from "@/features/legal/front-desk";
 import { AtlasIcon } from "./asset";
 import type { StopId } from "./demo/plan-model";
-import { DetailActions, FRONT_DESK, PlanAction } from "./detail-live";
+import { DetailActions, PlanAction } from "./detail-live";
 import { AboutBlock, DetailBody, DetailHero, DetailScreen, DetailTitle, FactCards, InfoRows, SourceRow } from "./place-detail";
 import type { ScreenKey } from "./screen-hrefs";
 import { AtlasLink } from "./ui";
@@ -9,8 +10,8 @@ import { AtlasLink } from "./ui";
 /*
  * Hotel facility details — FacilityDetail (Spa, 1:872) and FacilityPool (1:1933). A hotel-owned
  * facility is labelled "Part of Hotel A", never as a partner, and Atlas takes no bookings: the
- * booking row points guests to the hotel's own desk. Calling the desk is not connected in this
- * prototype, and the phone button says so instead of opening another screen.
+ * booking row points guests to the hotel's own desk. These design-review screens have no real stay, so
+ * there is no hotel number to dial: no call button, only the plain reception line.
  */
 
 export function FacilityDetail(props: {
@@ -26,7 +27,7 @@ export function FacilityDetail(props: {
   return (
     <DetailScreen
       hero={<DetailHero photo={props.photo} />}
-      actions={<DetailActions tall secondary={FRONT_DESK} primary={<PlanAction place={props.place} />} />}
+      actions={<DetailActions tall primary={<PlanAction place={props.place} />} />}
     >
       <DetailBody variant="place">
         <DetailTitle eyebrow="At your hotel · Wellness" name={props.name} gap={6}>
@@ -42,7 +43,7 @@ export function FacilityDetail(props: {
         <InfoRows
           rows={[
             { icon: "/atlas-ui/icon-info.svg", label: "Booking", value: props.booking },
-            { icon: "/atlas-ui/icon-phone-18.svg", label: "Questions?", value: "Call the front desk" },
+            { icon: "/atlas-ui/icon-phone-18.svg", label: "Questions?", value: RECEPTION_FALLBACK },
           ]}
         />
         {props.extra}

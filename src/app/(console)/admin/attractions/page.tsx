@@ -4,21 +4,16 @@ import { Card } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { buttonStyles } from "@/components/shared/button";
 import type { Metadata } from "next";
-import { listExperiencePlacesForAdmin } from "@/db/queries/places";
+import { listGuestReachForAdmin, type CatalogueExclusionReason, type EligibilitySource, type GuestReachRow } from "@/services/eligibility";
 
 /**
- * The experiences catalog: every Place a guest might visit, with the state that
- * decides whether any guest can actually see it.
+ * Guest reach: every Place a guest might visit, and whether guests can see it today.
  *
- * A VIEW over the canonical Place model, not a second entity. "Attraction" is a
- * role a Place plays, so this is the Places table filtered to non-hotels and
- * annotated with its relationships — editing still happens on the Place itself,
- * which remains the one record.
- *
- * The point of the screen is the gap it makes visible. A Place can be published,
- * verified and perfectly correct and still reach nobody, because no hotel has
- * approved it; from the Place's own form that is invisible. Here it reads as
- * "reaches no guests", which is the thing an admin needs to know.
+ * The verdict is the guest catalogue's own: listGuestReachForAdmin runs the same eligibility service the guest screens
+ * use, once per hotel, so this screen cannot disagree with what guests are shown (docs/catalogue-model-plan.md):
+ * attractions need no contract, a business needs an active, confirmed, in-window Atlas contract, and a hotel facility
+ * is seen only by its own hotel's guests; every Place must be published, verified and not archived. A hotel promotion
+ * is listed separately because it changes ranking and labels only, never visibility.
  */
 export const metadata: Metadata = { title: "Guest reach" };
 
@@ -27,13 +22,55 @@ function sentence(value: string) {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+const REASON_TEXT: Record<CatalogueExclusionReason, string> = {
+  archived: "Archived",
+  unpublished: "Not published",
+  unverified: "Not verified",
+  no_contract: "No Atlas contract",
+  contract_pending_review: "Atlas contract is pending review",
+  contract_suspended: "Atlas contract is suspended",
+  contract_ended: "Atlas contract has ended",
+  contract_unconfirmed: "Atlas contract is not confirmed",
+  contract_not_started: "Atlas contract has not started yet",
+  contract_expired: "Atlas contract has expired",
+  facility_inactive: "Hotel facility is inactive",
+};
+
+const SOURCE_TEXT: Record<EligibilitySource, string> = {
+  attraction: "Attraction",
+  partner: "Atlas partner",
+  facility: "Hotel facility",
+};
+
+function names(hotels: { name: string }[]) {
+  return hotels.map((hotel) => hotel.name).join(", ");
+}
+
+function Reach({ row }: { row: GuestReachRow }) {
+  if (row.visibleAtHotels.length === 0) {
+    const reasons = row.hiddenReasons.length ? row.hiddenReasons.map((reason) => REASON_TEXT[reason]).join(" · ") : "Not in the guest catalogue";
+    return (
+      <p className="text-xs text-amber-700">
+        <span className="font-medium">Not visible to guests.</span> {reasons}.
+      </p>
+    );
+  }
+  const how = row.sources.map((source) => SOURCE_TEXT[source]).join(", ");
+  return (
+    <p className="text-xs text-green-800">
+      <span className="font-medium">{row.visibleEverywhere ? "Visible to guests of every hotel" : `Visible only to guests of ${names(row.visibleAtHotels)}`}</span>
+      {` · ${how}`}
+    </p>
+  );
+}
+
 export default async function AdminAttractionsPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const rows = await listExperiencePlacesForAdmin();
+  const rows = await listGuestReachForAdmin();
 
   return (
     <div className="space-y-6">
@@ -41,8 +78,10 @@ export default async function AdminAttractionsPage({
         <div>
           <h1 className="text-xl font-semibold">Guest reach</h1>
           <p className="text-sm text-slate-600">
-            Which places can reach a guest today: a place is seen only by guests of a hotel that owns it as an active
-            facility or has an active partnership with it, and only while it is published, verified and not archived.
+            Which places guests can see today, worked out exactly as the guest app does. Attractions need no contract; a
+            business needs an active, confirmed Atlas contract; a hotel facility is seen only by that hotel&apos;s guests.
+            Every place must also be published, verified and not archived. A hotel promotion only changes ranking and the
+            &ldquo;Recommended by&rdquo; label.
           </p>
         </div>
         <Link href="/admin/places/new" className={buttonStyles.primary}>
@@ -55,11 +94,12 @@ export default async function AdminAttractionsPage({
       {rows.length === 0 ? (
         <EmptyState
           title="No experiences yet"
-          description="Create a place, publish and verify it, then add it to a hotel as a partner or a facility."
+          description="Create a place, publish and verify it, then mark it as an attraction, give a business an Atlas contract, or add it to a hotel as a facility."
         />
       ) : (
         <ul className="space-y-3">
-          {rows.map(({ place, partnerships, facilities }) => {
+          {rows.map((row) => {
+            const { place } = row;
             return (
               <li key={place.id}>
                 <Card className="space-y-2">
@@ -67,35 +107,28 @@ export default async function AdminAttractionsPage({
                     <div>
                       <h2 className="font-medium text-slate-900">{place.name}</h2>
                       <p className="text-xs text-slate-500">
-                        {sentence(place.category)}
+                        {sentence(place.category)} · {sentence(place.kind)}
                         {place.visitDurationMinutes ? ` · about ${place.visitDurationMinutes} min` : " · visit time estimated"}
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-1">
-                      <Badge tone={place.publicationStatus === "published" ? "good" : "muted"}>
-                        {sentence(place.publicationStatus)}
-                      </Badge>
-                      <Badge tone={place.verificationStatus === "verified" ? "good" : "muted"}>
-                        {sentence(place.verificationStatus)}
-                      </Badge>
+                      <Badge tone={place.publicationStatus === "published" ? "good" : "muted"}>{sentence(place.publicationStatus)}</Badge>
+                      <Badge tone={place.verificationStatus === "verified" ? "good" : "muted"}>{sentence(place.verificationStatus)}</Badge>
                       {place.archivedAt && <Badge tone="muted">Archived</Badge>}
                     </div>
                   </div>
 
+                  <Reach row={row} />
                   <p className="text-xs text-slate-600">
-                    {partnerships > 0 && `Active partner of ${partnerships} hotel${partnerships === 1 ? "" : "s"}`}
-                    {partnerships > 0 && facilities > 0 && " · "}
-                    {facilities > 0 && `Active facility of ${facilities} hotel${facilities === 1 ? "" : "s"}`}
-                    {partnerships + facilities === 0 && (
-                      <span className="text-amber-700">No active partnership or facility, so no guest can see it.</span>
-                    )}
+                    {row.promotedBy.length > 0
+                      ? `Promoted by ${row.promotedBy.map((hotel) => (hotel.featured ? `${hotel.name} (featured)` : hotel.name)).join(", ")}`
+                      : "No hotel promotion"}
                   </p>
 
                   <div className="flex flex-wrap items-center gap-2">
                     <Link href={`/admin/places/${place.id}`} className="atlas-hit inline-block text-sm text-slate-700 underline">
                       Edit, archive or delete
                     </Link>
-
                   </div>
                 </Card>
               </li>

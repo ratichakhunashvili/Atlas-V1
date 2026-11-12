@@ -20,6 +20,12 @@ export const users = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    /**
+     * Sessions signed in before this moment are over (sign-out, password reset). Null: none has been ended. An Auth.js
+     * JWT is otherwise valid until it expires, so every authenticated request compares its sign-in time with this
+     * (sessionStanding in lib/session-standing.ts).
+     */
+    sessionsValidAfter: timestamp("sessions_valid_after", { withTimezone: true }),
   },
   (table) => [
     check("users_role_check", enumCheck(table.role, USER_ROLES)),

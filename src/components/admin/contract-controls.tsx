@@ -1,4 +1,5 @@
 import { ConfirmSubmit } from "@/components/admin/confirm-submit";
+import { PendingButton } from "@/components/admin/pending-button";
 import { Button } from "@/components/shared/button";
 import { Field } from "@/components/shared/field";
 import { Select } from "@/components/shared/select";
@@ -115,7 +116,9 @@ export function ContractControls({
               <ReturnTo path={returnTo} />
               <Field label="Starts (UTC date, optional)" name="startsAt" id={`startsAt-${contract.id}`} type="date" defaultValue={isoDate(contract.startsAt)} />
               <Field label="Ends (UTC date, optional)" name="endsAt" id={`endsAt-${contract.id}`} type="date" defaultValue={isoDate(contract.endsAt)} />
-              <Button type="submit">{contract.status === "suspended" ? "Resume contract" : "Confirm contract"}</Button>
+              <PendingButton pendingLabel={contract.status === "suspended" ? "Resuming…" : "Confirming…"}>
+                {contract.status === "suspended" ? "Resume contract" : "Confirm contract"}
+              </PendingButton>
             </form>
           )}
 

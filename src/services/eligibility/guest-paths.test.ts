@@ -111,6 +111,12 @@ describe("no guest-facing code can read Places without eligibility", () => {
        * selects the token hash (pinned by services/qr/secret-handling.test.ts).
        */
       "db/queries/qr-credentials.ts",
+      /*
+       * "Download my data" (CAND-01): joins places for the NAMES of the signed-in user's own stays' hotels, visited
+       * Places and badge Places, and returns them only to that user. History, not a recommendation: it decides no
+       * eligibility and hands no Place list to any guest-facing feature. Pinned by db/account-export.pglite.test.ts.
+       */
+      "db/operations/account-export.ts",
     ]);
     const users = files.filter((f) => /\.(from|innerJoin|leftJoin)\(places\b/.test(f.text) && !f.path.endsWith(".test.ts"));
     for (const f of users) assert.ok(allowed.has(f.path), `${f.path} reads the places table directly; route guest reads through services/eligibility`);

@@ -17,8 +17,11 @@ function safePath(path: string | string[] | undefined): string {
 export default async function PresentPage({ searchParams }: { searchParams: Promise<{ path?: string | string[] }> }) {
   const { path } = await searchParams;
   return (
-    <main className="flex h-dvh w-full items-center justify-center overflow-hidden bg-atlas-teal">
+    <main className="relative flex h-dvh w-full items-center justify-center overflow-hidden bg-atlas-teal">
       <PhoneFrame src={safePath(path)} />
+      <p className="absolute inset-x-0 bottom-[14px] hidden px-[24px] text-center font-manrope text-[14px] leading-[20px] text-atlas-paper/80 sm:block">
+        The Atlas guest app, shown at phone size. Tap and scroll it as you would on a phone.
+      </p>
     </main>
   );
 }

@@ -100,8 +100,9 @@ export function PlaceForm({
         </Select>
       </div>
       <p className="text-xs text-slate-500">
-        A place is only ever shown to guests when it is published, verified, not archived, and linked to their hotel as a facility or an
-        active partner.
+        Guests see a place only when it is published, verified and not archived, and it is an attraction (shown to every hotel&apos;s
+        guests), a business with an active Atlas contract (every hotel&apos;s guests), or a hotel&apos;s own facility (that hotel&apos;s guests
+        only). Hotels themselves are never shown as destinations.
       </p>
 
       <Button type="submit">{confirmCreateAnyway ? "Create anyway" : place?.id ? "Save changes" : "Create place"}</Button>

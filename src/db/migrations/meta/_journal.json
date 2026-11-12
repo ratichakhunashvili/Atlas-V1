@@ -218,6 +218,27 @@
       "when": 1794122593822,
       "tag": "0030_place_models_floating",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794310602740,
+      "tag": "0031_password_reset_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794485759147,
+      "tag": "0032_users_sessions_valid_after",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794486713866,
+      "tag": "0033_rate_limit_data_export",
+      "breakpoints": true
     }
   ]
 }

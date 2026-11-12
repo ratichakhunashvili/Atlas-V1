@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
+import { buildSecurityHeaders } from "./src/lib/security-headers";
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
+  // CSP, framing, referrer, nosniff and permissions headers: see src/lib/security-headers.ts for the allowed origins.
+  async headers() {
+    return buildSecurityHeaders({ isDev: process.env.NODE_ENV !== "production" });
+  },
   experimental: {
     // Keep each guest screen in the browser for 30 s after a visit, so switching between tabs
     // (Missions ↔ My plan ↔ Profile) shows the screen at once instead of asking the server again.

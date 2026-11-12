@@ -1,6 +1,9 @@
+import { entryErrorMessage } from "@/features/hotel-stays/entry-errors";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { preload } from "react-dom";
+import { EntryErrorAlert } from "@/components/atlas-ui/entry-error-alert";
 import { LiveMissionsMap } from "@/components/atlas-ui/map/live-missions-map";
 import { AtlasButton, AtlasField, type } from "@/components/atlas-ui/ui";
 import { findCurrentStayForUser } from "@/db/queries/hotel-stays";
@@ -41,7 +44,8 @@ export default async function HomePage({
 }: {
   searchParams: Promise<{ checkinError?: string; checkinOk?: string }>;
 }) {
-  const { checkinError } = await searchParams;
+  // Only a known code becomes text: the URL never supplies the words (features/hotel-stays/entry-errors.ts).
+  const checkinError = entryErrorMessage((await searchParams).checkinError);
   const user = await requireUser();
   const stay = await findCurrentStayForUser(user.id);
   const area = stay ? boundsAround({ lat: stay.place.latitude, lng: stay.place.longitude }, CATALOGUE_HALF_SPAN_DEGREES) : undefined;
@@ -105,7 +109,33 @@ export default async function HomePage({
     findPreferencesForUser(user.id),
     listPlaceVisitsForUser(user.id),
   ]);
-  if (plan.status === "not_started") redirect("/preferences");
+  if (plan.status === "not_started") {
+    // A refused code must still be said out loud before moving on to "Plan my time", or the guest never learns of it.
+    if (!checkinError) redirect("/preferences");
+    return (
+      <section
+        aria-labelledby="entry-refused-title"
+        className="absolute inset-0 z-10 flex justify-center overflow-y-auto bg-atlas-paper md:bg-atlas-dune md:px-[24px] md:py-[32px]"
+      >
+        <div className="flex w-full max-w-[560px] flex-col items-start gap-[16px] bg-atlas-paper px-[20px] pb-[calc(28px+env(safe-area-inset-bottom))] pt-[calc(32px+env(safe-area-inset-top))] md:h-fit md:rounded-[24px] md:border md:border-atlas-beige md:px-[32px]">
+          <p className={type.eyebrow}>{stay.place.name}</p>
+          <h1 id="entry-refused-title" className={`w-full ${type.title}`}>
+            That code didn&apos;t work
+          </h1>
+          <p role="alert" className="w-full rounded-[12px] border border-atlas-danger bg-atlas-danger-soft px-[14px] py-[12px] font-manrope text-[14px] leading-[1.45] text-atlas-danger">
+            {checkinError}
+          </p>
+          <p className={`w-full ${type.body} text-atlas-slate`}>Your stay at {stay.place.name} hasn&apos;t changed.</p>
+          <Link
+            href="/preferences"
+            className="flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-atlas-teal font-manrope text-[16px] font-semibold text-atlas-paper"
+          >
+            Plan my time
+          </Link>
+        </div>
+      </section>
+    );
+  }
   const summary = stayHeaderSummary({
     availableMinutes: plan.status === "no_stay" ? null : plan.availableMinutes,
     categories: saved?.categories ?? [],
@@ -113,24 +143,28 @@ export default async function HomePage({
   });
 
   return (
-    <LiveMissionsMap
-      summary={summary}
-      models={models}
-      hotel={{ name: stay.place.name, address: stay.place.address, at: [map.hotelLocation.lng, map.hotelLocation.lat] }}
-      truncated={map.truncated}
-      visitedPlaceIds={visits.map((visit) => visit.placeId)}
-      places={map.places.map((place) => ({
-        id: place.id,
-        name: place.name,
-        description: place.description,
-        source: place.source,
-        category: place.category,
-        address: place.address,
-        priceLevel: place.priceLevel,
-        imageUrl: place.imageUrl,
-        recommended: place.recommended,
-        at: [place.longitude, place.latitude],
-      }))}
-    />
+    <>
+      {/* A refused hotel code is shown to guests with a stay too, over the map (features/hotel-stays/entry-errors.ts). */}
+      {checkinError ? <EntryErrorAlert message={checkinError} /> : null}
+      <LiveMissionsMap
+        summary={summary}
+        models={models}
+        hotel={{ name: stay.place.name, address: stay.place.address, at: [map.hotelLocation.lng, map.hotelLocation.lat] }}
+        truncated={map.truncated}
+        visitedPlaceIds={visits.map((visit) => visit.placeId)}
+        places={map.places.map((place) => ({
+          id: place.id,
+          name: place.name,
+          description: place.description,
+          source: place.source,
+          category: place.category,
+          address: place.address,
+          priceLevel: place.priceLevel,
+          imageUrl: place.imageUrl,
+          recommended: place.recommended,
+          at: [place.longitude, place.latitude],
+        }))}
+      />
+    </>
   );
 }

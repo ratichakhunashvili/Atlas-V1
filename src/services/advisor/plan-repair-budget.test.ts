@@ -91,7 +91,7 @@ function makeWorld(options: WorldOptions) {
     routeCalls: 0,
   };
 
-  const user: User = { id: USER, email: "g@example.test", name: null, passwordHash: "x", role: "user", createdAt: NOW, updatedAt: NOW };
+  const user: User = { id: USER, email: "g@example.test", name: null, passwordHash: "x", role: "user", createdAt: NOW, updatedAt: NOW, sessionsValidAfter: null };
   const active = () => state.stops.filter((stop) => stop.supersededAt === null).sort((a, b) => a.position - b.position);
 
   const deps: PlanRepairDependencies = {

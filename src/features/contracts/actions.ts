@@ -16,14 +16,14 @@ import {
 import type { AdminAuditAction, AtlasContractStatus } from "@/db/schema";
 import { validateConfirmationWindow } from "@/features/partnerships/rules";
 import { confirmContractSchema, contractIdSchema, placeIdSchema, placeKindSchema } from "./schema";
-import { contractStatusesThatCanTransitionTo, validateContractCandidate, validateKindChange } from "./rules";
+import { confirmMissOutcome, contractStatusesThatCanTransitionTo, validateContractCandidate, validateKindChange } from "./rules";
 
 /**
  * Atlas contracts and Place kinds (docs/catalogue-model-plan.md, phase C1). Every action calls requireAdmin() FIRST:
  * Server Actions are reachable by direct POST, so hiding a button is not authorization. Ids are validated and the
  * records re-loaded; nothing trusts a client-supplied status or kind beyond the validated enum.
  *
- * Phase C1 changes no guest behaviour: services/eligibility does not read contracts or kinds yet.
+ * Contracts and kinds decide guest visibility: services/eligibility reads them for every guest catalogue query.
  */
 
 const CONTRACTS_PATH = "/admin/contracts";
@@ -105,7 +105,13 @@ export async function confirmContractAction(contractId: string, formData: FormDa
     confirmedBy: admin.id,
     confirmedAt: now,
   }, now);
-  if (!updated) finish({ error: "This contract can't be confirmed: it changed status, or the place already has an active contract." }, back);
+  if (!updated) {
+    // A double click (or a second tab) sends this twice; the first one confirmed it, so the second is not an error.
+    if (confirmMissOutcome(await findContractById(db, existing.id)) === "already_confirmed") {
+      finish({ ok: `Contract for ${place.name} is confirmed.` }, back);
+    }
+    finish({ error: "This contract can't be confirmed: it changed status, or the place already has an active contract." }, back);
+  }
 
   await recordAdminAudit({
     actorUserId: admin.id,

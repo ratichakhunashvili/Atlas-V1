@@ -1,3 +1,4 @@
+import type { FrontDesk } from "@/features/legal/front-desk";
 import { DAY_MONTH as DAY } from "@/lib/format";
 /**
  * The facts the Profile screen shows, as plain data a client component can receive.
@@ -14,6 +15,8 @@ export type GuestProfile = {
     /** e.g. "Night 2 of 3", "Stay ended" */
     progress: string;
   } | null;
+  /** The valid current stay's callable hotel; null for no stay, an ended stay, or no dialable number. */
+  frontDesk: FrontDesk | null;
   achievements: { unlocked: number; total: number };
   interests: string;
   price: string;

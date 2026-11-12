@@ -7,11 +7,11 @@ import { listAllPartnershipsForAdmin } from "@/db/queries/hotel-partnerships";
 /*
  * AdminPartnerships · Hotel partners — Figma frame 70:1190, on real data.
  *
- * A VIEW over the canonical model: each row is one hotel_partnerships record joined to the Place
- * it approves and the hotel that approved it. Nothing here creates a Place or changes eligibility.
- * Partners are linked, confirmed (with their date window and priority) and suspended or revoked
- * on that hotel's own partnerships page, because a partnership only means anything for one hotel —
- * so "Edit" opens that page, and the design's "Link a place" is replaced by a note saying where
+ * A VIEW over the canonical model: each row is one hotel_partnerships record (a promotion) joined to the Place
+ * it promotes and the hotel that promotes it. Nothing here creates a Place or changes eligibility.
+ * Promotions are added, confirmed (with their date window and priority) and suspended or revoked
+ * on that hotel's own Promotion page, because a promotion only means anything for one hotel,
+ * so "Manage" opens that page, and the design's "Link a place" is replaced by a note saying where
  * to do it.
  */
 

@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { issueSignedToken } from "@vercel/blob";
 import { handleUploadPresigned, type HandleUploadPresignedBody } from "@vercel/blob/client";
 import { isBlobConfigured } from "@/services/storage/server";
-import { auth } from "@/auth";
 import { findPlaceById } from "@/db/queries/places";
-import { findUserById } from "@/db/queries/users";
+import { currentSession } from "@/lib/authorization";
 import { placeIdSchema } from "@/features/place-models/schema";
+import { modelUploadRefusal } from "@/features/place-models/upload-gate";
 import { ALLOWED_MODEL_CONTENT_TYPES, MAX_MODEL_BYTES, modelStorageKey } from "@/services/map3d";
 
 /*
@@ -25,15 +25,16 @@ const TOKEN_LIFETIME_MS = 10 * 60 * 1000;
 class Refused extends Error {}
 
 async function assertAdmin() {
-  const session = await auth();
-  const user = session?.user ? await findUserById(session.user.id) : null;
-  if (!user || user.role !== "admin") throw new Refused("Only administrators can upload models.");
+  // currentSession reads the account row (the fresh role) and refuses a token whose session was ended.
+  const session = await currentSession();
+  if (session.status !== "signed-in" || session.account.role !== "admin") throw new Refused("Only administrators can upload models.");
 }
 
 export async function POST(request: Request) {
-  if (!isBlobConfigured) {
-    return NextResponse.json({ error: "File storage isn't configured for this deployment." }, { status: 503 });
-  }
+  // Authorization first: a guest gets 401/403, never a hint about how storage is configured (features/place-models/upload-gate.ts).
+  // No onUploadCompleted is registered below, so Vercel never posts a session-less completion callback to this route.
+  const refusal = modelUploadRefusal(await currentSession(), isBlobConfigured);
+  if (refusal) return NextResponse.json({ error: refusal.error }, { status: refusal.status });
 
   let body: HandleUploadPresignedBody;
   try {

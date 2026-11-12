@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { AtlasIcon } from "./asset";
 import { addStop, chooseCheckIn } from "./demo/demo-store";
 import { ACHIEVEMENT_SCREEN, ACHIEVEMENT_TITLES, placeStatus, planLabel, useLivePlan } from "./demo/live";
 import { STOPS, clock, type StopId } from "./demo/plan-model";
-import { FRONT_DESK_NOTICE } from "./navigation";
 import { PartnerAchievement, PlanChip, SMALL_ACTION } from "./place-detail";
 import { screenHref, type ScreenKey } from "./screen-hrefs";
 import { AtlasButton, AtlasLink } from "./ui";
@@ -68,41 +67,28 @@ export function PlanAction({ place, label = "Add to my plan", icon }: { place: S
   );
 }
 
-type Secondary =
-  | { to: ScreenKey; icon: string; iconSize: number; label: string }
-  | { notice: string; icon: string; iconSize: number; label: string };
+type Secondary = { to: ScreenKey; icon: string; iconSize: number; label: string };
 
 /**
  * Bottom actions bar: a square secondary action beside the primary one. Facility and attraction
  * bars are 88 tall with a 56 x 60 secondary; partner bars 80 with 52 x 52.
  */
-export function DetailActions({ secondary, primary, tall = false }: { secondary: Secondary; primary: ReactNode; tall?: boolean }) {
-  const [notice, setNotice] = useState<string | null>(null);
+/** `secondary` is optional: a screen with no working secondary action shows none rather than a button that does nothing. */
+export function DetailActions({ secondary, primary, tall = false }: { secondary?: Secondary; primary: ReactNode; tall?: boolean }) {
   const square = `flex shrink-0 items-center justify-center rounded-[14px] border border-atlas-teal ${tall ? "h-[60px] w-[56px]" : "size-[52px]"}`;
   return (
     <div className="border-t border-atlas-beige bg-atlas-paper">
-      {notice ? (
-        <p role="status" className="mx-[16px] mt-[10px] rounded-[10px] bg-atlas-sand px-[10px] py-[8px] font-manrope text-[13px] leading-[18px] text-atlas-ink">
-          {notice}
-        </p>
-      ) : null}
       <div className={`flex w-full items-start gap-[10px] px-[16px] pb-[calc(17px+env(safe-area-inset-bottom))] pt-[10px] ${tall ? "min-h-[87px]" : "min-h-[79px]"}`}>
-        {"to" in secondary ? (
+        {secondary ? (
           <AtlasLink to={secondary.to} label={secondary.label} className={square}>
             <AtlasIcon src={secondary.icon} size={secondary.iconSize} />
           </AtlasLink>
-        ) : (
-          <button type="button" aria-label={secondary.label} onClick={() => setNotice(secondary.notice)} className={square}>
-            <AtlasIcon src={secondary.icon} size={secondary.iconSize} />
-          </button>
-        )}
+        ) : null}
         {primary}
       </div>
     </div>
   );
 }
-
-export const FRONT_DESK = { notice: FRONT_DESK_NOTICE, icon: "/atlas-ui/icon-phone-teal-22.svg", iconSize: 22, label: "Call the front desk" } as const;
 
 function CheckInScanLink({ place, to, className, children }: { place: StopId; to: ScreenKey; className: string; children: ReactNode }) {
   return (

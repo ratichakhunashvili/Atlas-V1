@@ -1,60 +1,73 @@
 import NextAuth from "next-auth";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { authConfig } from "@/auth/config";
-import { adminRedirect } from "@/lib/admin-route-policy";
 import { shouldBlockDevelopmentOnlyPath } from "@/lib/development-route-policy";
+import { hasSessionCookie, proxyReadsSession, sessionRedirect } from "@/lib/session-redirect";
 
 // Separate, edge-safe NextAuth() call (shares authConfig with src/auth/index.ts
 // but omits the Node-only Credentials provider) so this proxy never bundles
 // db/bcrypt code for the Edge runtime.
 const { auth } = NextAuth(authConfig);
 
-const PROTECTED_EXACT = ["/"];
-// /admin has its own rules (admin sign-in, Access denied): see adminRedirect.
-const PROTECTED_PREFIXES = ["/profile", "/hotels", "/experiences", "/collection", "/checkin", "/unlock/"];
-
-function isProtectedPath(pathname: string) {
-  return (
-    PROTECTED_EXACT.includes(pathname) ||
-    PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
-  );
-}
+const NOT_FOUND_REWRITE_PATH = "/atlas-not-found";
 
 // This is an optimistic, UX-only check (redirect early, no flash of
-// protected content). It is NOT the authorization boundary: every admin
-// page re-checks with requireAdmin() in its layout, and every mutating
-// server action re-checks again before touching the database.
-export default auth((req) => {
+// protected content). It is NOT the authorization boundary: every protected
+// page re-checks with requireUser()/requireAdmin(), and every mutating
+// server action re-checks again before touching the database. The guest and
+// admin rules live in lib/session-redirect.ts and lib/admin-route-policy.ts.
+const pageLoadProxy = auth((req) => {
+  const { pathname, search } = req.nextUrl;
+  const target = sessionRedirect({
+    pathname,
+    search,
+    viewer: req.auth ? { role: req.auth.user.role } : null,
+    sessionCookie: hasSessionCookie(req.cookies.getAll().map((cookie) => cookie.name)),
+  });
+  if (target) return NextResponse.redirect(new URL(target, req.nextUrl.origin));
+});
+
+export default function proxy(req: NextRequest, event: NextFetchEvent) {
   const { pathname } = req.nextUrl;
 
+  // First, and for every method: a blocked design-preview or development URL is a 404 whether it is loaded or posted to.
   if (shouldBlockDevelopmentOnlyPath(pathname, process.env.NODE_ENV, process.env.ATLAS_DEPLOYMENT_ENV)) {
-    return new NextResponse(null, { status: 404 });
+    // Still a 404, but rendered by the branded app/not-found.tsx: rewrite to a path that does not exist, so a
+    // blocked design-preview URL looks exactly like any unknown URL (and the browser never shows its own error page).
+    return NextResponse.rewrite(new URL(NOT_FOUND_REWRITE_PATH, req.nextUrl.origin), { status: 404 });
   }
 
-  const adminTarget = adminRedirect(pathname, req.auth ? { role: req.auth.user.role } : null);
-  if (adminTarget) return NextResponse.redirect(new URL(adminTarget, req.nextUrl.origin));
+  // Auth.js appends a re-issued session cookie to every response it handles, after our callback has run. On a
+  // server-action POST (the sidebar's Sign out posts to the current /admin page) that cookie raced sign-out's clearing
+  // cookie and the browser could keep the session (audit CAND-00). So only page loads reach Auth.js here; everything
+  // else passes untouched and is authorized by the action or route handler itself.
+  if (!proxyReadsSession(req.method)) return NextResponse.next();
 
-  if (isProtectedPath(pathname) && !req.auth) {
-    const loginUrl = new URL("/login", req.nextUrl.origin);
-    loginUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-});
+  return (pageLoadProxy as unknown as (req: NextRequest, event: NextFetchEvent) => Promise<Response>)(req, event);
+}
 
 export const config = {
   matcher: [
     "/",
     "/profile/:path*",
-    "/hotels/:path*",
     "/experiences/:path*",
     "/collection/:path*",
     "/admin/:path*",
     "/checkin/:path*",
     "/unlock/:path*",
+    // Live guest screens (GUEST_PROTECTED_* in lib/session-redirect.ts); a test keeps the two in step.
+    "/plan",
+    "/scan",
+    "/achievements",
+    "/preferences/:path*",
+    "/directions/:path*",
+    "/places/:path*",
+    "/privacy/delete-account",
     "/dev/:path*",
     "/demo/:path*",
     "/map-preview/:path*",
     // Design-review screens (DESIGN_PREVIEW_PREFIXES in lib/development-route-policy.ts); a test keeps the two in step.
+    // /plan/unlocked is a live screen under /plan/:path+, and is protected by the same rules.
     "/map/:path*",
     "/route/:path*",
     "/place/:path*",

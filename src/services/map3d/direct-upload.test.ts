@@ -63,7 +63,8 @@ describe("the upload routes guard themselves", () => {
     const before = route.slice(route.indexOf("getSignedToken"));
     assert.ok(before.indexOf("await assertAdmin()") > -1);
     assert.ok(before.indexOf("await assertAdmin()") < before.indexOf("issueSignedToken("));
-    assert.match(route, /findUserById[\s\S]*role !== "admin"/);
+    // currentSession (lib/authorization.ts) reads the account row with findUserById and refuses an ended session.
+    assert.match(route, /await currentSession\(\)[\s\S]*session\.account\.role !== "admin"/);
   });
 
   it("the token only allows a PUT of a GLB within the size limit, at this Place's own path", () => {

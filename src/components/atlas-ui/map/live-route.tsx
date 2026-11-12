@@ -64,7 +64,16 @@ export function LiveRoute({
       // Location off or unavailable: route from the hotel, and say so.
       origin = { lat: hotelAt[1], lng: hotelAt[0], from: "hotel" };
     }
-    const result = await getDirectionsToStopAction(stopId, origin.lat, origin.lng);
+    // A dropped connection or a server error throws instead of returning a result: end the loading state either way,
+    // so the guest gets the error and a working "Refresh route" (2026-11 replay U070 found it stuck).
+    let result: Awaited<ReturnType<typeof getDirectionsToStopAction>>;
+    try {
+      result = await getDirectionsToStopAction(stopId, origin.lat, origin.lng);
+    } catch {
+      setLoading(false);
+      setError("We couldn't get a walking route right now. Check your connection and try again.");
+      return;
+    }
     setLoading(false);
     if (!result.ok) {
       setError(result.reason === "stop_unavailable" ? "This place isn't available through your hotel any more." : "We couldn't get a walking route right now. Try again.");

@@ -4,6 +4,7 @@ import { after, before, describe, it } from "node:test";
 import { eq, sql } from "drizzle-orm";
 import { createTestDatabase, expectSqlFailure, type TestDatabase } from "./test-support/pglite";
 import { buildEligiblePlaces } from "@/services/eligibility/rules";
+import { validatePartnerCandidate } from "@/features/partnerships/rules";
 import {
   listAttractionPlacesForCatalogue,
   listCatalogueForAdmin,
@@ -207,6 +208,80 @@ describe("migration 0027: the map's geographic index (phase C3)", () => {
       east: 44.81,
     });
     assert.ok(onEdge.some((row) => row.placeId === edge.id), "a Place exactly on the box's corner is inside");
+  });
+});
+
+describe("a hotel can only promote a business with an Atlas contract in force", () => {
+  it("refuses a business with no contract, a pending one and an ended one, and accepts one in force", async () => {
+    const check = async (placeId: string, now?: Date) => {
+      const facts = await loadContractFacts(database.db, placeId, now);
+      const [place] = await database.db.select().from(database.schema.places).where(eq(database.schema.places.id, placeId));
+      return validatePartnerCandidate({
+        hotelPlaceId: "00000000-0000-0000-0000-0000000000aa",
+        place,
+        isHotelFacility: facts.isHotelFacility,
+        isHotelAnchor: facts.isHotelAnchor,
+        hasContractInForce: facts.hasContractInForce,
+      });
+    };
+    const none = await insertPlace("Promo No Contract", "restaurant");
+    assert.match((await check(none.id)) ?? "", /Atlas contract/);
+
+    const pending = await insertPlace("Promo Pending", "restaurant");
+    assert.ok(await proposeContract(database.db, pending.id));
+    assert.match((await check(pending.id)) ?? "", /Atlas contract/);
+
+    const live = await insertPlace("Promo Live", "restaurant");
+    const proposed = await proposeContract(database.db, live.id);
+    assert.ok(proposed);
+    const endsAt = new Date("2027-01-01T00:00:00Z");
+    await transitionContract(database.db, proposed.id, ["pending_review"], {
+      status: "active",
+      confirmedAt: new Date("2026-01-01T00:00:00Z"),
+      confirmedBy: adminId,
+      startsAt: new Date("2026-01-01T00:00:00Z"),
+      endsAt,
+    });
+    assert.equal(await check(live.id, new Date("2026-06-01T00:00:00Z")), null);
+    // Losing the contract only ends the promotion's eligibility to be (re)confirmed; nothing is deleted.
+    assert.match((await check(live.id, new Date("2027-06-01T00:00:00Z"))) ?? "", /Atlas contract/);
+  });
+});
+
+describe("viewport narrowing is bounds-only (phase C3)", () => {
+  it("returns exactly the unbounded rows that lie inside the box, for contracts and attractions alike", async () => {
+    const hotelId = "00000000-0000-0000-0000-000000000000";
+    const at = async (name: string, category: "restaurant" | "landmark", latitude: number, longitude: number) => {
+      const [row] = await database.db.insert(database.schema.places).values({ name, latitude, longitude, category }).returning();
+      return row;
+    };
+    const inside = await at("Bounds Inside Cafe", "restaurant", 41.9501, 44.9501);
+    const outside = await at("Bounds Outside Cafe", "restaurant", 42.5, 45.5);
+    const insideSight = await at("Bounds Inside Sight", "landmark", 41.9502, 44.9502);
+    const outsideSight = await at("Bounds Outside Sight", "landmark", 42.5, 45.5);
+    for (const place of [inside, outside]) {
+      const proposed = await proposeContract(database.db, place.id);
+      assert.ok(proposed);
+      await transitionContract(database.db, proposed.id, ["pending_review"], { status: "active", confirmedAt: new Date(), confirmedBy: adminId });
+    }
+    for (const place of [insideSight, outsideSight]) await setPlaceKind(database.db, place.id, "attraction");
+
+    const box = { south: 41.95, west: 44.95, north: 41.96, east: 44.96 };
+    const inBox = (p: { latitude: number; longitude: number }) =>
+      p.latitude >= box.south && p.latitude <= box.north && p.longitude >= box.west && p.longitude <= box.east;
+
+    const allContracts = await listContractRowsForCatalogue(database.db, hotelId);
+    const boxedContracts = await listContractRowsForCatalogue(database.db, hotelId, box);
+    assert.deepEqual(
+      boxedContracts.map((row) => row.placeId).sort(),
+      allContracts.filter((row) => inBox(row.place)).map((row) => row.placeId).sort()
+    );
+    assert.ok(boxedContracts.some((row) => row.placeId === inside.id) && !boxedContracts.some((row) => row.placeId === outside.id));
+
+    const allAttractions = await listAttractionPlacesForCatalogue(database.db, hotelId);
+    const boxedAttractions = await listAttractionPlacesForCatalogue(database.db, hotelId, box);
+    assert.deepEqual(boxedAttractions.map((p) => p.id).sort(), allAttractions.filter(inBox).map((p) => p.id).sort());
+    assert.ok(boxedAttractions.some((p) => p.id === insideSight.id) && !boxedAttractions.some((p) => p.id === outsideSight.id));
   });
 });
 

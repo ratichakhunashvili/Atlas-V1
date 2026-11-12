@@ -143,6 +143,47 @@ export async function listCatalogueForAdmin(db: AtlasDatabase) {
 export type AdminCatalogueRow = Awaited<ReturnType<typeof listCatalogueForAdmin>>[number];
 
 /**
+ * ADMIN Guest reach: every hotel, as the base whose guests' catalogue services/eligibility computes. Admin-only;
+ * the verdict itself comes from services/eligibility, never from this read.
+ */
+export async function listHotelsForGuestReach(db: AtlasDatabase) {
+  return db
+    .select({ hotelId: hotels.id, hotelPlaceId: hotels.placeId, name: places.name })
+    .from(hotels)
+    .innerJoin(places, eq(hotels.placeId, places.id))
+    .orderBy(places.name);
+}
+
+/**
+ * ADMIN Guest reach: every Place that is not a hotel, with its contracts and facility rows, so the console can say WHY
+ * a Place reaches no guest. Explanation input only; visibility is decided by services/eligibility.
+ */
+export async function listGuestReachCandidates(db: AtlasDatabase) {
+  const rows = await db
+    .select()
+    .from(places)
+    .where(and(ne(places.category, "hotel"), ne(places.kind, "hotel")))
+    .orderBy(places.name);
+  const contracts = await db
+    .select({
+      placeId: atlasPartnerContracts.placeId,
+      status: atlasPartnerContracts.status,
+      confirmedAt: atlasPartnerContracts.confirmedAt,
+      startsAt: atlasPartnerContracts.startsAt,
+      endsAt: atlasPartnerContracts.endsAt,
+    })
+    .from(atlasPartnerContracts);
+  const facilities = await db.select({ placeId: hotelFacilities.placeId, hotelId: hotelFacilities.hotelId, status: hotelFacilities.status }).from(hotelFacilities);
+  return rows.map((place) => ({
+    place,
+    contracts: contracts.filter((contract) => contract.placeId === place.id),
+    facilities: facilities.filter((facility) => facility.placeId === place.id),
+  }));
+}
+
+export type GuestReachCandidate = Awaited<ReturnType<typeof listGuestReachCandidates>>[number];
+
+/**
  * GUEST catalogue input (phase C2): active contracts with their Place, for services/eligibility to judge. Rows whose
  * Place is another hotel's facility are left out here, because the pure rule cannot see facility ownership; the
  * guest's own hotel facilities reach the rule separately. The rule re-checks status, confirmation, window and Place.

@@ -24,9 +24,9 @@ export function AtlasAsset({ src, width, height, alt = "", className }: AtlasAss
  * The Logo instances in the Figma file carry an image fill that Figma itself renders as empty,
  * so on screen the prototype shows no mark — only the space it occupies. The slot keeps that
  * exact space. The exported artwork is kept in /public/atlas-ui (logo-teal.png, logo-light.png);
- * set SHOW_LOGO to true to draw it.
+ * SHOW_LOGO draws it (turned on by the 2026-11 audit fixes: an empty slot read as a missing logo).
  */
-const SHOW_LOGO = false;
+const SHOW_LOGO = true;
 
 export function AtlasLogo({ tone, width, height }: { tone: "teal" | "light"; width: number; height: number }) {
   if (!SHOW_LOGO) return <div aria-hidden className="shrink-0" style={{ width, height }} />;

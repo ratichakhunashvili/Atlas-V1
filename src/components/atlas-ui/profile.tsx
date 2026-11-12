@@ -7,15 +7,18 @@ import { AtlasIcon, AtlasLogo } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
 import { initialFor, type GuestProfile } from "@/features/profile/guest-profile";
 import { AtlasDialog } from "./dialog";
-import { DemoAction, FRONT_DESK_NOTICE } from "./navigation";
+import { FrontDeskCall } from "./front-desk";
+import { DemoAction } from "./navigation";
 import { screenHref, type ScreenKey } from "./screen-hrefs";
-import { AtlasButton, AtlasLink, AtlasTextLink } from "./ui";
+import { SignOutButton } from "./sign-out-button";
+import { AtlasLink, AtlasTextLink } from "./ui";
 
 /*
  * Stay · Profile — Figma frame 1:1542: the guest, their current stay, achievements, preferences
  * and app settings, all from the signed-in guest's own data (loadGuestProfile). The language row is a
  * design state only: Georgian translation is a future integration, and the row says so rather
- * than relabelling an English interface. Calling the front desk is not connected either.
+ * than relabelling an English interface. The phone button is a real tel: link to the current stay's hotel, shown
+ * only when that hotel has a dialable number (features/legal/front-desk.ts); otherwise a plain reception line.
  *
  * SignOutConfirm (70:4020) is the same screen with the sign-out confirmation open. "Sign out"
  * ends the real session (logoutAction) and returns to sign-in; it
@@ -52,7 +55,7 @@ function LanguageRow() {
     <div className="flex w-full flex-col border-b border-atlas-beige">
       <DemoAction
         className={ROW}
-        notice="Georgian (ქართული) isn't available in this prototype yet. Translating the interface is a future integration."
+        notice="Atlas is in English for now. Georgian (ქართული) isn't available yet."
         noticeClassName="mb-[8px]"
       >
         <span className="font-manrope text-[15px] leading-[20px] text-atlas-ink">Language</span>
@@ -79,7 +82,6 @@ function Badge({ unlocked }: { unlocked: boolean }) {
 
 export function ProfileScreen({ profile, confirmSignOut = false }: { profile: GuestProfile; confirmSignOut?: boolean }) {
   const router = useRouter();
-  const [calling, setCalling] = useState(false);
   const [signingOut, setSigningOut] = useState(confirmSignOut);
 
   const closeSignOut = () => {
@@ -124,20 +126,18 @@ export function ProfileScreen({ profile, confirmSignOut = false }: { profile: Gu
               <span className="w-full font-manrope text-[13px] leading-[18px] text-atlas-linen">Scan your hotel&apos;s Atlas code to start.</span>
             )}
           </span>
-          <button
-            type="button"
-            aria-label="Call the front desk"
-            aria-describedby={calling ? "front-desk-notice" : undefined}
-            onClick={() => setCalling(true)}
-            className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] bg-atlas-paper/15"
-          >
-            <AtlasIcon src="/atlas-ui/icon-phone-light-19.svg" size={19} />
-          </button>
+          {profile.frontDesk ? (
+            <FrontDeskCall
+              frontDesk={profile.frontDesk}
+              className="flex size-[44px] shrink-0 items-center justify-center rounded-[12px] bg-atlas-paper/15"
+              fallbackClassName=""
+            >
+              <AtlasIcon src="/atlas-ui/icon-phone-light-19.svg" size={19} />
+            </FrontDeskCall>
+          ) : null}
         </section>
-        {calling ? (
-          <p id="front-desk-notice" role="status" className="w-full rounded-[10px] bg-atlas-sand px-[10px] py-[8px] font-manrope text-[13px] leading-[18px] text-atlas-ink">
-            {FRONT_DESK_NOTICE}
-          </p>
+        {profile.stay && !profile.frontDesk ? (
+          <FrontDeskCall frontDesk={null} className="" fallbackClassName="w-full font-manrope text-[13px] leading-[18px] text-atlas-slate" />
         ) : null}
 
         <AtlasLink to="Achievements" className="flex w-full flex-col items-start gap-[10px] rounded-[16px] border border-atlas-beige p-[14px] text-left">
@@ -208,7 +208,7 @@ export function ProfileScreen({ profile, confirmSignOut = false }: { profile: Gu
           Your plan and achievements stay saved. You&apos;ll need to sign in again to see them.
         </p>
         <form action={logoutAction} className="w-full">
-          <AtlasButton type="submit">Sign out</AtlasButton>
+          <SignOutButton />
         </form>
         <AtlasTextLink onClick={closeSignOut}>Stay signed in</AtlasTextLink>
       </AtlasDialog>

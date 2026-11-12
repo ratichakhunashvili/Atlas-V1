@@ -119,6 +119,7 @@ const user: User = {
   role: "user",
   createdAt: NOW,
   updatedAt: NOW,
+  sessionsValidAfter: null,
 };
 
 function emptyGeometry() {

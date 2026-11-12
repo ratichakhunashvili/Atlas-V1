@@ -6,17 +6,27 @@ import { deleteAccountAction } from "@/features/users/actions";
 import { PendingSubmit } from "./pending-submit";
 import { AtlasIcon } from "./asset";
 import { AtlasDialog } from "./dialog";
-import { DemoAction, FRONT_DESK_NOTICE } from "./navigation";
+import { DemoAction } from "./navigation";
 import { screenHref, type ScreenKey } from "./screen-hrefs";
+import Link from "next/link";
+import { DATA_WE_STORE, LEGAL_PENDING_NOTE, LOCATION_USE, TERMS_SUMMARY } from "@/features/legal/copy";
+import type { FrontDesk } from "@/features/legal/front-desk";
+import { FrontDeskCall } from "./front-desk";
+import { hotelLabel } from "@/features/legal/stay-hotel";
 import { AtlasBackButton, AtlasPoints, AtlasTextLink } from "./ui";
 
 /*
  * Privacy (1:1303), PrivacyPublic (1:2888) and PrivacyDelete (1:1357). The signed-in screen adds
  * Help, the Data request row (1:178) and the delete button; PrivacyDelete is the same screen with
- * the delete confirmation open. The document rows jump to the placeholder texts at the bottom of
- * the page, which stay placeholders until approved terms and a privacy notice exist.
+ * the delete confirmation open. The document rows jump to the interim texts at the bottom of
+ * the page (src/features/legal/copy.ts); approved legal text is still owed by the owner.
  *
- * Calling, emailing and data requests say they are not connected yet. "Delete account" is real: it
+ * Data download and account deletion are for a signed-in guest only: a signed-out visitor is asked
+ * to sign in instead, and the hotel is named only from the signed-in guest's own valid stay.
+ *
+ * Calling the hotel is a real tel: link when the guest's valid stay has a hotel phone number, and a plain
+ * "ask at reception" line otherwise. "Download my data" downloads the signed-in guest's own data
+ * (GET /api/account/export). Emailing support says it is not connected yet. "Delete account" is real: it
  * deletes the signed-in account and its data on the server (deleteAccountAction), then signs out.
  */
 
@@ -37,20 +47,20 @@ function AnchorRow({ label, href, divider = true }: { label: string; href: strin
   );
 }
 
+/**
+ * A plain link to the signed-in guest's own data; the server decides whose data it is from the session. The file is
+ * saved because the response says `attachment`; no `download` attribute, so a refusal (signed out, too many requests)
+ * opens as a readable message instead of a failed download.
+ */
 function DataRequestRow() {
-  const [requested, setRequested] = useState(false);
   return (
-    <button
-      type="button"
-      onClick={() => setRequested(true)}
-      aria-describedby={requested ? "data-request-status" : undefined}
+    <a
+      href="/api/account/export"
       className="flex min-h-[52px] w-full items-center justify-between gap-[8px] border-b border-atlas-beige text-left"
     >
       <span className={ROW_LABEL}>Download my data</span>
-      <span id="data-request-status" role="status" className="text-right font-manrope text-[14px] leading-[19px] text-atlas-slate">
-        {requested ? "Prototype · nothing was requested" : "›"}
-      </span>
-    </button>
+      <Chevron />
+    </a>
   );
 }
 
@@ -63,24 +73,50 @@ function Section({ title, children, gap = 0 }: { title: string; children: ReactN
   );
 }
 
-const USES = [
-  { icon: "/atlas-ui/icon-pin.svg", text: "Location: to show walk times and confirm check-ins. Sent only when you check in." },
-  { icon: "/atlas-ui/icon-camera-20.svg", text: "Camera: to read codes and show the marker view. Stays on your phone." },
-  { icon: "/atlas-ui/icon-home-20.svg", text: "Your stay: so we show what you can do from Hotel A." },
-];
+function usesFor(hotelName: string | null) {
+  return [
+    { icon: "/atlas-ui/icon-pin.svg", text: LOCATION_USE },
+    { icon: "/atlas-ui/icon-camera-20.svg", text: "Camera: to read codes and show the marker view. Stays on your phone." },
+    { icon: "/atlas-ui/icon-home-20.svg", text: `Your stay: so we show what you can do from ${hotelLabel(hotelName)}.` },
+  ];
+}
 
 function Documents() {
+  const body = "font-manrope text-[14px] leading-[19px] text-atlas-slate";
   return (
     <>
       <div id="terms" className="flex w-full scroll-mt-[16px] flex-col items-start gap-[6px]">
         <h2 className={HEADING}>Terms of use</h2>
-        <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">[Final terms text]</p>
+        <p className={body}>{TERMS_SUMMARY}</p>
+        <p className={body}>{LEGAL_PENDING_NOTE}</p>
       </div>
       <div id="privacy-notice" className="flex w-full scroll-mt-[16px] flex-col items-start gap-[6px]">
         <h2 className={HEADING}>Privacy notice</h2>
-        <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">[Final privacy notice text]</p>
+        <p className={body}>What Atlas stores about you:</p>
+        <ul className={`${body} w-full list-disc space-y-[4px] pl-[20px] [overflow-wrap:anywhere]`}>
+          {DATA_WE_STORE.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+        <p className={body}>{LEGAL_PENDING_NOTE}</p>
       </div>
     </>
+  );
+}
+
+function SignInPrompt({ callbackPath }: { callbackPath: string }) {
+  return (
+    <Section title="Your data" gap={6}>
+      <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">
+        Sign in to download your data or delete your account.
+      </p>
+      <Link
+        href={`/login?callbackUrl=${encodeURIComponent(callbackPath)}`}
+        className="flex min-h-[44px] items-center font-manrope text-[15px] font-semibold leading-[20px] text-atlas-teal underline underline-offset-2"
+      >
+        Sign in
+      </Link>
+    </Section>
   );
 }
 
@@ -93,9 +129,20 @@ function Screen({ back, children }: { back: ScreenKey; children: ReactNode }) {
   );
 }
 
-export function PrivacyScreen({ confirmDelete = false }: { confirmDelete?: boolean }) {
+export function PrivacyScreen({
+  signedIn,
+  hotelName,
+  frontDesk,
+  confirmDelete = false,
+}: {
+  signedIn: boolean;
+  hotelName: string | null;
+  /** The valid stay's callable hotel, or null: then a plain "ask at reception" line, never a dead button. */
+  frontDesk: FrontDesk | null;
+  confirmDelete?: boolean;
+}) {
   const router = useRouter();
-  const [confirming, setConfirming] = useState(confirmDelete);
+  const [confirming, setConfirming] = useState(confirmDelete && signedIn);
   // Deletes the signed-in account on the server, then signs out to /account-deleted.
   const [deleteState, deleteAction] = useActionState(deleteAccountAction, {});
 
@@ -107,44 +154,63 @@ export function PrivacyScreen({ confirmDelete = false }: { confirmDelete?: boole
 
   return (
     <>
-      <Screen back="Stay">
+      <Screen back={signedIn ? "Stay" : "SignIn"}>
         <h1 className="font-grotesk text-[24px] font-bold leading-[31px] text-atlas-teal">Help and privacy</h1>
         <Section title="Help">
-          <div className="flex w-full flex-col border-b border-atlas-beige">
-            <DemoAction className={ROW} notice={FRONT_DESK_NOTICE} noticeClassName="mb-[8px]">
-              <span className={ROW_LABEL}>Call Hotel A front desk</span>
-              <Chevron />
-            </DemoAction>
-          </div>
+          {signedIn ? (
+            <div className="flex w-full flex-col border-b border-atlas-beige">
+              <FrontDeskCall
+                frontDesk={frontDesk}
+                className={ROW}
+                fallbackClassName="flex min-h-[48px] items-center font-manrope text-[15px] leading-[20px] text-atlas-slate"
+              >
+                {frontDesk ? (
+                  <>
+                    <span className={ROW_LABEL}>Call {frontDesk.hotelName}</span>
+                    <Chevron />
+                  </>
+                ) : null}
+              </FrontDeskCall>
+            </div>
+          ) : null}
           <div className="flex w-full flex-col">
-            <DemoAction className={ROW} notice="Support email isn't set up in this prototype." noticeClassName="mb-[8px]">
+            <DemoAction className={ROW} notice="A support email address isn't available yet." noticeClassName="mb-[8px]">
               <span className={ROW_LABEL}>Email Atlas support</span>
-              <span className="flex items-center gap-[4px]">
-                <span className="font-manrope text-[13px] leading-[18px] text-atlas-slate">[support email]</span>
-                <Chevron />
-              </span>
+              <Chevron />
             </DemoAction>
           </div>
         </Section>
         <Section title="What Atlas uses" gap={10}>
-          <AtlasPoints items={USES} gap={10} />
+          <AtlasPoints items={usesFor(signedIn ? hotelName : null)} gap={10} />
         </Section>
-        <Section title="Your data">
-          <DataRequestRow />
-          <AnchorRow label="Terms of use" href="#terms" />
-          <AnchorRow label="Full privacy notice" href="#privacy-notice" divider={false} />
-        </Section>
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="flex h-[48px] w-full items-center justify-center rounded-[12px] border border-atlas-danger font-manrope text-[15px] font-semibold leading-[20px] text-atlas-danger"
-        >
-          Delete my account
-        </button>
+        {signedIn ? (
+          <>
+            <Section title="Your data">
+              <DataRequestRow />
+              <AnchorRow label="Terms of use" href="#terms" />
+              <AnchorRow label="Full privacy notice" href="#privacy-notice" divider={false} />
+            </Section>
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              className="flex h-[48px] w-full items-center justify-center rounded-[12px] border border-atlas-danger font-manrope text-[15px] font-semibold leading-[20px] text-atlas-danger"
+            >
+              Delete my account
+            </button>
+          </>
+        ) : (
+          <>
+            <SignInPrompt callbackPath="/privacy" />
+            <Section title="Documents">
+              <AnchorRow label="Terms of use" href="#terms" />
+              <AnchorRow label="Full privacy notice" href="#privacy-notice" divider={false} />
+            </Section>
+          </>
+        )}
         <Documents />
       </Screen>
 
-      <AtlasDialog open={confirming} onClose={close} labelledBy="delete-title" describedBy="delete-body">
+      <AtlasDialog open={confirming && signedIn} onClose={close} labelledBy="delete-title" describedBy="delete-body">
         <h2 id="delete-title" className="font-grotesk text-[20px] font-bold leading-[26px] text-atlas-ink">
           Delete your Atlas account?
         </h2>
@@ -172,12 +238,12 @@ export function PrivacyScreen({ confirmDelete = false }: { confirmDelete?: boole
   );
 }
 
-export function PrivacyPublicScreen() {
+export function PrivacyPublicScreen({ hotelName }: { hotelName: string | null }) {
   return (
     <Screen back="SignIn">
       <h1 className="font-grotesk text-[24px] font-bold leading-[31px] text-atlas-teal">Terms and privacy</h1>
       <Section title="What Atlas uses" gap={10}>
-        <AtlasPoints items={USES} gap={10} />
+        <AtlasPoints items={usesFor(hotelName)} gap={10} />
       </Section>
       <Section title="Documents">
         <AnchorRow label="Terms of use" href="#terms" />

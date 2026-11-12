@@ -5,13 +5,14 @@ import { join } from "node:path";
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
-test("the Proxy matcher covers /dev and /demo, and returns a real 404 in production", () => {
+test("the Proxy matcher covers /dev and /demo, and returns a branded 404 in production", () => {
   const proxy = read("src/proxy.ts");
   assert.match(
     proxy,
     /shouldBlockDevelopmentOnlyPath\(pathname, process\.env\.NODE_ENV, process\.env\.ATLAS_DEPLOYMENT_ENV\)/
   );
-  assert.match(proxy, /new NextResponse\(null, \{ status: 404 \}\)/);
+  assert.match(proxy, /NextResponse\.rewrite\(new URL\(NOT_FOUND_REWRITE_PATH, req\.nextUrl\.origin\), \{ status: 404 \}\)/);
+  assert.match(proxy, /NOT_FOUND_REWRITE_PATH = "\/atlas-not-found"/);
   assert.match(proxy, /"\/dev\/:path\*"/);
   assert.match(proxy, /"\/demo\/:path\*"/);
 });

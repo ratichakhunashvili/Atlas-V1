@@ -100,7 +100,7 @@ function makeWorld(options: WorldOptions) {
     replacementPersists: 0,
     removalPersists: 0,
   };
-  const user: User = { id: USER, email: "g@example.com", name: null, passwordHash: "x", role: "user", createdAt: NOW, updatedAt: NOW };
+  const user: User = { id: USER, email: "g@example.com", name: null, passwordHash: "x", role: "user", createdAt: NOW, updatedAt: NOW, sessionsValidAfter: null };
   const active = () => state.stops.filter((s) => s.supersededAt === null).sort((a, b) => a.position - b.position);
   const refreshDay = (routeGeoJson: unknown, totalDurationSeconds: number | null) => {
     const list = active();

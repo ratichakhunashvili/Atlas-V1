@@ -5,6 +5,8 @@ import {
   listCatalogueForAdmin as listCatalogueOperation,
   listContractRowsForCatalogue as listContractRowsOperation,
   listContractsForPlace as listContractsOperation,
+  listGuestReachCandidates as listGuestReachCandidatesOperation,
+  listHotelsForGuestReach as listHotelsForGuestReachOperation,
 } from "@/db/operations/atlas-contracts";
 import type { MapBounds } from "@/services/eligibility/viewport";
 
@@ -15,6 +17,15 @@ export async function listCatalogueForAdmin() {
 
 export async function listContractsForPlace(placeId: string) {
   return listContractsOperation(db, placeId);
+}
+
+/** Admin Guest reach input: services/eligibility (listGuestReachForAdmin) is the only caller. */
+export async function listHotelsForGuestReach() {
+  return listHotelsForGuestReachOperation(db);
+}
+
+export async function listGuestReachCandidates() {
+  return listGuestReachCandidatesOperation(db);
 }
 
 /** Guest catalogue input: only services/eligibility may call these. */

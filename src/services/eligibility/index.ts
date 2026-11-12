@@ -1,10 +1,13 @@
-import type { Hotel, Place, PlaceCategory } from "@/db/schema";
+import type { FacilityStatus, Hotel, Place, PlaceCategory } from "@/db/schema";
 import type { LatLng } from "@/lib/geo";
 import { calculateDayNumber, stayEndFor } from "@/services/advisor/stay-day";
 import {
   buildEligiblePlaces,
+  explainCatalogueExclusion,
   filterEligibleByRadius,
+  type CatalogueExclusionReason,
   type ContractRow,
+  type ExclusionInput,
   type EligiblePlace,
   type EligibilitySource,
   type FacilityRow,
@@ -12,7 +15,7 @@ import {
 } from "./rules";
 import { clampBounds, selectForViewport, type MapBounds } from "./viewport";
 
-export type { EligiblePlace, EligibilitySource, Promotion } from "./rules";
+export type { CatalogueExclusionReason, EligiblePlace, EligibilitySource, Promotion } from "./rules";
 export { MAP_RESULT_CAP, type MapBounds } from "./viewport";
 
 /**
@@ -221,6 +224,83 @@ export async function getEligibleExperienceForGuest(
   const result = await listEligibleExperiencesForGuest({ userId: input.userId }, now, deps);
   if (result.status !== "ok") return null;
   return result.experiences.find((entry) => entry.place.id === input.placeId) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Admin: Guest reach
+// ---------------------------------------------------------------------------
+
+export type GuestReachHotel = { hotelId: string; hotelPlaceId: string; name: string };
+
+export type GuestReachCandidate = {
+  place: Place;
+  contracts: ExclusionInput["contracts"];
+  facilities: readonly { hotelId: string; status: FacilityStatus }[];
+};
+
+export type GuestReachDependencies = Pick<
+  EligibilityDependencies,
+  "listPartnershipsForHotel" | "listFacilitiesForHotel" | "listContractsForCatalogue" | "listAttractionsForCatalogue"
+> & {
+  listHotels: () => Promise<GuestReachHotel[]>;
+  listCandidates: () => Promise<GuestReachCandidate[]>;
+};
+
+export type GuestReachRow = {
+  place: Place;
+  /** How the Place reaches guests where it does: attraction, Atlas partner, or a hotel's own facility. */
+  sources: EligibilitySource[];
+  /** The hotels whose guests see this Place right now, by the guest catalogue itself. */
+  visibleAtHotels: { hotelId: string; name: string }[];
+  /** Every hotel's guests see it (and there is at least one hotel). */
+  visibleEverywhere: boolean;
+  /** Hotels that promote it to their own guests ("Recommended by"). Ranking and labels only, never visibility. */
+  promotedBy: { hotelId: string; name: string; featured: boolean }[];
+  /** Why no guest sees it; empty when it is visible. */
+  hiddenReasons: CatalogueExclusionReason[];
+};
+
+/**
+ * ADMIN ONLY. What the guest catalogue shows, Place by Place, for the console's Guest reach screen. The verdict is not
+ * computed here: for every hotel this runs listEligiblePlacesForStay, the same call the guest screens use, and reads
+ * which Places came back and with which promotion. explainCatalogueExclusion only names the reasons a Place that came
+ * back nowhere is hidden.
+ */
+export async function listGuestReachForAdmin(now: Date = new Date(), deps?: GuestReachDependencies): Promise<GuestReachRow[]> {
+  const d = deps ?? (await loadDefaultGuestReachDependencies());
+  const [hotelList, candidates] = await Promise.all([d.listHotels(), d.listCandidates()]);
+  const perHotel = await Promise.all(
+    hotelList.map(async (hotel) => ({
+      hotel,
+      eligible: await listEligiblePlacesForStay({ hotel: { id: hotel.hotelId }, place: { id: hotel.hotelPlaceId } }, now, d),
+    }))
+  );
+
+  return candidates.map(({ place, contracts, facilities }) => {
+    const sources = new Set<EligibilitySource>();
+    const visibleAtHotels: GuestReachRow["visibleAtHotels"] = [];
+    const promotedBy: GuestReachRow["promotedBy"] = [];
+    for (const { hotel, eligible } of perHotel) {
+      const entry = eligible.find((candidate) => candidate.place.id === place.id);
+      if (!entry) continue;
+      sources.add(entry.source);
+      visibleAtHotels.push({ hotelId: hotel.hotelId, name: hotel.name });
+      if (entry.promotion) promotedBy.push({ hotelId: hotel.hotelId, name: hotel.name, featured: entry.promotion.featured });
+    }
+    return {
+      place,
+      sources: [...sources],
+      visibleAtHotels,
+      visibleEverywhere: hotelList.length > 0 && visibleAtHotels.length === hotelList.length,
+      promotedBy,
+      hiddenReasons: visibleAtHotels.length > 0 ? [] : explainCatalogueExclusion({ place, contracts, facilities }, now),
+    };
+  });
+}
+
+async function loadDefaultGuestReachDependencies(): Promise<GuestReachDependencies> {
+  const [base, contractsQ] = await Promise.all([loadDefaultDependencies(), import("@/db/queries/atlas-contracts")]);
+  return { ...base, listHotels: contractsQ.listHotelsForGuestReach, listCandidates: contractsQ.listGuestReachCandidates };
 }
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,12 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-export const WEAK_PASSWORD_MESSAGE = "Too easy to guess. Use at least 8 characters with a letter and a number.";
+/** Each rule says what is actually wrong, so a merely short password is not called "easy to guess". */
+export const PASSWORD_TOO_SHORT_MESSAGE = "Password is too short. Use at least 8 characters.";
+export const PASSWORD_NEEDS_LETTER_MESSAGE = "Add at least one letter to your password.";
+export const PASSWORD_NEEDS_NUMBER_MESSAGE = "Add at least one number to your password.";
+/** Kept for callers that want the full rule in one sentence. */
+export const WEAK_PASSWORD_MESSAGE = "Use at least 8 characters with a letter and a number.";
 
 export const signupSchema = z.object({
   /** Optional; an empty field is stored as no name. */
@@ -21,10 +26,10 @@ export const signupSchema = z.object({
   email: normalisedEmail("Enter a full email address, like name@example.com"),
   password: z
     .string()
-    .min(8, WEAK_PASSWORD_MESSAGE)
+    .min(8, PASSWORD_TOO_SHORT_MESSAGE)
     .max(200, "Use 200 characters or fewer")
-    .regex(/[A-Za-z]/, WEAK_PASSWORD_MESSAGE)
-    .regex(/[0-9]/, WEAK_PASSWORD_MESSAGE),
+    .regex(/[A-Za-z]/, PASSWORD_NEEDS_LETTER_MESSAGE)
+    .regex(/[0-9]/, PASSWORD_NEEDS_NUMBER_MESSAGE),
 });
 
 export const preferencesSchema = z.object({

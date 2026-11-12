@@ -3,6 +3,7 @@ import { findCurrentStayForUser } from "@/db/queries/hotel-stays";
 import { findPreferencesForUser } from "@/db/queries/preferences";
 import { findUserById } from "@/db/queries/users";
 import { loadGuestAchievements } from "@/features/achievements/guest-data";
+import { frontDeskFor } from "@/features/legal/front-desk";
 import { interestsForCategories, priceLabelFor } from "@/features/plan/interests";
 import { describeStay, type GuestProfile } from "./guest-profile";
 
@@ -24,6 +25,9 @@ export async function loadGuestProfile(userId: string, now: Date = new Date()): 
           imageUrl: stay.place.imageUrl,
           ...describeStay({ checkIn: stay.checkIn, expectedCheckOut: stay.expectedCheckOut, checkOut: stay.checkOut, now }),
         }
+      : null,
+    frontDesk: stay
+      ? frontDeskFor({ checkOut: stay.checkOut, expectedCheckOut: stay.expectedCheckOut, hotelName: stay.place.name, phone: stay.place.phone }, now)
       : null,
     achievements: { unlocked: achievements.unlocked.length, total: achievements.total },
     interests: interests.length ? interests.join(", ") : "None chosen",

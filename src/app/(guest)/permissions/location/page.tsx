@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AllowLocationButton } from "@/components/atlas-ui/allow-location-button";
 import { PermissionScreen } from "@/components/atlas-ui/permission-screen";
+import { LOCATION_SENT_WHEN } from "@/features/legal/copy";
 
 /* PermLocation · Location permission — Figma frame 1:810. */
 
@@ -16,7 +17,7 @@ export default function LocationPermissionPage() {
         body="Atlas uses your location to show how far places are and to confirm you are there when you check in."
         reassurances={[
           "Only while Atlas is open.",
-          "Your location is sent only at the moment you check in.",
+          LOCATION_SENT_WHEN,
           "Without it, walk times are measured from Hotel A.",
         ]}
         allowLabel="Allow location"

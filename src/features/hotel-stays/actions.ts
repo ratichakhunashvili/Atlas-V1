@@ -1,5 +1,6 @@
 "use server";
 
+import { entryErrorPath } from "./entry-errors";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/authorization";
@@ -260,7 +261,7 @@ export async function checkInToHotelFormAction(formData: FormData) {
   if (result.ok && result.status === "entered") revalidatePath("/");
 
   if (!result.ok) {
-    redirect(`/?checkinError=${encodeURIComponent(result.error)}`);
+    redirect(entryErrorPath(result.error));
   }
 
   if (result.status === "switch_required") {
@@ -276,7 +277,7 @@ export async function enterHotelFormAction(token: string) {
   if (result.ok && result.status === "entered") revalidatePath("/");
 
   if (!result.ok) {
-    redirect(`/?checkinError=${encodeURIComponent(result.error)}`);
+    redirect(entryErrorPath(result.error));
   }
 
   if (result.status === "switch_required") {
@@ -292,7 +293,7 @@ export async function confirmHotelSwitchFormAction() {
   if (result.ok && result.status === "entered") revalidatePath("/");
 
   if (!result.ok) {
-    redirect(`/?checkinError=${encodeURIComponent(result.error)}`);
+    redirect(entryErrorPath(result.error));
   }
 
   redirect(`/?checkinOk=${encodeURIComponent(result.hotel.name)}`);

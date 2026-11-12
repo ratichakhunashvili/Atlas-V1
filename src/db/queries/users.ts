@@ -3,6 +3,7 @@ import { eq, ilike, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users, type User, type UserRole } from "@/db/schema";
 import { deleteGuestAccount as deleteGuestAccountOperation } from "@/db/operations/account-deletion";
+import { revokeUserSessions as revokeUserSessionsOperation } from "@/db/operations/sessions";
 
 /** Case-insensitive: emails are stored lower-case, and the lookup lower-cases its input too. */
 export async function findUserByEmail(email: string) {
@@ -50,4 +51,9 @@ export async function deleteUser(id: string) {
 /** A guest deleting their own account; see db/operations/account-deletion.ts. */
 export async function deleteGuestAccount(userId: string) {
   return deleteGuestAccountOperation(db, userId);
+}
+
+/** Sign-out: ends every session of the account on every device; see db/operations/sessions.ts. */
+export async function revokeUserSessions(userId: string, now: Date) {
+  return revokeUserSessionsOperation(db, userId, now);
 }

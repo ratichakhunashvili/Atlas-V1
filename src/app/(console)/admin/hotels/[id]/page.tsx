@@ -84,11 +84,11 @@ export default async function EditHotelPage({
       <Card className="space-y-3">
         <h2 className="font-medium">Delete hotel</h2>
         <p className="text-sm text-slate-500">
-          Only possible while no guest has stayed here. Its partnerships, facilities, events and hotel code are deleted with it.
+          Only possible while no guest has stayed here. Its promotions, facilities, events and hotel code are deleted with it.
         </p>
         <form action={deleteHotelAction}>
           <input type="hidden" name="id" value={hotel.id} />
-          <ConfirmSubmit confirm={`Delete ${hotel.place.name}? Its partnerships, facilities, events and hotel code are deleted too. This can't be undone.`}>
+          <ConfirmSubmit confirm={`Delete ${hotel.place.name}? Its promotions, facilities, events and hotel code are deleted too. This can't be undone.`}>
             Delete hotel
           </ConfirmSubmit>
         </form>

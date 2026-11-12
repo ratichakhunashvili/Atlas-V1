@@ -36,8 +36,10 @@ export default async function AdminContractsPage({ searchParams }: { searchParam
       />
       <AdminFlash ok={ok} error={error} />
       <AdminNote>
-        Not live for guests yet. Contracts and kinds start deciding what guests see in the next phase. Today guests still see
-        only their hotel&apos;s facilities and the partners that hotel confirmed.
+        Live for guests. A published, verified business is shown to guests of every hotel only while its Atlas contract is
+        active, confirmed and within its dates; an attraction is shown without one. A place&apos;s kind counts as soon as it is
+        set, even before it is confirmed. Hotel promotion only highlights an Atlas partner to that hotel&apos;s guests; it never
+        makes a place visible.
       </AdminNote>
 
       {unconfirmed.length > 0 && (

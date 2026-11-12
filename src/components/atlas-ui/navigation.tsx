@@ -97,5 +97,3 @@ export function DemoAction({
     </>
   );
 }
-
-export const FRONT_DESK_NOTICE = "Calling isn't connected in this prototype. The real app will use the number Hotel A provides.";

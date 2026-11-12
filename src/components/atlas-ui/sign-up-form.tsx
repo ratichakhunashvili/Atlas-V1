@@ -1,34 +1,53 @@
 "use client";
 
 import { useActionState } from "react";
-import { callbackQuery } from "@/auth/callback";
+import { callbackQuery, hasProtectedCallback } from "@/auth/callback";
 import { signupAction, type SignUpState } from "@/features/users/actions";
+import { ConsentLine, useAuthForm } from "./auth-parts";
 import { ErrorBanner } from "./sign-in-form";
 import { AtlasButton, AtlasField, AtlasLink, Spacer, type } from "./ui";
 
 /*
  * Create account — Figma SignUp (70:3586), with the error states SignUpEmailUsed (70:3615) and
  * SignUpWeak (70:3654) driven by what signupAction returns. On success the guest is signed in and
- * taken into the app.
+ * taken into the app. Browser validation bubbles are off (noValidate): every message is the server's,
+ * shown inline, announced, and focus moves to the first field with a problem.
  */
 
 const PASSWORD_HINT = "At least 8 characters, with a letter and a number.";
-const LINK = "flex h-[44px] items-center font-manrope text-[14px] font-semibold leading-[19px] text-atlas-teal";
+const LINK =
+  "flex min-h-[44px] items-center font-manrope text-[14px] font-semibold leading-[19px] text-atlas-teal underline underline-offset-2";
 
 export function AtlasSignUpForm({ callbackUrl }: { callbackUrl?: string }) {
   const [state, action, pending] = useActionState<SignUpState, FormData>(signupAction, {});
   const errors = state.fieldErrors ?? {};
+  const failed = Boolean(state.emailUsed || state.formError || state.fieldErrors);
+  const { ref, onInput } = useAuthForm(failed ? state : null);
 
   return (
-    <form action={action} className="flex w-full min-h-0 flex-1 flex-col items-start gap-[16px]">
+    <form ref={ref} onInput={onInput} action={action} noValidate className="flex w-full min-h-0 flex-1 flex-col items-start gap-[16px]">
       {/* Where to continue afterwards, e.g. the hotel code the guest scanned before having an account. */}
       {callbackUrl ? <input type="hidden" name="callbackUrl" value={callbackUrl} /> : null}
       <div className="flex w-full flex-col items-start gap-[8px]">
         <h1 className={`w-full ${type.title}`}>Create your account</h1>
-        <p className={`w-full ${type.body} text-atlas-slate`}>Your account keeps your plan and achievements for this stay.</p>
+        {hasProtectedCallback(callbackUrl) ? (
+          <p className={`w-full ${type.body} font-semibold text-atlas-ink`}>Sign in to continue.</p>
+        ) : null}
+        <p className={`w-full ${type.body} text-atlas-slate`}>
+          Your account keeps your plan and achievements. Guests normally start by scanning the code at their hotel.
+        </p>
+        <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">
+          Already have an account?{" "}
+          <AtlasLink
+            to="SignIn"
+            query={callbackQuery(callbackUrl)}
+            className="inline-block py-[8px] font-semibold text-atlas-teal underline underline-offset-2"
+          >
+            Sign in
+          </AtlasLink>
+        </p>
       </div>
 
-      {state.emailUsed ? <ErrorBanner>An account with this email already exists.</ErrorBanner> : null}
       {state.formError ? <ErrorBanner>{state.formError}</ErrorBanner> : null}
 
       <div className="flex w-full flex-col items-start gap-[16px]">
@@ -39,6 +58,7 @@ export function AtlasSignUpForm({ callbackUrl }: { callbackUrl?: string }) {
           autoComplete="given-name"
           defaultValue={state.values?.name}
           error={errors.name}
+          optional
         />
         <AtlasField
           id="email"
@@ -74,9 +94,7 @@ export function AtlasSignUpForm({ callbackUrl }: { callbackUrl?: string }) {
         <AtlasButton type="submit" disabled={pending}>
           {pending ? "Creating account…" : "Create account"}
         </AtlasButton>
-        <p className="w-full text-center font-manrope text-[12px] leading-[1.5] text-atlas-slate">
-          By continuing you agree to Atlas&apos;s Terms and Privacy notice.
-        </p>
+        <ConsentLine />
       </div>
     </form>
   );

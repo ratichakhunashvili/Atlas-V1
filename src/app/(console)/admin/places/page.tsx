@@ -29,7 +29,7 @@ export default async function AdminPlacesPage({ searchParams }: { searchParams: 
     <>
       <AdminPageHeader
         title="Places"
-        description="Every place Atlas knows about. Today a guest sees a place only when it is published, verified, and their hotel's own facility or confirmed partner."
+        description="Every place Atlas knows about. Guests see a place only when it is published, verified and not archived, and it is an attraction, a business with an active Atlas contract, or their own hotel's facility. Hotel promotion only highlights; it never makes a place visible."
         action={<AdminHeaderAction href="/admin/places/new">New place</AdminHeaderAction>}
       />
       <AdminFlash ok={ok} error={error} />

@@ -2,7 +2,9 @@
 
 import { useActionState } from "react";
 import { loginAction, type SignInState } from "@/auth/actions";
-import { AtlasLogo } from "@/components/atlas-ui/asset";
+import Link from "next/link";
+import { AtlasAsset } from "@/components/atlas-ui/asset";
+import { SESSION_ENDED_MESSAGE } from "@/components/atlas-ui/auth-parts";
 import { ErrorBanner } from "@/components/atlas-ui/sign-in-form";
 import { AtlasButton, AtlasField, type } from "@/components/atlas-ui/ui";
 
@@ -11,7 +13,7 @@ import { AtlasButton, AtlasField, type } from "@/components/atlas-ui/ui";
  * here only lands on the admin console. Whether the account may use it is checked by
  * requireAdmin() on the console itself (a non-admin is sent to Access denied).
  */
-export function AdminSignInForm({ callbackUrl }: { callbackUrl?: string }) {
+export function AdminSignInForm({ callbackUrl, sessionEnded = false }: { callbackUrl?: string; sessionEnded?: boolean }) {
   const [state, action, pending] = useActionState<SignInState, FormData>(loginAction, {});
 
   return (
@@ -22,12 +24,15 @@ export function AdminSignInForm({ callbackUrl }: { callbackUrl?: string }) {
     >
       <input type="hidden" name="area" value="admin" />
       {callbackUrl ? <input type="hidden" name="callbackUrl" value={callbackUrl} /> : null}
-      <AtlasLogo tone="teal" width={42} height={48} />
+      <AtlasAsset src="/atlas-ui/logo-teal.png" width={42} height={48} alt="Atlas" />
       <div className="flex w-full flex-col items-start gap-[6px]">
         <h1 id="admin-sign-in-title" className={type.title}>
           Admin sign-in
         </h1>
         <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">For Atlas platform admins only.</p>
+        {sessionEnded ? (
+          <p className="font-manrope text-[14px] font-semibold leading-[19px] text-atlas-ink">{SESSION_ENDED_MESSAGE}</p>
+        ) : null}
       </div>
       {state.error ? <ErrorBanner>{state.error}</ErrorBanner> : null}
       <AtlasField
@@ -43,6 +48,9 @@ export function AdminSignInForm({ callbackUrl }: { callbackUrl?: string }) {
       <AtlasButton type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </AtlasButton>
+      <Link href="/" className="flex h-[44px] w-full items-center justify-center font-manrope text-[15px] font-semibold text-atlas-teal">
+        Back to the Atlas app
+      </Link>
     </form>
   );
 }

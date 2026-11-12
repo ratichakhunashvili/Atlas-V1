@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { AtlasAsset, AtlasIcon, AtlasLogo } from "@/components/atlas-ui/asset";
 import { AtlasButton, AtlasLink } from "@/components/atlas-ui/ui";
+import { hotelLabel } from "@/features/legal/stay-hotel";
+import { loadLegalViewer } from "@/features/legal/viewer";
 
 /* Welcome · Welcome (after hotel QR) — Figma frame 1:690. */
 
@@ -12,20 +14,18 @@ const STEPS = [
   "Visit, check in, unlock achievements",
 ];
 
-export default function WelcomePage() {
+export default async function WelcomePage() {
+  const viewer = await loadLegalViewer();
+  const hotel = hotelLabel(viewer.hotelName);
   return (
     <main className="atlas-dark relative flex min-h-[100dvh] w-full flex-col items-center bg-atlas-teal">
+      {/* One stretched copy at every width (the artwork is built to stretch), so there are no repeat seams.
+          Wider screens start it below the tagline; short landscape screens have no room for it. */}
       <AtlasAsset
         src="/atlas-ui/pattern-beige-wave.svg"
         width={390}
         height={139}
-        className="pointer-events-none absolute inset-x-0 top-[196px] h-auto w-full max-w-none wide:hidden"
-      />
-      {/* Wider screens repeat the same artwork across the width rather than stretching it. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-[196px] hidden h-[139px] bg-repeat-x wide:block short:top-[24px]"
-        style={{ backgroundImage: "url(/atlas-ui/pattern-beige-wave.svg)" }}
+        className="pointer-events-none absolute inset-x-0 top-[196px] h-[139px] w-full max-w-none wide:top-[248px] short:hidden"
       />
 
       <div className="relative flex w-full max-w-[560px] flex-col items-start gap-[16px] px-[24px] pt-[calc(72px+env(safe-area-inset-top))] short:pt-[24px]">
@@ -41,14 +41,14 @@ export default function WelcomePage() {
       <div className="relative flex w-full max-w-[560px] flex-col items-start gap-[14px] px-[24px]">
         <div className="flex items-center gap-[8px] rounded-[14px] bg-atlas-paper/12 px-[12px] py-[6px]">
           <AtlasIcon src="/atlas-ui/icon-home-light.svg" size={16} />
-          <p className="font-manrope text-[13px] leading-[18px] text-atlas-paper">Exploring with Hotel A</p>
+          <p className="font-manrope text-[13px] leading-[18px] text-atlas-paper">Exploring with {hotel}</p>
         </div>
         <h1 className="w-full font-grotesk text-[30px] font-bold leading-[1.12] text-atlas-paper">
           Your stay is a starting point.
         </h1>
         <p className="w-full font-manrope text-[16px] leading-[1.55] text-atlas-linen">
-          Tell us what you&apos;re curious about and how much time you have. We&apos;ll show you what you can do from
-          Hotel A.
+          Tell us what you&apos;re curious about and how much time you have. We&apos;ll show you what you can do from{" "}
+          {hotel}.
         </p>
       </div>
 
@@ -69,7 +69,7 @@ export default function WelcomePage() {
         </AtlasButton>
         <p className="w-full text-center font-manrope text-[12px] leading-[1.5] text-atlas-beige">
           You&apos;ll need an Atlas account. We only ask for what we need to plan your visits.{" "}
-          <AtlasLink to="PrivacyPublic" className="atlas-hit inline-block py-[4px] text-atlas-beige underline underline-offset-2">
+          <AtlasLink to="PrivacyPublic" query="#privacy-notice" className="atlas-hit inline-block py-[4px] text-atlas-beige underline underline-offset-2">
             Privacy
           </AtlasLink>
         </p>

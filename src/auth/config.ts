@@ -1,5 +1,6 @@
 import type { NextAuthConfig } from "next-auth";
 import type { UserRole } from "@/db/schema";
+import { authTimeFor } from "@/lib/session-standing";
 
 // Edge-safe base config: no db/bcrypt imports here. This is what proxy.ts
 // uses (via its own NextAuth(authConfig) call) so the Node-only Credentials
@@ -14,6 +15,9 @@ export const authConfig = {
       if (user) {
         token.id = user.id as string;
         token.role = (user as { role: UserRole }).role;
+        // Stamped once, at sign-in, and never refreshed: sessions_valid_after (sign-out, password reset) ends every
+        // token signed in before it. See lib/session-standing.ts.
+        token.authTime = authTimeFor(new Date());
       }
       return token;
     },
@@ -22,6 +26,7 @@ export const authConfig = {
         session.user.id = token.id as string;
         session.user.role = token.role as UserRole;
       }
+      if (typeof token.authTime === "number") session.authTime = token.authTime;
       return session;
     },
   },

@@ -19,7 +19,7 @@ import type { ScreenKey } from "@/components/atlas-ui/screen-hrefs";
 export type FieldHeight = 44 | 48;
 
 const CONTROL =
-  "w-full rounded-[12px] border border-atlas-umber bg-white px-[14px] font-manrope text-[16px] leading-[22px] text-atlas-ink placeholder:text-atlas-slate/70 focus:border-atlas-teal";
+  "w-full rounded-[12px] border border-atlas-umber bg-white px-[14px] font-manrope text-[16px] leading-[22px] text-atlas-ink placeholder:text-atlas-slate focus:border-atlas-teal";
 
 export function AdminFormCard({
   title,

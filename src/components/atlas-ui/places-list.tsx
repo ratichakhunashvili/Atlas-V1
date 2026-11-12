@@ -50,7 +50,7 @@ export function PlacesList() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search places"
-            className="min-w-0 flex-1 bg-transparent font-manrope text-[16px] leading-[22px] text-atlas-ink outline-none placeholder:text-atlas-slate/70 [&::-webkit-search-cancel-button]:hidden"
+            className="min-w-0 flex-1 bg-transparent font-manrope text-[16px] leading-[22px] text-atlas-ink outline-none placeholder:text-atlas-slate [&::-webkit-search-cancel-button]:hidden"
           />
           {searching ? (
             <button

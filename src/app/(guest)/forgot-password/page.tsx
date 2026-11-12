@@ -1,25 +1,14 @@
 import type { Metadata } from "next";
-import { AtlasBackButton, AtlasButton, AtlasField, FlowScreen, Spacer, type } from "@/components/atlas-ui/ui";
+import { ForgotPasswordForm, RecoveryUnavailable } from "@/features/password-reset/forgot-password-form";
+import { isMailConfigured } from "@/services/mail";
 
 /* ForgotPassword · Reset password — Figma frame 1:1271. */
 
 export const metadata: Metadata = { title: "Reset your password" };
 
+// Whether mail is configured is a runtime fact, so this page is never prerendered.
+export const dynamic = "force-dynamic";
+
 export default function ForgotPasswordPage() {
-  return (
-    <main>
-      <FlowScreen>
-        <AtlasBackButton to="SignIn" />
-        <div className="flex w-full flex-col items-start gap-[8px]">
-          <h1 className={`w-full ${type.title}`}>Reset your password</h1>
-          <p className={`w-full ${type.body} text-atlas-slate`}>
-            Enter your email and we will send you a link to set a new password.
-          </p>
-        </div>
-        <AtlasField id="reset-email" label="Email" type="email" placeholder="you@example.com" autoComplete="email" />
-        <Spacer />
-        <AtlasButton to="ForgotSent">Send reset link</AtlasButton>
-      </FlowScreen>
-    </main>
-  );
+  return isMailConfigured() ? <ForgotPasswordForm /> : <RecoveryUnavailable />;
 }

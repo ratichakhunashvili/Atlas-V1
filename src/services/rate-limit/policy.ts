@@ -35,6 +35,8 @@ export const RATE_LIMIT_RULES: Record<RateLimitScope, RateLimitRule> = {
   route_retry: { limit: 5, windowSeconds: 15 * 60, counts: "all" },
   // Looking up guest stays one at a time is support work; dozens an hour is browsing.
   support_lookup: { limit: 30, windowSeconds: 60 * 60, counts: "all" },
+  // A full export of one account's data: a handful an hour covers retries, more is scraping or a stuck client.
+  data_export: { limit: 5, windowSeconds: 60 * 60, counts: "all" },
 };
 
 /** The moment a scope's rolling window opens, given "now". */

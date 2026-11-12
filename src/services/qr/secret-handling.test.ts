@@ -10,7 +10,8 @@ import { join } from "node:path";
  * raw-token habits.
  */
 
-const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+// Line endings normalised: the checkout may be CRLF (core.autocrlf), and the body slices below look for a closing brace line.
+const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8").replace(/\r\n/g, "\n");
 
 /** Source with comments removed, for assertions about what the code DOES rather than what it says. */
 const stripComments = (source: string) =>

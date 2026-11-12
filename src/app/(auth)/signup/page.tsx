@@ -11,7 +11,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: Promi
   const { callbackUrl } = await searchParams;
   return (
     <main>
-      <FlowScreen>
+      <FlowScreen compact>
         <AtlasBackButton to="SignIn" query={callbackQuery(callbackUrl)} />
         <AtlasSignUpForm callbackUrl={callbackUrl} />
       </FlowScreen>

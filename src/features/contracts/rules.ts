@@ -5,7 +5,7 @@ import type { AtlasContractStatus, PlaceKind } from "@/db/schema";
  * auth: the server actions load the facts, then ask these. The database constraints (one active / one pending
  * contract per Place, active requires confirmation, ended requires a date, valid window) stand behind them.
  *
- * Phase C1: nothing here changes what guests see. Guest eligibility does not read contracts or kinds yet.
+ * Guest eligibility (services/eligibility) reads contracts and kinds, so these decisions change what guests see.
  */
 
 /**
@@ -64,4 +64,13 @@ export function validateKindChange(input: {
     return "End this place's Atlas contract before changing it from Business.";
   }
   return null;
+}
+
+/**
+ * What to tell the admin when the confirm UPDATE matched nothing. Re-read the contract: if it is now active, an
+ * earlier submit (a double click, another tab) already confirmed it, so the admin sees success and no second audit
+ * entry is written. Anything else is a real refusal.
+ */
+export function confirmMissOutcome(now: { status: AtlasContractStatus } | null): "already_confirmed" | "refused" {
+  return now?.status === "active" ? "already_confirmed" : "refused";
 }

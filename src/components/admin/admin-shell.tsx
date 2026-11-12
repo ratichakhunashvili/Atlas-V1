@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AtlasLogo } from "@/components/atlas-ui/asset";
 import { adminLogoutAction } from "@/auth/actions";
+import { SignOutButton } from "@/components/atlas-ui/sign-out-button";
 import { developmentToolsBlocked } from "@/services/deployment/environment";
 import { AdminNav } from "./admin-nav";
 
@@ -32,9 +33,7 @@ export function AdminShell({ email, children }: { email: string; children: React
         <div className="order-2 ml-auto flex items-center gap-[12px] px-[8px] lg:order-4 lg:ml-0 lg:flex-col lg:items-start lg:gap-[2px] lg:py-[12px]">
           <p className="hidden whitespace-nowrap font-manrope text-[12px] leading-[16px] text-atlas-beige sm:block">{email}</p>
           <form action={adminLogoutAction}>
-            <button type="submit" className="flex h-[44px] items-center whitespace-nowrap font-manrope text-[14px] font-semibold leading-[19px] text-atlas-paper">
-              Sign out
-            </button>
+            <SignOutButton className="flex h-[44px] items-center whitespace-nowrap font-manrope text-[14px] font-semibold leading-[19px] text-atlas-paper" />
           </form>
         </div>
       </aside>

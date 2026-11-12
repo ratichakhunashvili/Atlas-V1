@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DemoAction, FRONT_DESK_NOTICE } from "@/components/atlas-ui/navigation";
+import { FrontDeskCall } from "@/components/atlas-ui/front-desk";
 import { AtlasBadge, AtlasButton, FlowScreen, Spacer, type } from "@/components/atlas-ui/ui";
 
 /* QRInvalid · Hotel code not recognised — Figma frame 1:1254. */
@@ -25,12 +25,12 @@ export default function QrInvalidPage() {
           <AtlasButton to="Welcome" icon="/atlas-ui/icon-qr-light-19.svg">
             Scan again
           </AtlasButton>
-          <DemoAction
-            className="flex h-[44px] w-full items-center justify-center font-manrope text-[15px] font-semibold leading-[20px] text-atlas-teal"
-            notice={FRONT_DESK_NOTICE}
-          >
-            Call the front desk
-          </DemoAction>
+          {/* Nobody's stay is known here (the code was not recognised), so there is no hotel number to call. */}
+          <FrontDeskCall
+            frontDesk={null}
+            className=""
+            fallbackClassName={`flex min-h-[44px] w-full items-center justify-center ${type.body} text-atlas-slate`}
+          />
         </div>
       </FlowScreen>
     </main>

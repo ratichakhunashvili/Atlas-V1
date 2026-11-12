@@ -194,6 +194,7 @@ export function AtlasField({
   defaultValue,
   autoComplete,
   required,
+  optional,
 }: {
   id: string;
   label: string;
@@ -204,13 +205,16 @@ export function AtlasField({
   defaultValue?: string;
   autoComplete?: string;
   required?: boolean;
+  /** Marks an optional field in its label, so "(optional)" is read out and not just implied. */
+  optional?: boolean;
 }) {
   const message = error ?? hint;
-  const messageId = message ? `${id}-${error ? "error" : "hint"}` : undefined;
+  const messageId = message ? `${id}-message` : undefined;
   return (
     <div className="flex w-full flex-col items-start gap-[6px]">
       <label htmlFor={id} className={type.label}>
         {label}
+        {optional ? <span className="font-normal text-atlas-slate"> (optional)</span> : null}
       </label>
       <input
         id={id}
@@ -222,15 +226,18 @@ export function AtlasField({
         required={required}
         aria-describedby={messageId}
         aria-invalid={error ? true : undefined}
-        className={`h-[52px] w-full rounded-[12px] bg-white font-manrope text-[16px] leading-[22px] text-atlas-ink placeholder:text-atlas-slate/70 focus:outline-2 focus:outline-offset-0 focus:outline-atlas-teal ${
+        className={`h-[52px] w-full rounded-[12px] bg-white font-manrope text-[16px] leading-[22px] text-atlas-ink text-ellipsis placeholder:text-atlas-slate focus:outline-2 focus:outline-offset-0 focus:outline-atlas-teal ${
           error ? "border-2 border-atlas-danger px-[13px]" : "border border-atlas-umber px-[14px] focus:border-atlas-teal"
         }`}
       />
-      {message ? (
-        <p id={messageId} className={`font-manrope text-[13px] leading-[18px] ${error ? "text-atlas-danger" : "text-atlas-slate"}`}>
-          {message}
-        </p>
-      ) : null}
+      {/* Always rendered, so a screen reader announces an error that appears after a submit. */}
+      <p
+        id={`${id}-message`}
+        aria-live="polite"
+        className={`font-manrope text-[13px] leading-[18px] empty:hidden ${error ? "text-atlas-danger" : "text-atlas-slate"}`}
+      >
+        {message}
+      </p>
     </div>
   );
 }
@@ -259,15 +266,18 @@ export function FlowScreen({
   children,
   gap = 16,
   className = "",
+  compact = false,
 }: {
   children: ReactNode;
   gap?: number;
   className?: string;
+  /** Wide screens: size the card to its content instead of a tall fixed minimum, so short forms leave no empty gap. */
+  compact?: boolean;
 }) {
   return (
-    <div className="flex min-h-[100dvh] w-full justify-center md:bg-atlas-dune md:px-[24px] md:py-[32px]">
+    <div className="flex min-h-[100dvh] w-full justify-center md:bg-atlas-dune md:px-[24px] md:py-[32px] short:md:py-[12px]">
       <div
-        className={`relative flex min-h-[100dvh] w-full max-w-[560px] flex-col items-start bg-atlas-paper px-[20px] pb-[calc(28px+env(safe-area-inset-bottom))] pt-[calc(16px+env(safe-area-inset-top))] md:min-h-[min(844px,calc(100dvh-64px))] md:rounded-[24px] md:border md:border-atlas-beige md:px-[32px] md:shadow-[0px_10px_40px_0px_rgba(28,41,41,0.08)] ${className}`}
+        className={`relative flex min-h-[100dvh] w-full max-w-[560px] flex-col items-start bg-atlas-paper px-[20px] pb-[calc(28px+env(safe-area-inset-bottom))] pt-[calc(16px+env(safe-area-inset-top))] ${compact ? "md:min-h-0 md:h-fit md:self-center" : "md:min-h-[min(844px,calc(100dvh-64px))]"} md:rounded-[24px] md:border md:border-atlas-beige md:px-[32px] md:shadow-[0px_10px_40px_0px_rgba(28,41,41,0.08)] ${className}`}
         style={{ gap }}
       >
         {children}

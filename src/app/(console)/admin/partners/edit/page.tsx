@@ -4,9 +4,9 @@ import { AdminFormCard, AdminInput, AdminSelect, AdminTextarea, FormActions, For
 import { AdminPageHeader } from "@/components/admin/page-parts";
 import { sampleScreenOrRedirect } from "@/components/admin/sample-screen";
 
-/* AdminPartnershipForm · Partnership: link or edit — Figma frame 70:1311. */
+/* AdminPartnershipForm · Promotion: add or edit — Figma frame 70:1311 (design sample; the live screen is the hotel's Promotion page). */
 
-export const metadata: Metadata = { title: "Admin · Link a place to a hotel" };
+export const metadata: Metadata = { title: "Admin · Promote a place for a hotel" };
 
 export default function AdminPartnershipFormPage() {
   sampleScreenOrRedirect("/admin/partners");
@@ -14,10 +14,10 @@ export default function AdminPartnershipFormPage() {
     <>
       <AdminPageHeader
         form
-        title="Link a place to a hotel"
-        description="Applies to the selected hotel only. Another hotel needs its own partnership."
+        title="Promote a place for a hotel"
+        description="Applies to the selected hotel only. Another hotel needs its own promotion. Only an Atlas partner can be promoted."
       />
-      <AdminFormCard title="Partnership">
+      <AdminFormCard title="Promotion">
         <FormRow>
           <AdminSelect id="partnership-hotel" label="Hotel" options={HOTEL_NAMES} defaultValue="Hotel A" height={48} />
           <AdminSelect id="partnership-place" label="Place" options={PLACE_NAMES} defaultValue="Partner Place 3" height={48} />
@@ -29,14 +29,14 @@ export default function AdminPartnershipFormPage() {
           defaultValue="Revoked"
           height={48}
           className="sm:w-[300px]"
-          hint={"Revoked and expired partnerships stop showing the place to that hotel's guests. Past plans keep their history."}
+          hint={"Revoked and expired promotions only remove the promotion for that hotel's guests. The place stays visible while its Atlas contract is in force, and past plans keep their history."}
         />
         <FormRow>
           <AdminInput id="partnership-starts" label="Starts" defaultValue="[start date]" height={48} />
           <AdminInput id="partnership-ends" label="Ends" defaultValue="[end date]" height={48} hint="Leave empty for no end date." />
         </FormRow>
         <AdminTextarea id="partnership-notes" label="Internal notes" defaultValue="[Visible to admins only]" />
-        <FormActions save="Save partnership" to="AdminPartnerships" />
+        <FormActions save="Save promotion" to="AdminPartnerships" />
       </AdminFormCard>
     </>
   );

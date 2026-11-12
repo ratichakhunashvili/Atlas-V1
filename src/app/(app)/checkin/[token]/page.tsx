@@ -1,3 +1,4 @@
+import { entryErrorPath } from "@/features/hotel-stays/entry-errors";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
@@ -29,7 +30,7 @@ export default async function CheckInPage({
   const preview = await previewHotelEntryByToken(token);
 
   if (!preview.ok) {
-    redirect(`/?checkinError=${encodeURIComponent(preview.error)}`);
+    redirect(entryErrorPath(preview.error));
   }
 
   // Nothing to decide: they are already staying here. Still no write.

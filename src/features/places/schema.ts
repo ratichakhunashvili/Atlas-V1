@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PLACE_CATEGORIES, PUBLICATION_STATUSES, VERIFICATION_STATUSES } from "@/db/schema";
+import { normalizePhoneForTel } from "@/features/legal/front-desk";
 
 const optionalText = (max: number) =>
   z
@@ -23,7 +24,13 @@ export const placeSchema = z.object({
   address: optionalText(300),
   imageUrl: optionalText(500),
   website: optionalText(300),
-  phone: optionalText(50),
+  /**
+   * Optional, but when given it must be dialable exactly as the guest's "Call <hotel>" link will dial it
+   * (features/legal/front-desk.ts): digits with an optional leading +, spaces, dots, dashes or brackets.
+   */
+  phone: optionalText(50).refine((value) => value === undefined || normalizePhoneForTel(value) !== null, {
+    message: "Enter the phone number with digits only (6 to 15), optionally starting with +, for example +995 32 200 0000.",
+  }),
   /**
    * How long a guest should expect to spend here. Optional: left blank, the Advisor
    * uses an explicit per-category estimate instead. Bounded to match the places CHECK,

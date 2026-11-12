@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, gt, gte, ilike, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { achievementUnlocks, achievements, hotelFacilities, hotelPartnerships, places, type Place, type PlaceCategory, type PublicationStatus, type VerificationStatus } from "@/db/schema";
+import { achievementUnlocks, achievements, places, type Place, type PlaceCategory, type PublicationStatus, type VerificationStatus } from "@/db/schema";
 import type { DuplicateCandidate } from "@/services/catalog/duplicates";
 import { boundingBoxForRadius, distanceMeters, type LatLng } from "@/lib/geo";
 
@@ -228,62 +228,6 @@ export async function setPlaceArchived(id: string, archived: boolean) {
     .returning();
   return place ?? null;
 }
-
-/**
- * The experiences catalog: every Place that is not a hotel, with how many hotels
- * have an ACTIVE, in-window partnership with it and how many own it as an ACTIVE
- * facility — the relationships that let a guest see it today.
- *
- * A VIEW over the canonical Place model. "Attraction" is not a separate entity —
- * it is a Place that guests might visit, so this is the Places table filtered and
- * annotated, never a second table that could drift from it.
- *
- * The counts say whether a Place can reach any guest at all: a published, verified
- * Place with no relationship to any hotel is invisible to everyone, which is easy
- * to create by accident and impossible to see from the Place alone.
- */
-export async function listExperiencePlacesForAdmin() {
-  const partnershipCount = db
-    .select({
-      placeId: hotelPartnerships.placeId,
-      total: sql<number>`count(*)::int`.as("partnership_total"),
-    })
-    .from(hotelPartnerships)
-    .where(
-      and(
-        eq(hotelPartnerships.status, "active"),
-        or(isNull(hotelPartnerships.startsAt), lte(hotelPartnerships.startsAt, sql`now()`)),
-        or(isNull(hotelPartnerships.endsAt), gt(hotelPartnerships.endsAt, sql`now()`))
-      )
-    )
-    .groupBy(hotelPartnerships.placeId)
-    .as("partnership_counts");
-
-  const facilityCount = db
-    .select({
-      placeId: hotelFacilities.placeId,
-      total: sql<number>`count(*)::int`.as("facility_total"),
-    })
-    .from(hotelFacilities)
-    .where(eq(hotelFacilities.status, "active"))
-    .groupBy(hotelFacilities.placeId)
-    .as("facility_counts");
-
-  return db
-    .select({
-      place: places,
-      partnerships: sql<number>`coalesce(${partnershipCount.total}, 0)`,
-      facilities: sql<number>`coalesce(${facilityCount.total}, 0)`,
-    })
-    .from(places)
-    .leftJoin(partnershipCount, eq(partnershipCount.placeId, places.id))
-    .leftJoin(facilityCount, eq(facilityCount.placeId, places.id))
-    // Hotels are administered in their own section; this is the catalog of things to visit.
-    .where(and(ne(places.category, "hotel"), ne(places.kind, "hotel")))
-    .orderBy(places.name);
-}
-
-export type AdminExperiencePlace = Awaited<ReturnType<typeof listExperiencePlacesForAdmin>>[number];
 
 /**
  * ADMIN ONLY: the pool a new Place is checked against for likely duplicates — everything within 300 m, plus any

@@ -188,3 +188,65 @@ export function filterEligibleByRadius(places: readonly EligiblePlace[], center:
     .sort((a, b) => a.distance - b.distance)
     .map(({ entry }) => entry);
 }
+
+// ---------------------------------------------------------------------------
+// Admin explanation (Guest reach)
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a Place is not in any guest's catalogue, in terms an admin can act on. EXPLANATION ONLY: whether a Place is
+ * visible is always decided by buildEligiblePlaces through listEligiblePlacesForStay (see listGuestReachForAdmin in
+ * index.ts); this only names the reasons, from the same facts the rule above checks.
+ */
+export type CatalogueExclusionReason =
+  | "archived"
+  | "unpublished"
+  | "unverified"
+  | "no_contract"
+  | "contract_pending_review"
+  | "contract_suspended"
+  | "contract_ended"
+  | "contract_unconfirmed"
+  | "contract_not_started"
+  | "contract_expired"
+  | "facility_inactive";
+
+export type ExclusionInput = {
+  place: Pick<Place, "kind" | "publicationStatus" | "verificationStatus" | "archivedAt">;
+  contracts: readonly { status: AtlasContractStatus; confirmedAt: Date | null; startsAt: Date | null; endsAt: Date | null }[];
+  facilities: readonly { status: FacilityStatus }[];
+};
+
+/** The contract reason for a business with no contract in force: the most actionable one when it has several. */
+function contractReason(contracts: ExclusionInput["contracts"], now: Date): CatalogueExclusionReason | null {
+  if (contracts.some((contract) => isContractInForce(contract, now))) return null;
+  const active = contracts.find((contract) => contract.status === "active");
+  if (active) {
+    if (active.confirmedAt === null) return "contract_unconfirmed";
+    if (active.startsAt !== null && active.startsAt.getTime() > now.getTime()) return "contract_not_started";
+    return "contract_expired";
+  }
+  if (contracts.some((contract) => contract.status === "suspended")) return "contract_suspended";
+  if (contracts.some((contract) => contract.status === "pending_review")) return "contract_pending_review";
+  if (contracts.some((contract) => contract.status === "ended")) return "contract_ended";
+  return "no_contract";
+}
+
+export function explainCatalogueExclusion(input: ExclusionInput, now: Date): CatalogueExclusionReason[] {
+  const reasons: CatalogueExclusionReason[] = [];
+  const { place } = input;
+  if (place.archivedAt !== null) reasons.push("archived");
+  if (place.publicationStatus !== "published") reasons.push("unpublished");
+  if (place.verificationStatus !== "verified") reasons.push("unverified");
+
+  if (input.facilities.length > 0) {
+    // A hotel facility reaches guests through its facility row, never through a contract.
+    if (!input.facilities.some((row) => row.status === "active")) reasons.push("facility_inactive");
+    return reasons;
+  }
+  if (place.kind === "business") {
+    const reason = contractReason(input.contracts, now);
+    if (reason) reasons.push(reason);
+  }
+  return reasons;
+}

@@ -15,6 +15,10 @@ export const AUTH_RATE_LIMIT_SCOPES = [
   "sign_in_ip",
   /** Any sign-up attempt from one network. */
   "sign_up_ip",
+  /** A password-reset request for one email address (counted whether or not an account exists). */
+  "password_reset_email",
+  /** A password-reset request from one network. */
+  "password_reset_ip",
 ] as const;
 export type AuthRateLimitScope = (typeof AUTH_RATE_LIMIT_SCOPES)[number];
 

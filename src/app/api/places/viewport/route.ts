@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { currentSession } from "@/lib/authorization";
 import { viewportQuerySchema } from "@/features/places/nearby-schema";
 import { getEligibleMapPlacesForGuest } from "@/services/eligibility";
 
@@ -10,8 +10,9 @@ import { getEligibleMapPlacesForGuest } from "@/services/eligibility";
 // service clamps an oversized box and returns at most MAP_RESULT_CAP Places, with `truncated` when it cut. No
 // hotelId/placeId is read from the request. No valid stay => an empty list, never "everything nearby".
 export async function GET(request: Request) {
-  const session = await auth();
-  if (!session?.user) {
+  // A token whose session was ended (signed out elsewhere, password reset, account deleted) is refused like no token.
+  const session = await currentSession();
+  if (session.status !== "signed-in") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
