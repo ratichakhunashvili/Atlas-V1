@@ -10,12 +10,14 @@ import { findCurrentStayForUser } from "@/db/queries/hotel-stays";
 import { listPlaceVisitsForUser } from "@/db/queries/place-visits";
 import { findPreferencesForUser } from "@/db/queries/preferences";
 import { checkInToHotelFormAction } from "@/features/hotel-stays/actions";
+import { STAY_DATES_HREF, guestStayState, stayStateCopy } from "@/features/hotel-stays/stay-state";
 import { stayHeaderSummary } from "@/features/plan/interests";
 import { enterTestStayFormAction } from "@/features/test-entry/actions";
 import { isTestEntryOffered } from "@/features/test-entry/offer";
 import { requireUser } from "@/lib/authorization";
 import { getDailyPlanForUser } from "@/services/advisor/daily-plan";
-import { getEligibleMapPlacesForGuest } from "@/services/eligibility";
+import { getEligibleMapPlacesForGuest, listUpcomingHotelEventsForGuest } from "@/services/eligibility";
+import { eventsByVenue } from "@/features/hotel-events/guest-display";
 import { listGuestPlaceModels } from "@/services/map3d";
 import { boundsAround } from "@/services/eligibility/viewport";
 
@@ -49,11 +51,14 @@ export default async function HomePage({
   const user = await requireUser();
   const stay = await findCurrentStayForUser(user.id);
   const area = stay ? boundsAround({ lat: stay.place.latitude, lng: stay.place.longitude }, CATALOGUE_HALF_SPAN_DEGREES) : undefined;
-  const [map, testEntryOffered, models] = await Promise.all([
-    getEligibleMapPlacesForGuest({ userId: user.id, bounds: area, radiusMeters: CATALOGUE_RADIUS_METERS }),
+  const now = new Date();
+  const [map, testEntryOffered, models, events] = await Promise.all([
+    getEligibleMapPlacesForGuest({ userId: user.id, bounds: area, radiusMeters: CATALOGUE_RADIUS_METERS }, now),
     isTestEntryOffered(user.id),
     // Only enabled models of Places in this guest's own catalogue, plus their own hotel's (services/map3d).
     listGuestPlaceModels(user.id),
+    // The guest's OWN hotel's upcoming events, venue eligibility checked at the event's time (services/eligibility).
+    listUpcomingHotelEventsForGuest({ userId: user.id }, now),
   ]);
 
   // Start downloading this guest's model files while the page and map are still loading, so they are ready (or close)
@@ -61,10 +66,13 @@ export default async function HomePage({
   for (const model of models) preload(model.fileUrl, { as: "fetch", crossOrigin: "anonymous" });
 
   if (map.status !== "ok" || !stay) {
-    // A stay that exists but is outside its dates gets its own words; either way, no places are shown.
-    const now = new Date();
-    const notYet = stay !== null && stay.checkOut === null && stay.checkIn > now;
-    const ended = stay !== null && stay.checkOut === null && !notYet;
+    // A stay that exists but is outside its dates gets its own words; either way, no places are shown. The rule is
+    // shared with Things to do, Scan and the stay pill (features/hotel-stays/stay-state.ts).
+    const state = guestStayState(
+      stay ? { hotelName: stay.place.name, checkIn: stay.checkIn, checkOut: stay.checkOut, expectedCheckOut: stay.expectedCheckOut } : null,
+      new Date()
+    );
+    const stateCopy = state.kind === "not_started" || state.kind === "ended" ? stayStateCopy(state) : null;
     return (
       <section
         aria-labelledby="join-title"
@@ -73,15 +81,22 @@ export default async function HomePage({
         <div className="flex w-full max-w-[560px] flex-col items-start gap-[16px] bg-atlas-paper px-[20px] pb-[calc(28px+env(safe-area-inset-bottom))] pt-[calc(32px+env(safe-area-inset-top))] md:h-fit md:rounded-[24px] md:border md:border-atlas-beige md:px-[32px]">
           <p className={type.eyebrow}>Atlas</p>
           <h1 id="join-title" className={`w-full ${type.title}`}>
-            {notYet ? "Your stay hasn't started yet" : ended ? "Your stay has ended" : "Join your hotel"}
+            {stateCopy ? stateCopy.title : "Join your hotel"}
           </h1>
           <p className={`w-full ${type.body} text-atlas-slate`}>
-            {notYet
-              ? `Your stay at ${stay.place.name} starts on ${stay.checkIn.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}. Its places appear here from then.`
-              : ended
-              ? `Your stay at ${stay.place.name} is past its dates, so Atlas isn't showing its places. Staying somewhere new? Type that hotel's code to start.`
+            {stateCopy
+              ? stateCopy.body
               : "Atlas shows what you can do from your hotel. Type the code from the Atlas card at reception to start your stay."}
           </p>
+          {stateCopy ? (
+            // The guest declared these dates and may have mistyped them: the stay pill's date editor fixes that.
+            <Link
+              href={STAY_DATES_HREF}
+              className="flex min-h-[48px] w-full items-center justify-center rounded-[14px] border border-atlas-teal font-manrope text-[15px] font-semibold text-atlas-teal"
+            >
+              Change your dates
+            </Link>
+          ) : null}
           {checkinError ? (
             <p role="alert" className="w-full rounded-[12px] border border-atlas-danger bg-atlas-danger-soft px-[14px] py-[12px] font-manrope text-[14px] leading-[1.45] text-atlas-danger">
               {checkinError}
@@ -141,6 +156,8 @@ export default async function HomePage({
     categories: saved?.categories ?? [],
     budget: saved?.budget ?? null,
   });
+  // Each event goes on its venue, only if that venue is already in this map's list: an event never adds a place.
+  const placeEvents = eventsByVenue(events, map.places.map((place) => place.id), now);
 
   return (
     <>
@@ -162,6 +179,7 @@ export default async function HomePage({
           priceLevel: place.priceLevel,
           imageUrl: place.imageUrl,
           recommended: place.recommended,
+          events: placeEvents.get(place.id) ?? [],
           at: [place.longitude, place.latitude],
         }))}
       />

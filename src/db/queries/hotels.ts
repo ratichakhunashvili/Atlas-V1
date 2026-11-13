@@ -2,6 +2,7 @@ import "server-only";
 import { and, count, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { hotelFacilities, hotelPartnerships, hotels, places, qrCredentials } from "@/db/schema";
+import { markPlaceAsHotel } from "@/db/operations/hotel-admin";
 
 export async function listHotelsWithPlace() {
   return db
@@ -67,12 +68,6 @@ export async function updateHotelPlace(id: string, placeId: string) {
     if (hotel) await markPlaceAsHotel(tx, placeId);
     return hotel ?? null;
   });
-}
-
-/** A hotel's anchor Place is certainly a hotel (docs/catalogue-model-plan.md): record that kind as confirmed. */
-async function markPlaceAsHotel(tx: Pick<typeof db, "update">, placeId: string) {
-  const now = new Date();
-  await tx.update(places).set({ kind: "hotel", kindConfirmedAt: now, updatedAt: now }).where(eq(places.id, placeId));
 }
 
 export async function deleteHotel(id: string) {

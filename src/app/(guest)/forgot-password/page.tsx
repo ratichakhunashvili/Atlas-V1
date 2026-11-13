@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ForgotPasswordForm, RecoveryUnavailable } from "@/features/password-reset/forgot-password-form";
-import { isMailConfigured } from "@/services/mail";
+import { isRecoveryAvailable } from "@/services/mail";
 
 /* ForgotPassword · Reset password — Figma frame 1:1271. */
 
@@ -10,5 +10,5 @@ export const metadata: Metadata = { title: "Reset your password" };
 export const dynamic = "force-dynamic";
 
 export default function ForgotPasswordPage() {
-  return isMailConfigured() ? <ForgotPasswordForm /> : <RecoveryUnavailable />;
+  return isRecoveryAvailable() ? <ForgotPasswordForm /> : <RecoveryUnavailable />;
 }

@@ -18,6 +18,9 @@ export const authConfig = {
         // Stamped once, at sign-in, and never refreshed: sessions_valid_after (sign-out, password reset) ends every
         // token signed in before it. See lib/session-standing.ts.
         token.authTime = authTimeFor(new Date());
+        // Which password this session was signed in with (lib/password-fingerprint.ts); a reset ends it.
+        const passwordVersion = (user as { passwordVersion?: string }).passwordVersion;
+        if (passwordVersion) token.passwordVersion = passwordVersion;
       }
       return token;
     },
@@ -27,6 +30,7 @@ export const authConfig = {
         session.user.role = token.role as UserRole;
       }
       if (typeof token.authTime === "number") session.authTime = token.authTime;
+      if (typeof token.passwordVersion === "string") session.passwordVersion = token.passwordVersion;
       return session;
     },
   },

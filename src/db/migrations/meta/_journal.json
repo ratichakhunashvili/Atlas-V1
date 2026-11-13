@@ -239,6 +239,20 @@
       "when": 1794486713866,
       "tag": "0033_rate_limit_data_export",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794552342756,
+      "tag": "0034_reset_token_one_unused",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794553143636,
+      "tag": "0035_admin_audit_catalogue_actions",
+      "breakpoints": true
     }
   ]
 }

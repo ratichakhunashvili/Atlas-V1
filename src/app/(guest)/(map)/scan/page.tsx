@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { ScanScreen, type ScanEmpty, type ScanTarget } from "@/components/atlas-ui/scan-screens";
 import type { CheckInMethod } from "@/db/schema";
+import { findActiveStayForUser } from "@/db/queries/hotel-stays";
+import { STAY_DATES_HREF, formatStayStart, guestStayState, type GuestStayState } from "@/features/hotel-stays/stay-state";
 import { requireUser } from "@/lib/authorization";
 import { isCheckInMethodAllowed } from "@/services/advisor/check-in-method";
 import { getDailyPlanForUser, type DailyPlanState } from "@/services/advisor/daily-plan";
@@ -13,9 +15,17 @@ import { getDailyPlanForUser, type DailyPlanState } from "@/services/advisor/dai
 export const metadata: Metadata = { title: "Scan" };
 export const dynamic = "force-dynamic";
 
-function emptyState(state: DailyPlanState): ScanEmpty {
+/** `stay` is only loaded for a stay outside its dates, to tell "not started yet" from "ended" (features/hotel-stays/stay-state.ts). */
+function emptyState(state: DailyPlanState, stay: GuestStayState): ScanEmpty {
   switch (state.status) {
     case "no_stay":
+      if (stay.kind === "not_started") {
+        return {
+          title: "Your stay hasn't started yet",
+          body: `Your stay at ${stay.hotelName} starts on ${formatStayStart(stay.startsOn)}. You can check in at places from then.`,
+          action: { label: "Change your dates", href: STAY_DATES_HREF },
+        };
+      }
       return state.reason === "outside_stay_period"
         ? { title: "Your stay has ended", body: "Your achievements are still yours to look back on.", action: { label: "See my achievements", href: "/achievements" } }
         : { title: "Join your hotel first", body: "Scan the Atlas code at reception or in your room to start.", action: { label: "Scan the hotel code", href: "/scan-hotel" } };
@@ -40,9 +50,16 @@ function scannable(method: CheckInMethod) {
 export default async function ScanPage() {
   const user = await requireUser();
   const state = await getDailyPlanForUser(user.id);
+  const openStay = state.status === "no_stay" && state.reason === "outside_stay_period" ? await findActiveStayForUser(user.id) : null;
+  const stay = guestStayState(
+    openStay
+      ? { hotelName: openStay.place.name, checkIn: openStay.checkIn, checkOut: openStay.checkOut, expectedCheckOut: openStay.expectedCheckOut }
+      : null,
+    new Date()
+  );
   const target: ScanTarget | null =
     state.status === "in_progress" && state.currentAvailable && scannable(state.current.checkInMethod)
       ? { stopId: state.current.id, name: state.current.name, checkInMethod: state.current.checkInMethod }
       : null;
-  return <ScanScreen target={target} empty={emptyState(state)} />;
+  return <ScanScreen target={target} empty={emptyState(state, stay)} />;
 }

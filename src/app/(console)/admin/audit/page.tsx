@@ -1,4 +1,5 @@
 import { listAuditLogWithActors } from "@/db/queries/admin-audit";
+import { auditActionLabel } from "@/features/admin-audit/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +11,8 @@ function describeState(state: unknown): string {
 }
 
 /**
- * The append-only record of sensitive admin changes (partnerships, Place publication and archival, QR credentials,
- * model settings, staff roles, support lookups). The database refuses edits and deletes of these rows. Snapshots hold
+ * The append-only record of sensitive admin changes (partnerships, contracts, Place edits, publication and archival,
+ * hotels and their facilities, QR credentials, model settings, staff roles, support lookups). The database refuses edits and deletes of these rows. Snapshots hold
  * only the fields that changed — never a token, hash, password or private reference.
  */
 export const metadata = { title: "Audit log" };
@@ -33,7 +34,9 @@ export default async function AuditLogPage() {
           {events.map((event) => (
             <li key={event.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-medium text-slate-900">{event.action}</span>
+                <span className="font-medium text-slate-900">
+                  {auditActionLabel(event.action)} <code className="text-xs font-normal text-slate-500">{event.action}</code>
+                </span>
                 <time className="text-xs text-slate-500" dateTime={event.occurredAt.toISOString()}>
                   {event.occurredAt.toISOString().slice(0, 19).replace("T", " ")}
                 </time>

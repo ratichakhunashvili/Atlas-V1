@@ -21,11 +21,17 @@ const TILT = 45;
 // Walking routes from Hotel A, fetched once from Mapbox Directions and kept as a fixture.
 const ROUTE_LINES = routes as unknown as Record<string, LngLat[]>;
 
-type Feature = GeoJSON.Feature<GeoJSON.Point, { marker: string; placeId?: string }>;
+type Feature = GeoJSON.Feature<GeoJSON.Point, { marker: string; placeId?: string; hasEvent?: boolean; selected?: boolean }>;
 
-function point(coordinates: LngLat, marker: string, placeId?: string): Feature {
-  return { type: "Feature", geometry: { type: "Point", coordinates }, properties: { marker: markerImageId(marker), placeId } };
+function point(coordinates: LngLat, marker: string, placeId?: string, hasEvent?: boolean): Feature {
+  const properties: Feature["properties"] = { marker: markerImageId(marker), placeId };
+  // Read by the event-badge layer: whether to draw a badge, and on which size of marker.
+  if (hasEvent) Object.assign(properties, { hasEvent: true, selected: marker.endsWith("selected") });
+  return { type: "Feature", geometry: { type: "Point", coordinates }, properties };
 }
+
+/** Event badges: a second symbol layer over the same places source, so no DOM marker and no second source. */
+export const EVENT_BADGE_LAYER = "atlas-event-badges";
 
 /** A point a quarter of the way along the route, where the design puts the walker. */
 function alongRoute(line: LngLat[]): LngLat {
@@ -69,7 +75,7 @@ function markerFeatures(scene: MapScene): GeoJSON.FeatureCollection {
   const ordered = [...scene.places].sort((a, b) => Number(a.marker.endsWith("selected")) - Number(b.marker.endsWith("selected")));
   for (const place of ordered) {
     const at = place.at ?? PLACE_LNGLAT[place.id as keyof typeof PLACE_LNGLAT];
-    if (at) features.push(point(at, place.marker, place.id));
+    if (at) features.push(point(at, place.marker, place.id, place.hasEvent));
   }
   if (scene.hotel) features.push(point(scene.hotelAt ?? HOTEL_LNGLAT, "hotel"));
   if (scene.you) features.push(point(YOU_LNGLAT, "you"));
@@ -156,6 +162,22 @@ export function createAtlasMap(
         },
       });
     }
+    if (!map.getLayer(EVENT_BADGE_LAYER)) {
+      // Above the markers, on the top-right corner of each marker that has an event (further out on a selected one).
+      map.addLayer({
+        id: EVENT_BADGE_LAYER,
+        type: "symbol",
+        source: "atlas-places",
+        filter: ["==", ["get", "hasEvent"], true],
+        layout: {
+          "icon-image": markerImageId("event-badge"),
+          "icon-offset": ["case", ["==", ["get", "selected"], true], ["literal", [16, -16]], ["literal", [11, -11]]],
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "symbol-z-order": "source",
+        },
+      });
+    }
     if (!map.getSource("atlas-you")) {
       // The guest's live position, on its own source above the places so a moving dot never re-sends the places.
       map.addSource("atlas-you", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -175,16 +197,19 @@ export function createAtlasMap(
     if (bounds) onViewport({ south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() });
   });
 
-  map.on("click", "atlas-markers", (event) => {
-    const placeId = event.features?.[0]?.properties?.placeId as string | undefined;
-    if (placeId) onPlaceClick(placeId);
-  });
-  map.on("mouseenter", "atlas-markers", (event) => {
-    if (event.features?.[0]?.properties?.placeId) map.getCanvas().style.cursor = "pointer";
-  });
-  map.on("mouseleave", "atlas-markers", () => {
-    map.getCanvas().style.cursor = "";
-  });
+  // A badge belongs to its marker: tapping either opens the place.
+  for (const layer of ["atlas-markers", EVENT_BADGE_LAYER]) {
+    map.on("click", layer, (event) => {
+      const placeId = event.features?.[0]?.properties?.placeId as string | undefined;
+      if (placeId) onPlaceClick(placeId);
+    });
+    map.on("mouseenter", layer, (event) => {
+      if (event.features?.[0]?.properties?.placeId) map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", layer, () => {
+      map.getCanvas().style.cursor = "";
+    });
+  }
 
   return map;
 }

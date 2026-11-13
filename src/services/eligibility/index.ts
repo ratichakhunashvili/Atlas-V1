@@ -1,4 +1,5 @@
-import type { FacilityStatus, Hotel, Place, PlaceCategory } from "@/db/schema";
+import type { FacilityStatus, Hotel, HotelEvent, Place, PlaceCategory } from "@/db/schema";
+import { isVenueEligibleForEvent, lastMomentOf } from "@/features/hotel-events/venue";
 import type { LatLng } from "@/lib/geo";
 import { calculateDayNumber, stayEndFor } from "@/services/advisor/stay-day";
 import {
@@ -224,6 +225,106 @@ export async function getEligibleExperienceForGuest(
   const result = await listEligibleExperiencesForGuest({ userId: input.userId }, now, deps);
   if (result.status !== "ok") return null;
   return result.experiences.find((entry) => entry.place.id === input.placeId) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Hotel events for the guest's own hotel
+// ---------------------------------------------------------------------------
+
+/** Guests see their hotel's events that start within this many days (and any already under way). */
+export const GUEST_EVENT_HORIZON_DAYS = 7;
+/** A ceiling on events per read: each distinct event time costs one catalogue evaluation. */
+export const GUEST_EVENT_LIMIT = 50;
+
+/** What a guest may be told about an event: what, where (the venue Place id) and when. Never capacity or booking. */
+export type GuestHotelEvent = {
+  id: string;
+  venuePlaceId: string;
+  title: string;
+  description: string | null;
+  startsAt: Date;
+  endsAt: Date;
+};
+
+export type GuestEventDependencies = Pick<
+  EligibilityDependencies,
+  "findActiveStayForUser" | "listPartnershipsForHotel" | "listFacilitiesForHotel" | "listContractsForCatalogue" | "listAttractionsForCatalogue"
+> & {
+  /** One hotel's scheduled events ending after `endsAfter` and starting before `startsBefore`. */
+  listHotelEventsInWindow: (hotelId: string, window: { endsAfter: Date; startsBefore: Date }) => Promise<HotelEvent[]>;
+};
+
+async function loadDefaultGuestEventDependencies(): Promise<GuestEventDependencies> {
+  const [base, eventsQ] = await Promise.all([loadDefaultDependencies(), import("@/db/queries/hotel-events")]);
+  return { ...base, listHotelEventsInWindow: eventsQ.listHotelEventsInWindow };
+}
+
+/**
+ * The events of the guest's OWN hotel that they could still go to: scheduled (never cancelled), not yet over, and
+ * starting within GUEST_EVENT_HORIZON_DAYS. The hotel comes only from the authenticated guest's valid active stay;
+ * there is no hotel-id input. No valid stay => nothing.
+ *
+ * Each event's venue must be in this hotel's catalogue at the event's start AND its last moment — the very check the
+ * admin event-creation action makes (features/hotel-events/actions.ts), with the same listEligiblePlacesForStay and
+ * isVenueEligibleForEvent. A venue whose Atlas contract has lapsed, or lapses during the event, drops its events.
+ */
+export async function listUpcomingHotelEventsForGuest(
+  input: { userId: string },
+  now: Date = new Date(),
+  deps?: GuestEventDependencies
+): Promise<GuestHotelEvent[]> {
+  const d = deps ?? (await loadDefaultGuestEventDependencies());
+  const context = await resolveGuestHotelContext(input.userId, now, d);
+  if (!context.ok) return [];
+  const { stay } = context;
+
+  const until = new Date(now.getTime() + GUEST_EVENT_HORIZON_DAYS * 86_400_000);
+  const rows = await d.listHotelEventsInWindow(stay.hotel.id, { endsAfter: now, startsBefore: until });
+  // The query already scopes these; repeated here so a query change can never leak another hotel's or a cancelled event.
+  const candidates = rows
+    .filter(
+      (event) =>
+        event.hotelId === stay.hotel.id &&
+        event.status === "scheduled" &&
+        event.endsAt.getTime() > now.getTime() &&
+        event.startsAt.getTime() < until.getTime()
+    )
+    .slice(0, GUEST_EVENT_LIMIT);
+  if (candidates.length === 0) return [];
+
+  // The catalogue rows are read once; only the instant they are judged at changes from one event time to the next.
+  const [partnerships, facilities, contracts, attractions] = await Promise.all([
+    d.listPartnershipsForHotel(stay.hotel.id),
+    d.listFacilitiesForHotel(stay.hotel.id),
+    d.listContractsForCatalogue(stay.hotel.id),
+    d.listAttractionsForCatalogue(stay.hotel.id),
+  ]);
+  const catalogue = {
+    listPartnershipsForHotel: async () => partnerships,
+    listFacilitiesForHotel: async () => facilities,
+    listContractsForCatalogue: async () => contracts,
+    listAttractionsForCatalogue: async () => attractions,
+  };
+  const byInstant = new Map<number, Promise<EligiblePlace[]>>();
+  const eligibleAt = (instant: Date) => {
+    let cached = byInstant.get(instant.getTime());
+    if (!cached) {
+      cached = listEligiblePlacesForStay(stay, instant, catalogue);
+      byInstant.set(instant.getTime(), cached);
+    }
+    return cached;
+  };
+
+  const verdicts = await Promise.all(
+    candidates.map(async (event) => {
+      const [eligibleAtStart, eligibleAtEnd] = await Promise.all([eligibleAt(event.startsAt), eligibleAt(lastMomentOf(event))]);
+      return isVenueEligibleForEvent({ venuePlaceId: event.venuePlaceId, eligibleAtStart, eligibleAtEnd });
+    })
+  );
+
+  return candidates
+    .filter((_, index) => verdicts[index])
+    .map(({ id, venuePlaceId, title, description, startsAt, endsAt }) => ({ id, venuePlaceId, title, description, startsAt, endsAt }));
 }
 
 // ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { db } from "@/db";
 import { requireAdmin } from "@/lib/authorization";
 import { PG_CHECK_VIOLATION, PG_FOREIGN_KEY_VIOLATION, hasPgErrorCode } from "@/db/errors";
 import { recordAdminAudit } from "@/db/queries/admin-audit";
@@ -11,9 +12,9 @@ import {
   deletePlace,
   findPlaceById,
   setPlaceArchived,
-  updatePlace,
 } from "@/db/queries/places";
-import type { AdminAuditAction, Place } from "@/db/schema";
+import { placeStatusAuditActions, placeStatusSnapshot as statusSnapshot, updatePlaceWithAudit } from "@/db/operations/place-admin";
+import type { Place } from "@/db/schema";
 import { findLikelyDuplicates } from "@/services/catalog/duplicates";
 import { isUuid } from "@/lib/route-ids";
 import { placeFormQuery } from "./prefill";
@@ -58,29 +59,13 @@ function priceEvidence(
   return { priceLevelSource: data.priceLevelSource, priceLevelVerifiedAt: unchanged ? before!.priceLevelVerifiedAt : now };
 }
 
-/** The status fields an audit entry needs from a Place — only what can change eligibility, never the whole row. */
-function statusSnapshot(place: Pick<Place, "publicationStatus" | "verificationStatus" | "archivedAt">) {
-  return {
-    publicationStatus: place.publicationStatus,
-    verificationStatus: place.verificationStatus,
-    archived: place.archivedAt !== null,
-  };
-}
-
-/** Writes one audit entry per eligibility-relevant status change, comparing the Place before and after an edit. */
+/** Writes one audit entry per eligibility-relevant status change of a newly created Place. */
 async function auditStatusChanges(
   adminId: string,
   before: Pick<Place, "publicationStatus" | "verificationStatus" | "archivedAt">,
   after: Place
 ) {
-  const changes: Array<[AdminAuditAction, boolean]> = [
-    ["place.published", before.publicationStatus !== "published" && after.publicationStatus === "published"],
-    ["place.unpublished", before.publicationStatus === "published" && after.publicationStatus !== "published"],
-    ["place.verified", before.verificationStatus !== "verified" && after.verificationStatus === "verified"],
-    ["place.unverified", before.verificationStatus === "verified" && after.verificationStatus !== "verified"],
-  ];
-  for (const [action, happened] of changes) {
-    if (!happened) continue;
+  for (const action of placeStatusAuditActions(before, after)) {
     await recordAdminAudit({
       actorUserId: adminId,
       action,
@@ -174,24 +159,30 @@ export async function updatePlaceAction(id: string, formData: FormData) {
     redirect(`/admin/places/${id}?${placeFormQuery(formData, { error: evidence.error })}`);
   }
 
-  let after: Place | null = null;
+  // The edit and its audit entries (place.updated with only the changed fields, plus any publication/verification
+  // change) are written in one transaction: if either fails, neither is saved.
+  let saved: Awaited<ReturnType<typeof updatePlaceWithAudit>> = null;
   try {
-    after = await updatePlace(id, {
-      name: parsed.data.name,
-      description: parsed.data.description ?? null,
-      latitude: parsed.data.latitude,
-      longitude: parsed.data.longitude,
-      category: parsed.data.category,
-      address: parsed.data.address ?? null,
-      imageUrl: parsed.data.imageUrl ?? null,
-      website: parsed.data.website ?? null,
-      phone: parsed.data.phone ?? null,
-      visitDurationMinutes: parsed.data.visitDurationMinutes,
-      priceLevel: parsed.data.priceLevel,
-      priceLevelSource: evidence.priceLevelSource,
-      priceLevelVerifiedAt: evidence.priceLevelVerifiedAt,
-      publicationStatus: parsed.data.publicationStatus,
-      verificationStatus: parsed.data.verificationStatus,
+    saved = await updatePlaceWithAudit(db, {
+      actorUserId: admin.id,
+      placeId: id,
+      changes: {
+        name: parsed.data.name,
+        description: parsed.data.description ?? null,
+        latitude: parsed.data.latitude,
+        longitude: parsed.data.longitude,
+        category: parsed.data.category,
+        address: parsed.data.address ?? null,
+        imageUrl: parsed.data.imageUrl ?? null,
+        website: parsed.data.website ?? null,
+        phone: parsed.data.phone ?? null,
+        visitDurationMinutes: parsed.data.visitDurationMinutes,
+        priceLevel: parsed.data.priceLevel,
+        priceLevelSource: evidence.priceLevelSource,
+        priceLevelVerifiedAt: evidence.priceLevelVerifiedAt,
+        publicationStatus: parsed.data.publicationStatus,
+        verificationStatus: parsed.data.verificationStatus,
+      },
     });
   } catch (error) {
     // places_archived_not_published_check: an archived place can't be published.
@@ -203,7 +194,7 @@ export async function updatePlaceAction(id: string, formData: FormData) {
     throw error;
   }
 
-  if (after) await auditStatusChanges(admin.id, before, after);
+  if (!saved) redirect(`/admin/places?error=${encodeURIComponent("That place no longer exists.")}`);
 
   revalidatePath("/admin/places");
   revalidatePath(`/admin/places/${id}`);

@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { requireAdmin } from "@/lib/authorization";
 import { isUuid } from "@/lib/route-ids";
-import { countHotelDeletionBlockers, createHotel, deleteHotel, findHotelById, updateHotelPlace } from "@/db/queries/hotels";
+import { countHotelDeletionBlockers, deleteHotel, findHotelById } from "@/db/queries/hotels";
+import { createHotelWithAudit, updateHotelPlaceWithAudit } from "@/db/operations/hotel-admin";
 import { hasHotelDeletionBlockers, hotelDeletionBlockedMessage } from "@/db/operations/hotel-deletion";
 import { loadContractFacts } from "@/db/operations/atlas-contracts";
 import { placeHasPartnershipRows } from "@/db/queries/hotel-partnerships";
@@ -38,7 +39,7 @@ async function hotelPlaceProblem(placeId: string, hotelId: string | null): Promi
 }
 
 export async function createHotelAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const parsed = hotelSchema.safeParse({ placeId: formData.get("placeId") ?? "" });
   if (!parsed.success) redirect(withMessage("/admin/hotels/new", { error: parsed.error.issues[0]?.message ?? "Invalid input" }));
@@ -48,8 +49,9 @@ export async function createHotelAction(formData: FormData) {
 
   // No entry credential is minted here. A hotel starts with none, and an admin
   // issues one deliberately from its edit page, where the raw code is shown once.
+  // The hotel and its `hotel.created` audit entry are written in one transaction.
   try {
-    await createHotel({ placeId: parsed.data.placeId });
+    await createHotelWithAudit(db, { actorUserId: admin.id, placeId: parsed.data.placeId });
   } catch (error) {
     // Two admins choosing the same place at once: the unique index decides, and the loser gets a sentence.
     if (!hasPgErrorCode(error, PG_UNIQUE_VIOLATION)) throw error;
@@ -61,7 +63,7 @@ export async function createHotelAction(formData: FormData) {
 }
 
 export async function updateHotelAction(id: string, formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   if (!isUuid(id)) redirect(HOTELS_PATH);
 
   const editPath = `/admin/hotels/${id}`;
@@ -73,7 +75,8 @@ export async function updateHotelAction(id: string, formData: FormData) {
 
   let updated;
   try {
-    updated = await updateHotelPlace(id, parsed.data.placeId);
+    // The change and its `hotel.updated` audit entry are written in one transaction; saving the same place writes nothing.
+    updated = await updateHotelPlaceWithAudit(db, { actorUserId: admin.id, hotelId: id, placeId: parsed.data.placeId });
   } catch (error) {
     if (!hasPgErrorCode(error, PG_UNIQUE_VIOLATION)) throw error;
     redirect(withMessage(editPath, { error: "This place already belongs to another hotel." }));

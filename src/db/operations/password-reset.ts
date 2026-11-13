@@ -17,12 +17,17 @@ export async function findUserIdByEmail(db: AtlasDatabase, email: string): Promi
   return row?.id ?? null;
 }
 
-/** Stores a new token and retires every older unused one for the user, in one transaction. */
+/**
+ * Stores a new token and retires every older unused one for the user, in one transaction. The user's row is locked
+ * first, so two simultaneous requests for one account run one after the other: the second retires the first's token
+ * before inserting its own. The partial unique index (one unused token per user) backs this up in the database.
+ */
 export async function issueResetToken(
   db: AtlasDatabase,
   input: { userId: string; tokenHash: string; now: Date; expiresAt: Date }
 ): Promise<void> {
   await db.transaction(async (tx) => {
+    await tx.execute(sql`select 1 from ${users} where ${users.id} = ${input.userId} for update`);
     await tx
       .update(passwordResetTokens)
       .set({ usedAt: input.now })

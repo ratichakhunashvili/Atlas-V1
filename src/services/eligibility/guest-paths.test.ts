@@ -117,6 +117,13 @@ describe("no guest-facing code can read Places without eligibility", () => {
        * eligibility and hands no Place list to any guest-facing feature. Pinned by db/account-export.pglite.test.ts.
        */
       "db/operations/account-export.ts",
+      /*
+       * ADMIN catalogue edits with their audit entries (U090): read the Place being edited (before/after for
+       * place.updated) and a hotel Place's kind when a hotel is created or re-pointed. Behind requireAdmin(); they
+       * return no Place to a guest and decide no eligibility. Pinned by db/catalogue-admin-audit.pglite.test.ts.
+       */
+      "db/operations/place-admin.ts",
+      "db/operations/hotel-admin.ts",
     ]);
     const users = files.filter((f) => /\.(from|innerJoin|leftJoin)\(places\b/.test(f.text) && !f.path.endsWith(".test.ts"));
     for (const f of users) assert.ok(allowed.has(f.path), `${f.path} reads the places table directly; route guest reads through services/eligibility`);

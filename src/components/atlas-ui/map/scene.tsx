@@ -16,7 +16,13 @@ import type { LngLat } from "./geo";
  * A marker. Design screens use the fixture ids, placed where the Figma frame draws them; screens
  * on real data pass the Place's own id and coordinates in `at` ([lng, lat]).
  */
-export type ScenePlace = { id: PlaceId | (string & {}); marker: MarkerImage; at?: [number, number] };
+export type ScenePlace = {
+  id: PlaceId | (string & {});
+  marker: MarkerImage;
+  at?: [number, number];
+  /** Something is happening here (a hotel event the server already scoped to the guest): drawn as a small badge. */
+  hasEvent?: boolean;
+};
 
 export type MapScene = {
   places: ScenePlace[];

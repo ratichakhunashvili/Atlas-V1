@@ -2,9 +2,11 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/shared/button";
+import { STAY_DATES_PARAM } from "@/features/hotel-stays/stay-state";
+import { isDismissKey } from "@/lib/focus";
 import { StayDatesForm, type StayDatesView } from "./stay-dates-form";
 
 const QrScannerModal = dynamic(
@@ -25,6 +27,8 @@ type GuestAppShellProps = {
   isAdmin: boolean;
   hotelName: string | null;
   checkIn: string | null;
+  /** Where the stay stands today (features/hotel-stays/stay-state.ts); a stay that hasn't started reads "Starts", not "Since". */
+  stayPhase: "active" | "not_started" | "ended" | null;
   stayDates: StayDatesView | null;
   /** Real, server-derived stay reminders (e.g. departure approaching). Never invented. */
   reminders: { id: string; title: string; description: string }[];
@@ -38,13 +42,29 @@ export function GuestAppShell({
   isAdmin,
   hotelName,
   checkIn,
+  stayPhase,
   stayDates,
   reminders,
   upcomingEvents,
 }: GuestAppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [panel, setPanel] = useState<OpenPanel>(null);
+  const searchParams = useSearchParams();
+  // "Change your dates" links elsewhere (Profile, home, Things to do) arrive with ?stay=dates and open this panel,
+  // so the one stay-date editor is reused rather than duplicated. Also reacts when the link is followed on this page.
+  const wantsStayDates = searchParams.get(STAY_DATES_PARAM.name) === STAY_DATES_PARAM.value;
+  const [panel, setPanel] = useState<OpenPanel>(wantsStayDates ? "stay" : null);
+  const [seenStayDatesRequest, setSeenStayDatesRequest] = useState(wantsStayDates);
+  if (wantsStayDates !== seenStayDatesRequest) {
+    setSeenStayDatesRequest(wantsStayDates);
+    if (wantsStayDates) setPanel("stay");
+  }
+  // Focus follows the panel (U094): its heading when it opens, the control that opened it when it is dismissed.
+  const panelHeadingRef = useRef<HTMLHeadingElement>(null);
+  const stayChipRef = useRef<HTMLButtonElement>(null);
+  const bellRef = useRef<HTMLButtonElement>(null);
+  const shownPanel = useRef<OpenPanel>(null);
+  const returnFocusTo = useRef<OpenPanel>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   // A ref, not state: it only has to survive until the route change lands, and setting state
@@ -64,12 +84,41 @@ export function GuestAppShell({
   }, []);
 
   useEffect(() => {
+    const previous = shownPanel.current;
+    shownPanel.current = panel;
+    if (panel && panel !== previous) {
+      panelHeadingRef.current?.focus({ preventScroll: true });
+    } else if (!panel && previous && returnFocusTo.current) {
+      (returnFocusTo.current === "stay" ? stayChipRef : bellRef).current?.focus({ preventScroll: true });
+    }
+    returnFocusTo.current = null;
+  }, [panel]);
+
+  useEffect(() => {
     if (pathname !== "/" || !pendingAdvisorOpen.current) return;
     pendingAdvisorOpen.current = false;
     window.dispatchEvent(new Event("atlas:open-advisor"));
   }, [pathname]);
 
   if (isAdminRoute) return <div className="atlas-admin-shell">{children}</div>;
+
+  /** Closing on purpose (close button, Escape, the same toggle) hands focus back to the control that opened the panel. */
+  function dismissPanel() {
+    returnFocusTo.current = panel;
+    setPanel(null);
+    if (wantsStayDates) {
+      // Drop ?stay=dates so a reload or Back doesn't reopen the panel the guest just closed.
+      const rest = new URLSearchParams(searchParams.toString());
+      rest.delete(STAY_DATES_PARAM.name);
+      const query = rest.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    }
+  }
+
+  function togglePanel(which: Exclude<OpenPanel, null>) {
+    if (panel === which) dismissPanel();
+    else setPanel(which);
+  }
 
   function handleScannedCode(decodedText: string) {
     const token = extractHotelEntryToken(decodedText);
@@ -104,9 +153,10 @@ export function GuestAppShell({
         <button
           type="button"
           className="atlas-round-control"
+          ref={bellRef}
           aria-label="Open notifications"
           aria-expanded={panel === "notifications"}
-          onClick={() => setPanel((current) => (current === "notifications" ? null : "notifications"))}
+          onClick={() => togglePanel("notifications")}
         >
           <Icon name="bell" />
           {upcomingEvents.length > 0 && <span className="atlas-notification-dot" aria-label="Upcoming hotel events" />}
@@ -115,13 +165,18 @@ export function GuestAppShell({
         <button
           type="button"
           className="atlas-stay-chip"
+          ref={stayChipRef}
           aria-label={hotelName ? `Stay at ${hotelName}` : "Start your hotel stay"}
           aria-expanded={panel === "stay"}
-          onClick={() => setPanel((current) => (current === "stay" ? null : "stay"))}
+          onClick={() => togglePanel("stay")}
         >
           <span className="atlas-stay-indicator" />
           <span className="atlas-stay-label">{stayLabel}</span>
-          {checkIn && <span className="atlas-stay-date">· Since {formatShortDate(checkIn)}</span>}
+          {checkIn && (
+            <span className="atlas-stay-date">
+              · {stayPhase === "not_started" ? "Starts" : "Since"} {formatShortDate(checkIn)}
+            </span>
+          )}
           <Icon name="chevron" />
         </button>
 
@@ -142,13 +197,20 @@ export function GuestAppShell({
           aria-labelledby="atlas-top-panel-title"
           aria-live="polite"
           key={panel}
+          onKeyDown={(event) => {
+            if (!isDismissKey(event)) return;
+            event.stopPropagation();
+            dismissPanel();
+          }}
         >
           <div className="atlas-panel-heading">
             <div>
               <p className="atlas-eyebrow">{panel === "stay" ? "Your stay" : "Updates from your hotel"}</p>
-              <h2 id="atlas-top-panel-title">{panel === "stay" ? hotelName ?? "Start your stay" : "Notifications"}</h2>
+              <h2 id="atlas-top-panel-title" ref={panelHeadingRef} tabIndex={-1}>
+                {panel === "stay" ? hotelName ?? "Start your stay" : "Notifications"}
+              </h2>
             </div>
-            <button className="atlas-panel-close" type="button" aria-label="Close panel" onClick={() => setPanel(null)}>
+            <button className="atlas-panel-close" type="button" aria-label="Close panel" onClick={dismissPanel}>
               <Icon name="close" />
             </button>
           </div>
@@ -160,7 +222,11 @@ export function GuestAppShell({
                   <p className="atlas-panel-copy">
                     Recommendations come from this hotel&apos;s facilities, attractions and Atlas partner places.
                   </p>
-                  {checkIn && <p className="atlas-panel-meta">Checked in {formatDate(checkIn)}</p>}
+                  {checkIn && (
+                    <p className="atlas-panel-meta">
+                      {stayPhase === "not_started" ? "Arriving" : "Checked in"} {formatDate(checkIn)}
+                    </p>
+                  )}
                   {stayDates && <StayDatesForm stay={stayDates} />}
                   <Link className="atlas-panel-link" href="/experiences" onClick={() => setPanel(null)}>
                     Browse experiences <Icon name="arrow" />

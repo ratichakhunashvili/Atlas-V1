@@ -2,6 +2,12 @@ import "server-only";
 import { and, asc, eq, gte } from "drizzle-orm";
 import { db } from "@/db";
 import { hotelEvents, places, type HotelEvent } from "@/db/schema";
+import { listHotelEventsInWindow as listHotelEventsInWindowOperation } from "@/db/operations/hotel-events";
+
+/** See db/operations/hotel-events.ts. Called only by services/eligibility's guest event read. */
+export async function listHotelEventsInWindow(hotelId: string, window: { endsAfter: Date; startsBefore: Date }): Promise<HotelEvent[]> {
+  return listHotelEventsInWindowOperation(db, hotelId, window);
+}
 
 /**
  * One hotel's upcoming events, soonest first.

@@ -14,6 +14,7 @@ import type { Map as MapboxMap } from "mapbox-gl/esm";
  *   locked      the attraction diamond in grey, until the guest has visited it
  *   hotel       38 Deep Teal circle, 3px Warm White border, home icon
  *   you         26 halo at 18% teal around a 13 teal dot with a 3px Warm White border
+ *   event badge 16 Deep Teal circle, 2px Warm White border, clock hands; drawn on a marker's corner by its own layer
  * Route screens add a plain start circle, a plain destination square and a small "you" dot.
  *
  * Shapes are drawn from those numbers; icons are drawn from the exported Figma files.
@@ -88,6 +89,15 @@ export const MARKERS = {
   "route-start": { size: 32, svg: svg(32, box(0, 32, 16, TEAL, PAPER, 3)) },
   "route-destination": { size: 36, svg: svg(36, box(0, 36, 9, BEIGE, TEAL, 2)) },
   "route-you": { size: 14, svg: svg(14, box(0, 14, 7, TEAL, PAPER, 3)) },
+  /** A small clock badge on the corner of a place's marker: something is happening there soon (a hotel event). */
+  "event-badge": {
+    size: 16,
+    svg: svg(
+      16,
+      box(0, 16, 8, TEAL, PAPER, 2) +
+        `<path d="M8 4.75V8l2.25 1.5" fill="none" stroke="${PAPER}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`
+    ),
+  },
 } satisfies Record<string, MarkerSpec>;
 
 export type MarkerImage = keyof typeof MARKERS;

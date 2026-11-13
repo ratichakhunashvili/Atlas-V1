@@ -24,16 +24,27 @@ export function AtlasDialog({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const sheet = useRef<HTMLDivElement>(null);
+  // The control that opened the dialog. Browsers don't reliably hand focus back to it on close (U094 found focus on
+  // <body> after Escape), so it is restored explicitly when nothing else has taken focus.
+  const opener = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      const active = document.activeElement;
+      opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
       dialog.showModal();
       // showModal() focuses the first button; start on the sheet so the destructive action is not pre-selected.
       sheet.current?.focus();
     }
-    if (!open && dialog.open) dialog.close();
+    if (!open && dialog.open) {
+      dialog.close();
+      const target = opener.current;
+      opener.current = null;
+      const lost = document.activeElement === null || document.activeElement === document.body;
+      if (target?.isConnected && lost) target.focus();
+    }
   }, [open]);
 
   return (

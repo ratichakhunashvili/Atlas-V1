@@ -168,7 +168,8 @@ export function AtlasMap() {
     if (!map || !ready) return;
     const onClick = (event: { point: { x: number; y: number } }) => {
       const layer = modelsLayerRef.current;
-      if (!layer || map.queryRenderedFeatures([event.point.x, event.point.y], { layers: ["atlas-markers"] }).length > 0) return;
+      // A marker or its event badge (engine.ts EVENT_BADGE_LAYER) handles its own tap.
+      if (!layer || map.queryRenderedFeatures([event.point.x, event.point.y], { layers: ["atlas-markers", "atlas-event-badges"] }).length > 0) return;
       const canvas = map.getCanvas();
       const ratio = canvas.clientWidth > 0 ? canvas.width / canvas.clientWidth : 1;
       const placeId = layer.pick({ x: event.point.x * ratio, y: event.point.y * ratio }, { width: canvas.width, height: canvas.height });

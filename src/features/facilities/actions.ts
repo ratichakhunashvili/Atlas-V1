@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/authorization";
-import { createFacility, findFacilityById, setFacilityStatus } from "@/db/queries/hotel-facilities";
+import { findFacilityById } from "@/db/queries/hotel-facilities";
+import { addFacilityWithAudit, setFacilityStatusWithAudit } from "@/db/operations/hotel-facility-admin";
 import { findHotelById } from "@/db/queries/hotels";
 import { placeHasPartnershipRows } from "@/db/queries/hotel-partnerships";
 import { findPlaceById } from "@/db/queries/places";
@@ -28,7 +29,7 @@ function finish(hotelId: string, outcome: { error: string } | { ok: string }): n
 
 /** Register a hotel-OWNED facility. Eligible for this hotel's guests only — no external partnership involved. */
 export async function addFacilityAction(hotelId: string, formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const hotelIdParsed = hotelIdSchema.safeParse(hotelId);
   if (!hotelIdParsed.success) redirect("/admin/hotels");
@@ -52,21 +53,28 @@ export async function addFacilityAction(hotelId: string, formData: FormData) {
   });
   if (problem) finish(hotel.id, { error: problem });
 
-  const created = await createFacility({ hotelId: hotel.id, placeId: place.id, facilityType: parsed.data.facilityType });
+  // The facility and its `facility.added` audit entry are written in one transaction.
+  const created = await addFacilityWithAudit(db, {
+    actorUserId: admin.id,
+    hotelId: hotel.id,
+    placeId: place.id,
+    facilityType: parsed.data.facilityType,
+  });
   if (!created) finish(hotel.id, { error: "This place is already registered as a hotel facility." });
 
   finish(hotel.id, { ok: "Facility added." });
 }
 
 async function changeFacilityStatus(facilityId: string, status: FacilityStatus, okMessage: string) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const id = facilityIdSchema.safeParse(facilityId);
   if (!id.success) redirect("/admin/hotels");
   const existing = await findFacilityById(id.data);
   if (!existing) redirect("/admin/hotels");
 
-  await setFacilityStatus(existing.id, status);
+  // The status change and its audit entry are written in one transaction; a repeated click changes and records nothing.
+  await setFacilityStatusWithAudit(db, { actorUserId: admin.id, facilityId: existing.id, status });
   finish(existing.hotelId, { ok: okMessage });
 }
 

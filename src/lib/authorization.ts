@@ -8,6 +8,7 @@ import type { User } from "@/db/schema";
 import { findUserById } from "@/db/queries/users";
 import { ADMIN_DENIED_PATH, ADMIN_SIGN_IN_PATH } from "./admin-route-policy";
 import { SESSION_ENDED_REASON } from "./session-redirect";
+import { passwordFingerprint } from "./password-fingerprint";
 import { sessionStanding } from "./session-standing";
 import { isSessionCookieName, signInRedirectPath } from "./sign-in-redirect";
 
@@ -29,7 +30,15 @@ export const currentSession = cache(async (): Promise<CurrentSession> => {
   const session = await auth();
   if (!session?.user?.id) return { status: "signed-out" };
   const account = await findUserById(session.user.id);
-  if (!account || sessionStanding({ authTime: session.authTime }, account) === "ended") return { status: "ended" };
+  if (
+    !account ||
+    sessionStanding(
+      { authTime: session.authTime, passwordVersion: session.passwordVersion },
+      { sessionsValidAfter: account.sessionsValidAfter, passwordVersion: passwordFingerprint(account.passwordHash) }
+    ) === "ended"
+  ) {
+    return { status: "ended" };
+  }
   return { status: "signed-in", user: session.user, account };
 });
 

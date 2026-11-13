@@ -215,7 +215,9 @@ describe("completing a reset", () => {
 
 describe("mail configuration", () => {
   it("prefers the outbox, then Resend, otherwise none", () => {
-    assert.ok(getMailer({ ATLAS_MAIL_OUTBOX_DIR: "x" }));
+    // The outbox counts only on a local/development/qa deployment (services/mail/recovery-config.test.ts covers the rest).
+    assert.ok(getMailer({ ATLAS_MAIL_OUTBOX_DIR: "x", ATLAS_DEPLOYMENT_ENV: "qa" }));
+    assert.equal(getMailer({ ATLAS_MAIL_OUTBOX_DIR: "x" }), null);
     assert.ok(getMailer({ RESEND_API_KEY: "k", MAIL_FROM: "Atlas <a@b.c>" }));
     assert.equal(getMailer({}), null);
     assert.equal(getMailer({ MAIL_FROM: "a@b.c" }), null);

@@ -6,6 +6,7 @@ import type { DailyPlanState, DailyStopView } from "@/services/advisor/daily-pla
 import { AtlasAsset, AtlasIcon } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
 import { CheckInPanel } from "./check-in-panel";
+import { FocusAfterAction } from "./focus-after-action";
 import { PlanSegment, StayHeader } from "./missions-chrome";
 import { PendingSubmit } from "./pending-submit";
 import { type } from "./ui";
@@ -24,6 +25,11 @@ import { describePriceLevel } from "@/services/advisor/preference-ranking";
 type Started = Exclude<DailyPlanState, { status: "no_stay" } | { status: "not_started" }>;
 
 const DOT = "flex size-[28px] shrink-0 items-center justify-center rounded-[14px]";
+/** After a pick (or "Choose again") the server sends this screen back; focus then moves to what changed (U094). */
+const FOCUS_KEY = "plan";
+const CURRENT_TITLE_ID = "plan-current-title";
+const CHOOSE_TITLE_ID = "choose-title";
+const FINISHED_TITLE_ID = "plan-finished-title";
 const NOTICES: Record<string, string> = {
   saved: "Saved. Your new choices apply to your next plan.",
   "pick-failed": "That option isn't available any more. Here are your current options.",
@@ -96,19 +102,22 @@ function CurrentRow({ state, testFinish }: { state: Extract<Started, { status: "
     return (
       <Row line dot={<div className={`${DOT} border-2 border-dashed border-atlas-slate`} />}>
         <div className="flex w-full flex-col items-start gap-[8px] rounded-[14px] bg-atlas-sand p-[12px]">
-          <p className="font-grotesk text-[16px] font-bold leading-[20px] text-atlas-slate line-through">{current.name}</p>
+          <p id={CURRENT_TITLE_ID} tabIndex={-1} className="font-grotesk text-[16px] font-bold leading-[20px] text-atlas-slate line-through">
+            {current.name}
+          </p>
           <p className="font-manrope text-[13px] leading-[18px] text-atlas-ink">
             This place isn&apos;t available through {state.hotel.name} any more. Choose something else instead — it won&apos;t count
             towards your four.
           </p>
           <form action={chooseAgainAction}>
             <input type="hidden" name="stopId" value={current.id} />
-            <button
-              type="submit"
+            <PendingSubmit
+              pendingLabel="Finding other options…"
+              focusAfterAction={FOCUS_KEY}
               className="flex h-[44px] items-center justify-center rounded-[12px] bg-atlas-teal px-[16px] font-manrope text-[14px] font-semibold text-atlas-paper"
             >
               Choose again
-            </button>
+            </PendingSubmit>
           </form>
         </div>
       </Row>
@@ -119,7 +128,9 @@ function CurrentRow({ state, testFinish }: { state: Extract<Started, { status: "
     <Row line dot={<div className={`${DOT} border-2 border-atlas-teal bg-atlas-paper font-manrope text-[13px] font-semibold text-atlas-teal`}>{state.picksUsed}</div>}>
       <div className="flex w-full flex-col items-start gap-[8px] rounded-[14px] border-2 border-atlas-teal p-[12px]">
         <div className="flex w-full items-center justify-between gap-[8px]">
-          <p className="min-w-0 font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">{current.name}</p>
+          <p id={CURRENT_TITLE_ID} tabIndex={-1} className="min-w-0 font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">
+            {current.name}
+          </p>
           <span className="shrink-0 font-manrope text-[12px] font-semibold leading-[16px] text-atlas-teal">Go here now</span>
         </div>
         <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">
@@ -180,6 +191,7 @@ function ChoiceCard({ choice }: { choice: DailyChoice }) {
         <PendingSubmit
           pendingLabel="Choosing…"
           ariaLabel={`Choose ${choice.name}`}
+          focusAfterAction={FOCUS_KEY}
           className={`flex w-full items-center justify-center rounded-[12px] font-manrope font-semibold ${
             big ? "h-[52px] bg-atlas-teal text-[16px] text-atlas-paper" : "h-[44px] border border-atlas-teal text-[14px] text-atlas-teal"
           }`}
@@ -196,7 +208,9 @@ function Finished({ state }: { state: Extract<Started, { status: "finished" }> }
   const copy = finishedCopy(state.reason, state.completed.length);
   return (
     <div className="flex w-full flex-col items-start gap-[6px] rounded-[14px] bg-atlas-sand p-[14px]">
-      <p className="font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">{copy.title}</p>
+      <p id={FINISHED_TITLE_ID} tabIndex={-1} className="font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">
+        {copy.title}
+      </p>
       <p className="font-manrope text-[14px] leading-[19px] text-atlas-ink">{copy.text}</p>
       {copy.offerPreferences ? (
         <Link
@@ -252,9 +266,12 @@ export function DailyPlanScreen({
 
   const remaining = state.remainingMinutes;
   const noticeText = notice ? NOTICES[notice] : undefined;
+  const focusTarget = state.status === "in_progress" ? CURRENT_TITLE_ID : state.status === "choosing" ? CHOOSE_TITLE_ID : FINISHED_TITLE_ID;
+  const focusStamp = [state.status, state.completed.length, state.status === "in_progress" ? state.current.id : "", notice ?? ""].join(":");
 
   return (
     <Shell header={{ hotelName: state.hotel.name, summary }}>
+      <FocusAfterAction focusKey={FOCUS_KEY} targetId={focusTarget} stamp={focusStamp} />
       <div className="flex w-full flex-col items-start gap-[8px]">
         <div className="flex w-full items-center justify-between gap-[8px]">
           <h1 className="font-grotesk text-[20px] font-bold leading-[26px] text-atlas-teal">Today</h1>
@@ -326,7 +343,7 @@ export function DailyPlanScreen({
 
       {state.status === "choosing" ? (
         <section aria-labelledby="choose-title" className="flex w-full flex-col items-start gap-[10px]">
-          <h2 id="choose-title" className="font-grotesk text-[18px] font-bold leading-[24px] text-atlas-teal">
+          <h2 id={CHOOSE_TITLE_ID} tabIndex={-1} className="font-grotesk text-[18px] font-bold leading-[24px] text-atlas-teal">
             {state.completed.length === 0 ? "Choose your first activity" : "Choose your next activity"}
           </h2>
           <p className="font-manrope text-[13px] leading-[18px] text-atlas-slate">

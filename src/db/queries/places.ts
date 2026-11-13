@@ -1,9 +1,10 @@
 import "server-only";
-import { and, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
+import { and, eq, gte, ilike, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import { achievementUnlocks, achievements, places, type Place, type PlaceCategory, type PublicationStatus, type VerificationStatus } from "@/db/schema";
 import type { DuplicateCandidate } from "@/services/catalog/duplicates";
 import { boundingBoxForRadius, distanceMeters, type LatLng } from "@/lib/geo";
+import { updatePlaceRow } from "@/db/operations/place-admin";
 
 export type PlaceInput = {
   name: string;
@@ -187,28 +188,9 @@ export async function createPlace(input: PlaceInput) {
   return place;
 }
 
+/** The UPDATE lives in db/operations/place-admin.ts so the audited admin edit and this binding share one statement. */
 export async function updatePlace(id: string, input: Partial<PlaceInput>) {
-  const { publicationStatus, verificationStatus, ...rest } = input;
-  // The status timestamp is kept when the status doesn't change and set/cleared when it does, in one UPDATE
-  // (no read-then-write race). The CHECK constraints guarantee status and timestamp always agree.
-  const statusColumns = {
-    ...(publicationStatus !== undefined && {
-      publicationStatus,
-      publishedAt:
-        publicationStatus === "published" ? sql`coalesce(${places.publishedAt}, now())` : sql`null`,
-    }),
-    ...(verificationStatus !== undefined && {
-      verificationStatus,
-      verifiedAt:
-        verificationStatus === "verified" ? sql`coalesce(${places.verifiedAt}, now())` : sql`null`,
-    }),
-  };
-  const [place] = await db
-    .update(places)
-    .set({ ...rest, ...statusColumns, updatedAt: new Date() })
-    .where(eq(places.id, id))
-    .returning();
-  return place ?? null;
+  return updatePlaceRow(db, id, input);
 }
 
 export async function deletePlace(id: string) {

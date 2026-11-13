@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { authConfig } from "@/auth/config";
 import { shouldBlockDevelopmentOnlyPath } from "@/lib/development-route-policy";
-import { hasSessionCookie, proxyReadsSession, sessionRedirect } from "@/lib/session-redirect";
+import { hasSessionCookie, isBackgroundRequest, proxyReadsSession, sessionRedirect, withoutSessionCookieRefresh } from "@/lib/session-redirect";
 
 // Separate, edge-safe NextAuth() call (shares authConfig with src/auth/index.ts
 // but omits the Node-only Credentials provider) so this proxy never bundles
@@ -27,7 +27,7 @@ const pageLoadProxy = auth((req) => {
   if (target) return NextResponse.redirect(new URL(target, req.nextUrl.origin));
 });
 
-export default function proxy(req: NextRequest, event: NextFetchEvent) {
+export default async function proxy(req: NextRequest, event: NextFetchEvent) {
   const { pathname } = req.nextUrl;
 
   // First, and for every method: a blocked design-preview or development URL is a 404 whether it is loaded or posted to.
@@ -43,7 +43,11 @@ export default function proxy(req: NextRequest, event: NextFetchEvent) {
   // else passes untouched and is authorized by the action or route handler itself.
   if (!proxyReadsSession(req.method)) return NextResponse.next();
 
-  return (pageLoadProxy as unknown as (req: NextRequest, event: NextFetchEvent) => Promise<Response>)(req, event);
+  const response = await (pageLoadProxy as unknown as (req: NextRequest, event: NextFetchEvent) => Promise<Response | undefined>)(req, event);
+  // Background navigation fetches (React Server Component requests and prefetches) must not re-issue the session
+  // cookie: one still in flight when Sign out answers would otherwise put the cleared cookie back. Only a full page
+  // load keeps a session's cookie fresh (follow-up review, 2026-11-13).
+  return response && isBackgroundRequest(req.headers) ? withoutSessionCookieRefresh(response) : response;
 }
 
 export const config = {

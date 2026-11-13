@@ -2,7 +2,9 @@ import Link from "next/link";
 import { Card } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PLACE_CATEGORIES, type PlaceCategory } from "@/db/schema";
+import { findActiveStayForUser } from "@/db/queries/hotel-stays";
 import { findPreferencesForUser } from "@/db/queries/preferences";
+import { guestStayState, noPlacesCopy } from "@/features/hotel-stays/stay-state";
 import { requireUser } from "@/lib/authorization";
 import { distanceMeters } from "@/lib/geo";
 import { listEligibleExperiencesForGuest } from "@/services/eligibility";
@@ -37,18 +39,26 @@ export default async function ExperiencesPage({
   ]);
 
   if (result.status !== "ok") {
+    // No open stay, or an open stay outside its dates: say which, with the same rule eligibility applies.
+    const stay = result.status === "outside_stay_period" ? await findActiveStayForUser(user.id) : null;
+    const state = guestStayState(
+      stay ? { hotelName: stay.place.name, checkIn: stay.checkIn, checkOut: stay.checkOut, expectedCheckOut: stay.expectedCheckOut } : null,
+      new Date()
+    );
+    const copy = noPlacesCopy(state);
     return (
       <div className="space-y-4">
         <Header />
-        <EmptyState
-          title="No hotel stay yet"
-          description="Scan your hotel's code to start your stay. Atlas then shows what you can do around it."
-        />
-        <p className="text-sm">
-          <Link href="/" className="text-slate-700 underline">
-            Go to check in
-          </Link>
-        </p>
+        <EmptyState title={copy.title} description={copy.body} />
+        <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+          {copy.actions.map((action) => (
+            <li key={action.href}>
+              <Link href={action.href} className="text-slate-700 underline">
+                {action.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
     );
   }

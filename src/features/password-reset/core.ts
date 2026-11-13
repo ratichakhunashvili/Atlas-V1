@@ -1,4 +1,4 @@
-import { isAuthAttemptAllowed, recordAuthAttempt } from "@/db/operations/auth-rate-limit";
+import { reserveAuthAttempt } from "@/db/operations/auth-rate-limit";
 import { consumeResetToken, findUserIdByEmail, issueResetToken } from "@/db/operations/password-reset";
 import type { AtlasDatabase } from "@/db/operations/types";
 import { authRateLimitKey } from "@/services/rate-limit/auth-policy";
@@ -40,15 +40,10 @@ export async function requestPasswordReset(
 
   const emailKey = authRateLimitKey("email", email);
   const ipKey = authRateLimitKey("ip", deps.clientKey);
-  const [emailAllowed, ipAllowed] = await Promise.all([
-    isAuthAttemptAllowed(deps.db, { scope: "password_reset_email", keyHash: emailKey, now: deps.now }),
-    isAuthAttemptAllowed(deps.db, { scope: "password_reset_ip", keyHash: ipKey, now: deps.now }),
-  ]);
-  if (!emailAllowed || !ipAllowed) return { status: "rate_limited" };
-  await Promise.all([
-    recordAuthAttempt(deps.db, { scope: "password_reset_email", keyHash: emailKey, now: deps.now }),
-    recordAuthAttempt(deps.db, { scope: "password_reset_ip", keyHash: ipKey, now: deps.now }),
-  ]);
+  // Each limit is checked and recorded in one locked step (reserveAuthAttempt), so concurrent requests cannot all slip
+  // under it. The network limit is reserved first: a client over it never spends an address's allowance.
+  if (!(await reserveAuthAttempt(deps.db, { scope: "password_reset_ip", keyHash: ipKey, now: deps.now }))) return { status: "rate_limited" };
+  if (!(await reserveAuthAttempt(deps.db, { scope: "password_reset_email", keyHash: emailKey, now: deps.now }))) return { status: "rate_limited" };
 
   const userId = await findUserIdByEmail(deps.db, email);
   if (!userId) return { status: "sent" };

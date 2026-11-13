@@ -23,6 +23,7 @@ export async function loadGuestProfile(userId: string, now: Date = new Date()): 
       ? {
           hotelName: stay.place.name,
           imageUrl: stay.place.imageUrl,
+          canEditDates: stay.checkOut === null,
           ...describeStay({ checkIn: stay.checkIn, expectedCheckOut: stay.expectedCheckOut, checkOut: stay.checkOut, now }),
         }
       : null,

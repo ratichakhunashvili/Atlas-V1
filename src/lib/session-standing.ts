@@ -19,10 +19,13 @@ export type SessionStanding = "valid" | "ended";
  *   when it was issued, so it is ended.
  */
 export function sessionStanding(
-  token: { authTime?: number | null },
-  account: { sessionsValidAfter: Date | null } | null
+  token: { authTime?: number | null; passwordVersion?: string | null },
+  account: { sessionsValidAfter: Date | null; passwordVersion?: string | null } | null
 ): SessionStanding {
   if (!account) return "ended";
+  // Signed in with a password the account no longer has (it was reset since): ended, regardless of timing. A token from
+  // before this field existed carries none and is judged by the time cutoff alone.
+  if (token.passwordVersion && account.passwordVersion && token.passwordVersion !== account.passwordVersion) return "ended";
   if (account.sessionsValidAfter === null) return "valid";
   const authTime = token.authTime;
   // Below 1e12 is a seconds-era value (before 2001 in milliseconds): it cannot be compared, so it is ended.

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { locationService } from "@/services/location";
 import type { GuestPlaceModel } from "@/services/map3d/guest-models";
 import { AtlasIcon } from "../asset";
@@ -13,7 +13,10 @@ import { useMapScene, useSceneContext, type ScenePlace } from "./scene";
 import { useShortScreen, useWideLayout } from "../use-layout";
 import { useSheetSwipe } from "../use-sheet-swipe";
 import { categoryLabel } from "@/lib/format";
+import { eventCardLine, type GuestPlaceEvent } from "@/features/hotel-events/guest-display";
 import { describePriceLevel } from "@/services/advisor/preference-ranking";
+import { isDismissKey } from "@/lib/focus";
+import { countPlaceFilters, matchesPlaceFilter as matches, visiblePlaceFilters, type PlaceFilter as Filter } from "./place-filter";
 
 /*
  * Main · Missions › Map (home) — Figma frame 1:205 — on real data.
@@ -42,14 +45,13 @@ export type LivePlace = {
   imageUrl: string | null;
   /** The guest's own hotel recommends this partner. */
   recommended: boolean;
+  /** Upcoming events of the guest's own hotel at this place, soonest first, with their words already made on the server. */
+  events: GuestPlaceEvent[];
   /** [lng, lat] */
   at: [number, number];
 };
 
 export type LiveHotel = { name: string; address: string | null; at: [number, number] };
-
-/** Business chips. Attractions are always shown: choosing "Partners" or "Hotel" never hides them, and guests cannot turn them off. */
-type Filter = "All" | "Hotel" | "Partners";
 
 const SHEET_HEIGHT = 196;
 /** A picked place's details need a little more room than the card row, so its buttons are in view. */
@@ -93,9 +95,19 @@ function marker(place: LivePlace, selected: boolean, visited: boolean): MarkerIm
   return selected ? "partner-selected" : "partner";
 }
 
-function matches(filter: Filter, place: LivePlace) {
-  if (place.source === "attraction") return true;
-  return filter === "All" || (filter === "Hotel" ? place.source === "facility" : place.source === "partner");
+/** The soonest event's line on a place card, with how many more there are. Says only what and when. */
+function EventLine({ events }: { events: GuestPlaceEvent[] }) {
+  const [first] = events;
+  if (!first) return null;
+  return (
+    <span className="flex w-full items-start gap-[5px] font-manrope text-[12px] font-semibold leading-[16px] text-atlas-teal">
+      <span aria-hidden className="mt-[5px] size-[6px] shrink-0 rounded-[2px] bg-atlas-teal" />
+      <span className="min-w-0 [overflow-wrap:anywhere]">
+        {eventCardLine(first)}
+        {events.length > 1 ? ` (+${events.length - 1} more)` : ""}
+      </span>
+    </span>
+  );
 }
 
 /** Tapping a card (or its marker) flies the map to the place and shows its details in the sheet. */
@@ -132,6 +144,7 @@ function LivePlaceCard({ place, selected, hotelName, onOpen }: { place: LivePlac
             Recommended by {hotelName}
           </span>
         ) : null}
+        <EventLine events={place.events} />
         <span className="flex w-full flex-wrap items-center gap-[6px]">
           {place.address ? (
             <span className="min-w-0 truncate font-manrope text-[13px] leading-[18px] text-atlas-ink">{place.address}</span>
@@ -151,10 +164,31 @@ function sourceLabel(place: LivePlace): string {
   return place.source === "facility" ? "At your hotel" : place.source === "attraction" ? "Attraction" : "Partner";
 }
 
-/** One place's details in the sheet, after the guest picked it in the list or on the map. */
-function LivePlaceDetails({ place, hotelName, onBack }: { place: LivePlace; hotelName: string; onBack: () => void }) {
+/**
+ * One place's details in the sheet, after the guest picked it in the list or on the map. Its heading takes focus when
+ * it opens, and Escape anywhere inside goes back to the list, like "All places" (U094).
+ */
+function LivePlaceDetails({
+  place,
+  hotelName,
+  onBack,
+  headingRef,
+}: {
+  place: LivePlace;
+  hotelName: string;
+  onBack: () => void;
+  headingRef: RefObject<HTMLHeadingElement | null>;
+}) {
   return (
-    <div className="flex w-full flex-col items-start gap-[8px]" aria-live="polite">
+    <div
+      className="flex w-full flex-col items-start gap-[8px]"
+      aria-live="polite"
+      onKeyDown={(event) => {
+        if (!isDismissKey(event)) return;
+        event.stopPropagation();
+        onBack();
+      }}
+    >
       <div className="flex w-full items-start gap-[10px]">
         {place.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- admin-entered URLs from any host; next/image would need each host allowlisted
@@ -164,7 +198,14 @@ function LivePlaceDetails({ place, hotelName, onBack }: { place: LivePlace; hote
           <p className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
             {sourceLabel(place)} · {categoryLabel(place.category)}
           </p>
-          <h3 className="w-full font-grotesk text-[18px] font-bold leading-[22px] text-atlas-teal [overflow-wrap:anywhere]">{place.name}</h3>
+          <h3
+            ref={headingRef}
+            tabIndex={-1}
+            id="live-place-details-title"
+            className="w-full font-grotesk text-[18px] font-bold leading-[22px] text-atlas-teal [overflow-wrap:anywhere]"
+          >
+            {place.name}
+          </h3>
           {place.recommended ? (
             <p className="flex items-center gap-[5px] font-manrope text-[12px] font-semibold leading-[16px] text-atlas-teal">
               <span aria-hidden className="size-[6px] shrink-0 rounded-full bg-atlas-bronze" />
@@ -174,6 +215,26 @@ function LivePlaceDetails({ place, hotelName, onBack }: { place: LivePlace; hote
         </div>
       </div>
       {place.description ? <p className="w-full font-manrope text-[14px] leading-[1.45] text-atlas-ink">{place.description}</p> : null}
+      {place.events.length > 0 ? (
+        <section aria-labelledby="live-place-events-title" className="flex w-full flex-col items-start gap-[6px]">
+          <h4 id="live-place-events-title" className="font-manrope text-[11px] font-semibold uppercase leading-[15px] tracking-[0.44px] text-atlas-slate">
+            {place.events.length === 1 ? "Event" : "Events"}
+          </h4>
+          <ul className="flex w-full flex-col gap-[6px]">
+            {place.events.map((event) => (
+              <li key={event.id} className="flex w-full flex-col gap-[2px] rounded-[12px] border border-atlas-beige px-[12px] py-[8px]">
+                <span className="font-grotesk text-[15px] font-bold leading-[19px] text-atlas-teal [overflow-wrap:anywhere]">{event.title}</span>
+                <span className="font-manrope text-[13px] font-semibold leading-[18px] text-atlas-ink">
+                  {event.happeningNow ? `Happening now · ${event.range}` : event.range}
+                </span>
+                {event.description ? (
+                  <span className="font-manrope text-[13px] leading-[18px] text-atlas-ink [overflow-wrap:anywhere]">{event.description}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {place.address || place.priceLevel ? (
         <p className="flex w-full flex-wrap items-center gap-[6px] font-manrope text-[13px] leading-[18px] text-atlas-ink">
           {place.address ? <span className="min-w-0">{place.address}</span> : null}
@@ -237,6 +298,13 @@ export function LiveMissionsMap({
   // The place whose details the sheet shows. Picking one (a card or its marker) flies the one map to it.
   const [openId, setOpenId] = useState<string | null>(null);
   const open = places.find((place) => place.id === openId && matches(filter, place)) ?? null;
+  const openPlaceId = open?.id ?? null;
+  // The card that opened the details disappears while they show, so focus would fall to <body>: move it to the
+  // details' heading instead (U094). Closing hands it back to that place's card (closeDetails).
+  const detailsHeadingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (openPlaceId) detailsHeadingRef.current?.focus({ preventScroll: true });
+  }, [openPlaceId]);
   const restingHeight = open ? DETAILS_HEIGHT : SHEET_HEIGHT;
   const swipe = useSheetSwipe({ level, setLevel: (l) => setLevel(l as SheetLevel), heights: [SHEET_COLLAPSED, restingHeight, Math.max(restingHeight, listHeight)], enabled: !wide });
   // At the top of the list a downward drag moves the sheet; once scrolled, the list scrolls both ways.
@@ -264,6 +332,8 @@ export function LiveMissionsMap({
     id: place.id,
     marker: marker(place, place.id === selected, visited.has(place.id)),
     at: place.at,
+    // A small badge on the marker (a native symbol layer in engine.ts) says something is happening there.
+    hasEvent: place.events.length > 0,
   }));
 
   // The page sends every eligible Place within 15 km of the hotel once. Zooming or panning never reloads or
@@ -283,8 +353,14 @@ export function LiveMissionsMap({
   const closeDetails = () => {
     const id = openId;
     setOpenId(null);
-    // Back in the list, keep the place just viewed in sight.
-    if (id) requestAnimationFrame(() => document.getElementById(`live-place-${id}`)?.scrollIntoView({ block: "nearest", inline: "start" }));
+    // Back in the list, keep the place just viewed in sight, and give its card the focus back.
+    if (id) {
+      requestAnimationFrame(() => {
+        const card = document.getElementById(`live-place-${id}`);
+        card?.scrollIntoView({ block: "nearest", inline: "start" });
+        card?.focus({ preventScroll: true });
+      });
+    }
   };
 
   useMapScene(
@@ -301,15 +377,16 @@ export function LiveMissionsMap({
     selectPlace
   );
 
-  const counts: Record<Filter, number> = {
-    All: places.length,
-    Hotel: places.filter((place) => place.source === "facility").length,
-    Partners: places.filter((place) => place.source === "partner").length,
-  };
+  const counts = countPlaceFilters(places);
 
+  // One row that scrolls sideways: a wrapped second row would sit under the full list, which starts at LIST_TOP.
   const chips = (
-    <div role="toolbar" aria-label="Filter places" className="flex min-w-0 flex-1 flex-wrap items-start gap-[6px]">
-      {(["All", "Hotel", "Partners"] as const).map((chip) => {
+    <div
+      role="toolbar"
+      aria-label="Filter places"
+      className="flex min-w-0 flex-1 flex-nowrap items-start gap-[6px] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {visiblePlaceFilters(counts).map((chip) => {
         const active = chip === filter;
         return (
           <button
@@ -431,7 +508,7 @@ export function LiveMissionsMap({
             } wide:min-h-0 wide:flex-1 wide:snap-none wide:flex-col wide:overflow-y-auto wide:overflow-x-hidden wide:px-[4px] wide:[mask-image:none] wide:[scrollbar-width:thin]`}
           >
             {open ? (
-              <LivePlaceDetails place={open} hotelName={hotel.name} onBack={closeDetails} />
+              <LivePlaceDetails place={open} hotelName={hotel.name} onBack={closeDetails} headingRef={detailsHeadingRef} />
             ) : visible.length === 0 ? (
               <p className="w-full font-manrope text-[14px] leading-[1.45] text-atlas-slate">
                 {places.length === 0

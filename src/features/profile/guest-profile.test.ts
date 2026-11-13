@@ -15,6 +15,10 @@ describe("describeStay", () => {
   it("says the stay ended after the expected check-out", () => {
     assert.equal(describeStay({ checkIn, expectedCheckOut, checkOut: null, now: new Date("2026-03-14T09:00:00Z") }).progress, "Stay ended");
   });
+  it("still counts the departure day as part of the stay, like every other guest screen", () => {
+    const departure = new Date("2026-03-13T00:00:00Z");
+    assert.notEqual(describeStay({ checkIn, expectedCheckOut: departure, checkOut: null, now: new Date("2026-03-13T10:00:00Z") }).progress, "Stay ended");
+  });
   it("formats the dates in Tbilisi time", () => {
     assert.equal(describeStay({ checkIn, expectedCheckOut, checkOut: null, now: checkIn }).dates, "10 Mar – 13 Mar");
   });

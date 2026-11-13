@@ -1,12 +1,11 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { hashPassword } from "@/auth/password";
 import { db } from "@/db";
 import { clientIp } from "@/lib/client-ip";
 import { authRateLimitedMessage } from "@/services/rate-limit/auth-policy";
-import { getMailer } from "@/services/mail";
+import { getMailer, trustedLinkOrigin } from "@/services/mail";
 import { completePasswordReset, GENERIC_SENT_MESSAGE, requestPasswordReset } from "./core";
 
 /*
@@ -20,21 +19,14 @@ export type RequestResetState = {
   email?: string;
 };
 
-/** The site's own address for the emailed link: AUTH_URL when set, otherwise the request's host. */
-async function siteOrigin(): Promise<string> {
-  const configured = process.env.AUTH_URL?.trim();
-  if (configured) return new URL(configured).origin;
-  const list = await headers();
-  const host = list.get("x-forwarded-host") ?? list.get("host") ?? "localhost:3000";
-  const proto = list.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
 
 export async function requestResetAction(_previous: RequestResetState, formData: FormData): Promise<RequestResetState> {
   const email = String(formData.get("email") ?? "");
   try {
+    // The link's origin is AUTH_URL only (services/mail trustedLinkOrigin), never the request's Host header.
+    const origin = trustedLinkOrigin();
     const result = await requestPasswordReset(
-      { db, mailer: getMailer(), now: new Date(), origin: await siteOrigin(), clientKey: await clientIp() },
+      { db, mailer: origin ? getMailer() : null, now: new Date(), origin: origin ?? "", clientKey: await clientIp() },
       email
     );
     switch (result.status) {

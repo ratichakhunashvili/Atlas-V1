@@ -1,0 +1,3 @@
+-- Retire all but the newest unused reset token per account, so the unique index below can be created.
+UPDATE "password_reset_tokens" t SET "used_at" = now() WHERE t."used_at" IS NULL AND EXISTS (SELECT 1 FROM "password_reset_tokens" n WHERE n."user_id" = t."user_id" AND n."used_at" IS NULL AND (n."created_at", n."id") > (t."created_at", t."id"));--> statement-breakpoint
+CREATE UNIQUE INDEX "password_reset_tokens_one_unused_per_user" ON "password_reset_tokens" USING btree ("user_id") WHERE "password_reset_tokens"."used_at" is null;

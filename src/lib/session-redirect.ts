@@ -57,6 +57,26 @@ export function hasSessionCookie(cookieNames: readonly string[]): boolean {
   return cookieNames.some((name) => SESSION_COOKIE.test(name));
 }
 
+/**
+ * Anything other than the browser loading a page as a document: React Server Component fetches, prefetches, scripts.
+ * Decided by the browser-set Sec-Fetch-Dest header, because Next.js strips its own RSC and prefetch markers before the
+ * proxy sees the request (verified in the 2026-11-13 trace: prefetches arrived looking like plain GETs). A request
+ * without the header (not a browser) is treated as background too, so only real page loads refresh a session cookie.
+ */
+export function isBackgroundRequest(headers: Headers): boolean {
+  if (headers.has("rsc") || headers.has("next-router-prefetch") || headers.get("purpose") === "prefetch") return true;
+  return headers.get("sec-fetch-dest") !== "document";
+}
+
+/** The response with every Set-Cookie that would write an Auth.js session cookie removed; other cookies are kept. */
+export function withoutSessionCookieRefresh(response: Response): Response {
+  const cookies = response.headers.getSetCookie();
+  if (!cookies.some((cookie) => SESSION_COOKIE.test(cookie.split("=")[0]?.trim() ?? ""))) return response;
+  response.headers.delete("set-cookie");
+  for (const cookie of cookies) if (!SESSION_COOKIE.test(cookie.split("=")[0]?.trim() ?? "")) response.headers.append("set-cookie", cookie);
+  return response;
+}
+
 export function guestSignInPath(callbackUrl: string, sessionEnded: boolean): string {
   const query = new URLSearchParams({ callbackUrl });
   if (sessionEnded) query.set("reason", SESSION_ENDED_REASON);

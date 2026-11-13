@@ -26,7 +26,7 @@ describe("which requests the proxy hands to Auth.js", () => {
 
   it("proxy.ts blocks development routes first, then lets non-page-loads through before Auth.js runs", () => {
     const proxy = readFileSync(join(process.cwd(), "src/proxy.ts"), "utf8");
-    const body = proxy.slice(proxy.indexOf("export default function proxy"));
+    const body = proxy.slice(proxy.indexOf("export default async function proxy"));
     const block = body.indexOf("shouldBlockDevelopmentOnlyPath(");
     const gate = body.indexOf("if (!proxyReadsSession(req.method)) return NextResponse.next();");
     const authCall = body.indexOf("pageLoadProxy");

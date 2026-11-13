@@ -55,8 +55,9 @@ export default async function HotelEventsPage({
         </Link>
         <h1 className="mt-2 text-xl font-semibold">Hotel events — {hotel.place.name}</h1>
         <p className="text-sm text-slate-500">
-          Real, scheduled things happening at this hotel. The Advisor may include one in a guest&apos;s plan when it
-          fits the free time they chose. Atlas does not reserve a place, hold a seat, or confirm attendance.
+          Real, scheduled things happening at this hotel. Events are shown to this hotel&apos;s guests on the map and
+          in the place list, from 7 days before they start until they end, while their venue is available to those
+          guests. Atlas does not reserve a place, hold a seat, or confirm attendance.
         </p>
       </div>
 

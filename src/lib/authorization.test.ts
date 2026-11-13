@@ -24,7 +24,10 @@ describe("currentSession reads the account fresh", () => {
   });
 
   it("treats a missing account or an ended session as not signed in", () => {
-    assert.match(currentSessionBody, /!account \|\| sessionStanding\(\{ authTime: session\.authTime \}, account\) === "ended"/);
+    assert.match(currentSessionBody, /!account \|\|\s*sessionStanding\(/);
+    // The token's sign-in time AND the password it was signed in with, against the account's current state.
+    assert.match(currentSessionBody, /passwordVersion: session\.passwordVersion/);
+    assert.match(currentSessionBody, /passwordVersion: passwordFingerprint\(account\.passwordHash\)/);
     assert.match(currentSessionBody, /status: "ended"/);
   });
 });
