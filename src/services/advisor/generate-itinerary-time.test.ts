@@ -134,6 +134,7 @@ function buildDeps(options: Options) {
         availableMinutes: input.availableMinutes,
         generatedAt: input.generatedAt,
         completedAt: input.completedAt,
+        feedbackRequested: true,
       } satisfies ItineraryDay;
 
       const stops = input.stops.map((stop, index) => ({

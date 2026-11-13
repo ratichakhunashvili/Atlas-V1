@@ -12,7 +12,11 @@ export const users = pgTable(
     email: text("email").notNull().unique(),
     /** What the guest asked to be called; optional, never used to identify them. */
     name: text("name"),
-    passwordHash: text("password_hash").notNull(),
+    /**
+     * One-way hash of the password. Null for an account that signs in only with Google (user_identities) and has not
+     * set a password through "Forgot password"; such an account cannot sign in with a password.
+     */
+    passwordHash: text("password_hash"),
     role: text("role").notNull().default("user").$type<UserRole>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

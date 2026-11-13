@@ -124,6 +124,13 @@ describe("no guest-facing code can read Places without eligibility", () => {
        */
       "db/operations/place-admin.ts",
       "db/operations/hotel-admin.ts",
+      /*
+       * Private feedback after a plan day (Phase 2): joins places for the NAME of the hotel of the signed-in guest's
+       * own plan days (the feedback screen's "Your plan from <hotel>") and, behind requireAdmin(), of each entry in
+       * /admin/feedback. History, not a recommendation: it returns no Place list and decides no eligibility. Pinned by
+       * db/plan-day-feedback.pglite.test.ts.
+       */
+      "db/operations/plan-day-feedback.ts",
     ]);
     const users = files.filter((f) => /\.(from|innerJoin|leftJoin)\(places\b/.test(f.text) && !f.path.endsWith(".test.ts"));
     for (const f of users) assert.ok(allowed.has(f.path), `${f.path} reads the places table directly; route guest reads through services/eligibility`);

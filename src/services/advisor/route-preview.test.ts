@@ -64,6 +64,7 @@ function makeDay(overrides: Partial<ItineraryDay> = {}): ItineraryDay {
     availableMinutes: 240,
     generatedAt: NOW,
     completedAt: null,
+    feedbackRequested: true,
     ...overrides,
   };
 }

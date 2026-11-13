@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { PreferencesForm } from "@/components/atlas-ui/preferences-form";
 import { findPreferencesForUser } from "@/db/queries/preferences";
+import { findDaysOwingFeedback } from "@/features/feedback/owed";
 import { startPlanAction } from "@/features/plan/actions";
 import { interestsForCategories, priceLabelFor } from "@/features/plan/interests";
 import { requireUser } from "@/lib/authorization";
@@ -19,6 +20,8 @@ export default async function PreferencesPage() {
   // No valid stay: the home screen explains why. Already planned today: that plan is the place to be.
   if (plan.status === "no_stay") redirect("/");
   if (plan.status !== "not_started") redirect("/plan");
+  // An earlier day still owed private feedback comes before a new plan (Phase 2). Edit preferences stays open.
+  if ((await findDaysOwingFeedback(user.id, { plan })).owed.length > 0) redirect("/feedback");
 
   return (
     <PreferencesForm

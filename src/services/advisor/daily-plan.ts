@@ -8,6 +8,7 @@ import { calculateDayNumber, stayEndFor } from "./stay-day";
 import { isAvailableMinutesOption, remainingBudgetMinutes } from "./time-budget";
 import { savedStopVisitMinutes } from "./visit-duration";
 import { groupsUsedBy, type CategoryGroup } from "./category-groups";
+import { dayNeedsFeedback, NO_TODAY, type FeedbackCandidate } from "@/services/feedback/needs-feedback";
 
 /*
  * The guest's day as "choose 1 of 3", up to four activities. One day per calendar day of the stay.
@@ -89,15 +90,18 @@ export type DailyPlanDependencies = {
   recordVerifiedVisit: (input: { userId: string; placeId: string; method: CheckInMethod; now: Date }) => Promise<unknown>;
   /** TEST ONLY path ("Start today again"): frees today's slot, keeping the old day as history. */
   setDayAside: (dayId: string, now: Date) => Promise<boolean>;
+  /** The guest's days that may still be owed private feedback (Phase 2): a new plan waits until it is given. */
+  listFeedbackCandidates: (userId: string) => Promise<FeedbackCandidate[]>;
 };
 
 async function loadDefaultDependencies(): Promise<DailyPlanDependencies> {
-  const [eligibilityM, preferencesQ, itineraryQ, achievementsQ, visitsQ] = await Promise.all([
+  const [eligibilityM, preferencesQ, itineraryQ, achievementsQ, visitsQ, feedbackQ] = await Promise.all([
     import("@/services/eligibility"),
     import("@/db/queries/preferences"),
     import("@/db/queries/itinerary"),
     import("@/db/queries/achievements"),
     import("@/db/queries/place-visits"),
+    import("@/db/queries/plan-day-feedback"),
   ]);
   return {
     resolveGuestHotelContext: (userId, now) => eligibilityM.resolveGuestHotelContext(userId, now),
@@ -112,6 +116,7 @@ async function loadDefaultDependencies(): Promise<DailyPlanDependencies> {
     markStopVisited: itineraryQ.markStopVisited,
     recordVerifiedVisit: visitsQ.recordVerifiedVisit,
     setDayAside: itineraryQ.setItineraryDayAsideForTesting,
+    listFeedbackCandidates: feedbackQ.listFeedbackCandidates,
   };
 }
 
@@ -223,6 +228,7 @@ export type StartDayResult =
         | "no_active_stay"
         | "outside_stay_period"
         | "already_started"
+        | "feedback_required"
         | "invalid_time"
         | "no_preferences"
         | "no_eligible_experiences"
@@ -232,7 +238,8 @@ export type StartDayResult =
 
 /**
  * Starts today. Nothing is saved unless at least one option fits — a day that could offer nothing would only use
- * up the guest's one day for no reason.
+ * up the guest's one day for no reason. An earlier day still owed private feedback blocks the new plan
+ * ("feedback_required"); it is checked here, on the server, so a direct POST cannot skip it.
  */
 export async function startDayForUser(
   userId: string,
@@ -250,6 +257,10 @@ export async function startDayForUser(
   if (dayNumber === null) return { ok: false, reason: "outside_stay_period" };
 
   if (await d.findItineraryDay(userId, stay.hotel.id, dayNumber, stay.id)) return { ok: false, reason: "already_started" };
+
+  // Today's day does not exist yet, so every candidate is an earlier day: owed when one of its stops was visited.
+  const feedbackCandidates = await d.listFeedbackCandidates(userId);
+  if (feedbackCandidates.some((day) => dayNeedsFeedback(day, NO_TODAY))) return { ok: false, reason: "feedback_required" };
 
   const preferences = await d.findPreferencesForUser(userId);
   if (!preferences || preferences.categories.length === 0) return { ok: false, reason: "no_preferences" };

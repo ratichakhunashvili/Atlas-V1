@@ -11,6 +11,8 @@ import {
   pendingHotelSwitches,
   places,
   placeVisits,
+  planDayFeedback,
+  userIdentities,
   userPreferences,
   users,
 } from "@/db/schema";
@@ -23,10 +25,11 @@ import type { AtlasDatabase } from "./types";
  * Takes the database handle so db/account-export.pglite.test.ts runs this exact code.
  *
  * Included: the tables whose rows belong to the user (the same set account deletion removes): the account itself,
- * stays, pending hotel switches, preferences, plan days and their stops, visits, achievement unlocks, and the guest
- * principal with its sessions. Every column is chosen explicitly, so a column added later is never exported by accident.
+ * stays, pending hotel switches, preferences, plan days and their stops, visits, achievement unlocks, the private
+ * feedback the guest gave on their plan days, the sign-in methods (Google, and whether a password is set), and the guest principal with its sessions. Every column is chosen explicitly, so a column added later is never exported by accident.
  *
- * Left out on purpose: the password hash, password-reset token hashes, guest-session token hashes, and the two
+ * Left out on purpose: the password hash, Google's internal account id (an identifier Google assigned, not something the
+ * guest gave Atlas; the export says Google is connected and since when), password-reset token hashes, guest-session token hashes, and the two
  * rate-limit tables (security records keyed to the account, not data the guest gave us). The saved route line of a
  * plan day is also left out: it is a drawing derived from the stops, which are included.
  */
@@ -35,13 +38,20 @@ export type AccountExport = Awaited<ReturnType<typeof gatherAccountExport>>;
 
 export async function gatherAccountExport(db: AtlasDatabase, userId: string, now: Date = new Date()) {
   const [account] = await db
-    .select({ id: users.id, email: users.email, name: users.name, role: users.role, createdAt: users.createdAt, updatedAt: users.updatedAt })
+    .select({ id: users.id, email: users.email, name: users.name, role: users.role, createdAt: users.createdAt, updatedAt: users.updatedAt, passwordHash: users.passwordHash })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
   if (!account) return null;
+  // Only whether a password exists leaves this function, never the hash.
+  const { passwordHash, ...accountFields } = account;
+  const identities = await db
+    .select({ provider: userIdentities.provider, connectedAt: userIdentities.createdAt })
+    .from(userIdentities)
+    .where(eq(userIdentities.userId, userId))
+    .orderBy(asc(userIdentities.createdAt));
 
-  const [stays, pendingSwitches, preferences, days, visits, unlocks, principals] = await Promise.all([
+  const [stays, pendingSwitches, preferences, days, visits, unlocks, principals, feedback] = await Promise.all([
     db
       .select({
         id: hotelStays.id,
@@ -118,6 +128,32 @@ export async function gatherAccountExport(db: AtlasDatabase, userId: string, now
       .select({ id: guestPrincipals.id, createdAt: guestPrincipals.createdAt, lastSeenAt: guestPrincipals.lastSeenAt, linkedAt: guestPrincipals.linkedAt })
       .from(guestPrincipals)
       .where(eq(guestPrincipals.userId, userId)),
+    db
+      .select({
+        hotel: places.name,
+        planStartedAt: itineraryDays.generatedAt,
+        givenAt: planDayFeedback.createdAt,
+        overallRating: planDayFeedback.overallRating,
+        overallNote: planDayFeedback.overallNote,
+        technicalRating: planDayFeedback.technicalRating,
+        technicalNote: planDayFeedback.technicalNote,
+        mapRating: planDayFeedback.mapRating,
+        mapNote: planDayFeedback.mapNote,
+        placesRating: planDayFeedback.placesRating,
+        placesNote: planDayFeedback.placesNote,
+        checkinRating: planDayFeedback.checkinRating,
+        checkinNote: planDayFeedback.checkinNote,
+        moneyRating: planDayFeedback.moneyRating,
+        moneyNote: planDayFeedback.moneyNote,
+        hotelRating: planDayFeedback.hotelRating,
+        hotelNote: planDayFeedback.hotelNote,
+      })
+      .from(planDayFeedback)
+      .innerJoin(itineraryDays, eq(planDayFeedback.itineraryDayId, itineraryDays.id))
+      .innerJoin(hotels, eq(planDayFeedback.hotelId, hotels.id))
+      .innerJoin(places, eq(hotels.placeId, places.id))
+      .where(eq(planDayFeedback.userId, userId))
+      .orderBy(asc(planDayFeedback.createdAt)),
   ]);
 
   // Stops have no user column of their own: they are reached only through this user's days.
@@ -160,7 +196,9 @@ export async function gatherAccountExport(db: AtlasDatabase, userId: string, now
 
   return {
     exportedAt: now.toISOString(),
-    account,
+    account: accountFields,
+    /** How this account signs in: with a password (if one is set) and with any connected outside account. */
+    signIn: { password: passwordHash !== null, connectedAccounts: identities },
     preferences: preferences[0] ?? null,
     stays,
     pendingHotelSwitches: pendingSwitches,
@@ -170,6 +208,8 @@ export async function gatherAccountExport(db: AtlasDatabase, userId: string, now
     })),
     visits,
     achievements: unlocks,
+    /** Private feedback on plan days. A null rating means "didn't use it". */
+    planFeedback: feedback,
     guestProfiles: principals.map(({ id, ...principal }) => ({
       ...principal,
       sessions: sessions.filter((session) => session.principalId === id).map(({ principalId: _principalId, ...session }) => session),

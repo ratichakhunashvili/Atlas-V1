@@ -26,9 +26,10 @@ export const LOCATION_SENT_WHEN =
 
 /** What Atlas stores, from the schema and the sign-up, check-in and plan features. */
 export const DATA_WE_STORE = [
-  "Your account: email, an optional first name, and a password stored only as a one-way hash.",
+  "Your account: email, an optional first name, and a password stored only as a one-way hash. If you sign in with Google, Atlas uses your Google email as your account email and also keeps the id Google uses for your account. It never sees your Google password and stores nothing else from Google.",
   "Your stay: which hotel you are staying at and your dates.",
   "Your interests and free time, your plan, and the places you check in at and achievements you unlock.",
+  "The feedback you give after a plan day: your ratings and any notes. Only the Atlas team reads it; other guests never see it.",
   "Your location is not stored. It is sent to Atlas when you check in, to confirm you are there, and when you open a walking route, when Atlas passes it to its map provider, Mapbox, to work out the route.",
 ];
 

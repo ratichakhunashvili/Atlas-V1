@@ -353,6 +353,7 @@ function advisorDeps(stay: GuestStay, eligibility: EligibilityDependencies): Gen
         availableMinutes: null,
         generatedAt: input.generatedAt,
         completedAt: input.completedAt,
+        feedbackRequested: true,
       };
       const stops: ItineraryStop[] = input.stops.map((stop, i) => ({ id: `stop-${i}`, dayId: "day-1", position: i, supersededAt: null, supersededReason: null, ...stop }));
       return { status: "created", day, stops };

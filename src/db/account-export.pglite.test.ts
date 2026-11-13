@@ -54,6 +54,15 @@ async function seedGuest(label: string) {
     absoluteExpiresAt: new Date("2026-12-12T10:00:00Z"),
   });
   await db.insert(schema.rateLimitAttempts).values({ scope: "place_check_in", actorId: user.id });
+  await db.insert(schema.planDayFeedback).values({
+    userId: user.id,
+    itineraryDayId: day.id,
+    hotelId: hotel.id,
+    overallRating: 4,
+    overallNote: `Feedback ${label}`,
+    moneyRating: 2,
+    createdAt: new Date("2026-11-11T20:00:00Z"),
+  });
   return { user, stay, day };
 }
 
@@ -78,9 +87,15 @@ describe("gatherAccountExport", () => {
     assert.deepEqual(data.achievements.map((unlock) => unlock.achievement), ["Badge a"]);
     assert.equal(data.guestProfiles.length, 1);
     assert.equal(data.guestProfiles[0].sessions.length, 1);
+    assert.equal(data.planFeedback.length, 1);
+    assert.equal(data.planFeedback[0].hotel, "Hotel a");
+    assert.equal(data.planFeedback[0].overallRating, 4);
+    assert.equal(data.planFeedback[0].overallNote, "Feedback a");
+    assert.equal(data.planFeedback[0].moneyRating, 2);
+    assert.equal(data.planFeedback[0].technicalRating, null);
 
     const text = JSON.stringify(data);
-    for (const leak of [b.user.id, "b@example.test", "Name b", "Hotel b", "Stop b", "Museum b", "Badge b", b.stay.id, b.day.id]) {
+    for (const leak of [b.user.id, "b@example.test", "Name b", "Hotel b", "Stop b", "Museum b", "Badge b", "Feedback b", b.stay.id, b.day.id]) {
       assert.ok(!text.includes(leak), `A's export must not contain B's ${leak}`);
     }
   });

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { DailyPlanScreen } from "@/components/atlas-ui/daily-plan";
 import { findPreferencesForUser } from "@/db/queries/preferences";
+import { findDaysOwingFeedback } from "@/features/feedback/owed";
 import { stayHeaderSummary } from "@/features/plan/interests";
 import { isTestFinishAllowed } from "@/features/plan/test-finish";
 import { requireUser } from "@/lib/authorization";
@@ -26,6 +27,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ n
   if (state.status === "no_stay") redirect("/");
   // Preferences come first, every day.
   if (state.status === "not_started") redirect("/preferences");
+  // Today's plan is done: private feedback comes next, before the finished screen (Phase 2). Today's day is only owed
+  // once finished, so a day still in progress is never interrupted.
+  if (state.status === "finished" && (await findDaysOwingFeedback(user.id, { plan: state })).owed.some((day) => day.isToday)) {
+    redirect("/feedback");
+  }
   const summary = stayHeaderSummary({
     availableMinutes: state.availableMinutes,
     categories: saved?.categories ?? [],

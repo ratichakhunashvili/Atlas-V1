@@ -4,6 +4,7 @@ import { handleUploadPresigned, type HandleUploadPresignedBody } from "@vercel/b
 import { isBlobConfigured } from "@/services/storage/server";
 import { findPlaceById } from "@/db/queries/places";
 import { currentSession } from "@/lib/authorization";
+import { isPasswordSession } from "@/lib/session-standing";
 import { placeIdSchema } from "@/features/place-models/schema";
 import { modelUploadRefusal } from "@/features/place-models/upload-gate";
 import { ALLOWED_MODEL_CONTENT_TYPES, MAX_MODEL_BYTES, modelStorageKey } from "@/services/map3d";
@@ -27,7 +28,7 @@ class Refused extends Error {}
 async function assertAdmin() {
   // currentSession reads the account row (the fresh role) and refuses a token whose session was ended.
   const session = await currentSession();
-  if (session.status !== "signed-in" || session.account.role !== "admin") throw new Refused("Only administrators can upload models.");
+  if (session.status !== "signed-in" || session.account.role !== "admin" || !isPasswordSession(session.authMethod)) throw new Refused("Only administrators can upload models.");
 }
 
 export async function POST(request: Request) {

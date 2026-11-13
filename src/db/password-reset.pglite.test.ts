@@ -41,7 +41,7 @@ async function addUser(email: string) {
 }
 async function passwordWorks(userId: string, password: string) {
   const [row] = await database.db.select().from(users).where(eq(users.id, userId));
-  return bcrypt.compare(password, row.passwordHash);
+  return row.passwordHash !== null && bcrypt.compare(password, row.passwordHash);
 }
 async function messagesFor(email: string) {
   const files = await readdir(outbox);

@@ -9,11 +9,11 @@ import { findUserById } from "@/db/queries/users";
 import { ADMIN_DENIED_PATH, ADMIN_SIGN_IN_PATH } from "./admin-route-policy";
 import { SESSION_ENDED_REASON } from "./session-redirect";
 import { passwordFingerprint } from "./password-fingerprint";
-import { sessionStanding } from "./session-standing";
+import { isPasswordSession, sessionStanding } from "./session-standing";
 import { isSessionCookieName, signInRedirectPath } from "./sign-in-redirect";
 
 export type CurrentSession =
-  | { status: "signed-in"; user: Session["user"]; account: User }
+  | { status: "signed-in"; user: Session["user"]; account: User; authMethod: Session["authMethod"] }
   /** No session at all. */
   | { status: "signed-out" }
   /** A signed token whose session has been ended: signed out on another device, password reset, account deleted. */
@@ -39,7 +39,7 @@ export const currentSession = cache(async (): Promise<CurrentSession> => {
   ) {
     return { status: "ended" };
   }
-  return { status: "signed-in", user: session.user, account };
+  return { status: "signed-in", user: session.user, account, authMethod: session.authMethod };
 });
 
 export async function requireUser() {
@@ -67,13 +67,16 @@ export async function requireUser() {
  * let an administrator who has just been demoted keep full console access — and make the staff-access screen's
  * "removed" a statement that is not true. The same read also covers an account that was deleted, and a session that was
  * ended, after the token was issued.
+ *
+ * Admin access is never granted through Google (Phase 3): a session signed in with Google is refused even when the
+ * account is (or later becomes) an admin. Admins sign in with email and password.
  */
 export async function requireAdmin() {
   const current = await currentSession();
   if (current.status === "ended") redirect(`${ADMIN_SIGN_IN_PATH}?reason=${SESSION_ENDED_REASON}`);
   if (current.status !== "signed-in") redirect(ADMIN_SIGN_IN_PATH);
   const { user, account } = current;
-  if (account.role !== "admin") {
+  if (account.role !== "admin" || !isPasswordSession(current.authMethod)) {
     redirect(ADMIN_DENIED_PATH);
   }
   // The authoritative role, not the token's: callers that read `user.role` afterwards must see the fresh value.

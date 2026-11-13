@@ -19,6 +19,7 @@ export const GUEST_PROTECTED_EXACT = [
   "/",
   "/plan",
   "/plan/unlocked",
+  "/feedback",
   "/scan",
   "/achievements",
   "/privacy/delete-account",

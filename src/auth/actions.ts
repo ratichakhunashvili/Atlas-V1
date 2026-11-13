@@ -9,6 +9,8 @@ import { isAuthAttemptAllowed, recordAuthAttempt } from "@/db/queries/auth-rate-
 import { clientIp } from "@/lib/client-ip";
 import { authRateLimitKey, authRateLimitedMessage } from "@/services/rate-limit/auth-policy";
 import { safeCallback } from "./callback";
+import { isGoogleSignInConfigured } from "./google";
+import { redirect } from "next/navigation";
 
 /*
  * Sign-in for the guest screen (/login) and the admin screen (/admin/sign-in). Both use the same
@@ -69,6 +71,18 @@ export async function loginAction(_previous: SignInState, formData: FormData): P
     throw err;
   }
   return {};
+}
+
+/**
+ * "Continue with Google" on the sign-in and sign-up screens. Auth.js answers with a redirect to Google; the account
+ * rules run when Google sends the guest back (auth/index.ts). The destination is the same safe same-site path as a
+ * password sign-in, so a hotel code scanned before signing in survives the trip to Google. Without the Google keys
+ * there is no provider and no button; a stray post just returns to the sign-in screen.
+ */
+export async function googleSignInAction(formData: FormData) {
+  const redirectTo = safeCallback(formData.get("callbackUrl"), "/");
+  if (!isGoogleSignInConfigured(process.env)) redirect("/login");
+  await signIn("google", { redirectTo });
 }
 
 /**

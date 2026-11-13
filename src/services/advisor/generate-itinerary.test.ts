@@ -152,6 +152,7 @@ function createFakeItineraryStore() {
         availableMinutes: null,
         generatedAt: input.generatedAt,
         completedAt: computeDayCompletedAt(active, days[index].completedAt, input.generatedAt),
+        feedbackRequested: true,
       };
       days[index] = day;
       return { status: "updated", day, stops: active.sort((a, b) => a.position - b.position) };
@@ -171,6 +172,7 @@ function createFakeItineraryStore() {
         availableMinutes: null,
         generatedAt: input.generatedAt,
         completedAt: input.completedAt,
+        feedbackRequested: true,
       };
       days.push(day);
     }
@@ -513,6 +515,7 @@ test("difficulty ratchet: a fully-visited, easily-completed previous day raises 
       availableMinutes: null,
       generatedAt: new Date("2026-03-10T08:00:00Z"),
       completedAt: new Date("2026-03-10T08:30:00Z"),
+      feedbackRequested: true,
     },
     [
       {
@@ -598,6 +601,7 @@ test("cooldown expired (existing day generated long ago) rebuilds the same day i
       availableMinutes: null,
       generatedAt: new Date("2026-03-09T00:00:00Z"), // > 24h before NOW
       completedAt: null,
+      feedbackRequested: true,
     },
     [
       {
@@ -662,6 +666,7 @@ test("losing the create race for a brand-new day returns the winner's itinerary 
           availableMinutes: null,
           generatedAt: NOW,
           completedAt: null,
+          feedbackRequested: true,
         });
       }
       return originalPersist(input);
@@ -710,6 +715,7 @@ function historyDay(generatedAt: Date, overrides: Partial<ItineraryDay> = {}): I
     availableMinutes: null,
     generatedAt,
     completedAt: null,
+    feedbackRequested: true,
     ...overrides,
   };
 }
@@ -913,6 +919,7 @@ function previousDayWithDurations(totalDurationSeconds: number | null, originalD
       generatedAt: new Date("2026-03-10T08:00:00Z"),
       // Finished in 1800s, every stop visited.
       completedAt: new Date("2026-03-10T08:30:00Z"),
+      feedbackRequested: true,
     },
     [
       {

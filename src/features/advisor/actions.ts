@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/authorization";
+import { developmentToolsBlocked } from "@/services/deployment/environment";
 import { checkInStopWithGps, type CheckInResult } from "@/services/advisor/check-in";
 import { checkInStopWithQr, type QrCheckInResult } from "@/services/advisor/check-in-qr";
 import { checkInStopWithAr, type ArCheckInResult } from "@/services/advisor/check-in-ar";
@@ -185,6 +186,13 @@ export async function checkInArAction(
  */
 export async function generateItineraryAction(availableMinutes?: number): Promise<GenerateItineraryResult> {
   const user = await requireUser();
+
+  // The old whole-day generator belongs to the development page /dev/advisor only. A server action can be called
+  // directly even when its page is hidden, so it refuses on production builds and declared QA/staging/production
+  // deployments: guests plan through the daily plan, which enforces one plan per day and the feedback gate.
+  if (developmentToolsBlocked(process.env.NODE_ENV, process.env.ATLAS_DEPLOYMENT_ENV)) {
+    return { ok: false, reason: "no_plan_fits_time", message: "This tool is not available here." };
+  }
 
   // The window is the guest's own choice, but it is still client input: anything
   // outside the offered options is rejected here rather than planned for.

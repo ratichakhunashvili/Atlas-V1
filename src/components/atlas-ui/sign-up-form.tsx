@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { callbackQuery, hasProtectedCallback } from "@/auth/callback";
 import { signupAction, type SignUpState } from "@/features/users/actions";
 import { ConsentLine, useAuthForm } from "./auth-parts";
+import { GoogleSignInButton } from "./google-sign-in";
 import { ErrorBanner } from "./sign-in-form";
 import { AtlasButton, AtlasField, AtlasLink, Spacer, type } from "./ui";
 
@@ -18,7 +19,8 @@ const PASSWORD_HINT = "At least 8 characters, with a letter and a number.";
 const LINK =
   "flex min-h-[44px] items-center font-manrope text-[14px] font-semibold leading-[19px] text-atlas-teal underline underline-offset-2";
 
-export function AtlasSignUpForm({ callbackUrl }: { callbackUrl?: string }) {
+/** `google`: show "Continue with Google" (the page renders its form, GoogleSignInForm). */
+export function AtlasSignUpForm({ callbackUrl, google = false }: { callbackUrl?: string; google?: boolean }) {
   const [state, action, pending] = useActionState<SignUpState, FormData>(signupAction, {});
   const errors = state.fieldErrors ?? {};
   const failed = Boolean(state.emailUsed || state.formError || state.fieldErrors);
@@ -49,6 +51,8 @@ export function AtlasSignUpForm({ callbackUrl }: { callbackUrl?: string }) {
       </div>
 
       {state.formError ? <ErrorBanner>{state.formError}</ErrorBanner> : null}
+
+      {google ? <GoogleSignInButton /> : null}
 
       <div className="flex w-full flex-col items-start gap-[16px]">
         <AtlasField

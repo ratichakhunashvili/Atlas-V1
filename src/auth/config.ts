@@ -8,7 +8,9 @@ import { authTimeFor } from "@/lib/session-standing";
 // the Credentials provider on top of this for the full, Node-runtime config.
 export const authConfig = {
   session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
+  // Auth.js errors (a refused or failed Google sign-in) come back to the sign-in screen as ?error=<code>, never to
+  // Auth.js's own error page.
+  pages: { signIn: "/login", error: "/login" },
   providers: [],
   callbacks: {
     async jwt({ token, user }) {
@@ -21,6 +23,8 @@ export const authConfig = {
         // Which password this session was signed in with (lib/password-fingerprint.ts); a reset ends it.
         const passwordVersion = (user as { passwordVersion?: string }).passwordVersion;
         if (passwordVersion) token.passwordVersion = passwordVersion;
+        // How this session signed in; only a password session may use the admin console (lib/authorization.ts).
+        token.authMethod = (user as { authMethod?: "password" | "google" }).authMethod ?? "password";
       }
       return token;
     },
@@ -31,6 +35,7 @@ export const authConfig = {
       }
       if (typeof token.authTime === "number") session.authTime = token.authTime;
       if (typeof token.passwordVersion === "string") session.passwordVersion = token.passwordVersion;
+      if (token.authMethod === "password" || token.authMethod === "google") session.authMethod = token.authMethod;
       return session;
     },
   },

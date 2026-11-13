@@ -52,6 +52,8 @@ let days: ItineraryDay[];
 let stops: ItineraryStop[];
 let badges: Map<string, string>;
 let visits: string[];
+/** Days the guest has already given private feedback for (Phase 2). */
+let feedbackGiven: Set<string>;
 
 function deps(): DailyPlanDependencies {
   return {
@@ -118,6 +120,15 @@ function deps(): DailyPlanDependencies {
       for (const s of stops) if (s.dayId === dayId && !s.visitedAt && !s.supersededAt) s.supersededAt = now;
       return true;
     },
+    listFeedbackCandidates: async (userId) =>
+      days
+        .filter((day) => day.userId === userId && day.dayNumber > 0 && !feedbackGiven.has(day.id))
+        .map((day) => ({
+          dayId: day.id,
+          dayNumber: day.dayNumber,
+          hasFeedback: false,
+          visitedStops: stops.filter((stop) => stop.dayId === day.id && stop.visitedAt !== null).length,
+        })),
   };
 }
 
@@ -145,6 +156,7 @@ beforeEach(() => {
   stops = [];
   badges = new Map();
   visits = [];
+  feedbackGiven = new Set();
 });
 
 async function choicesFor(userId: string) {
@@ -191,6 +203,48 @@ describe("daily plan: starting the day", () => {
     assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: true });
     assert.deepEqual(await startDayForUser(GUEST_A, 240, NOW, deps()), { ok: false, reason: "already_started" });
     assert.equal(days.length, 1);
+  });
+});
+
+describe("daily plan: private feedback before the next plan (Phase 2)", () => {
+  /** An earlier day of Guest A's stay, with one stop; visited or not. */
+  function earlierDay(input: { userId?: string; dayNumber?: number; visited: boolean }) {
+    const userId = input.userId ?? GUEST_A;
+    const day = {
+      id: `earlier-${days.length + 1}`,
+      userId,
+      hotelId: userId === GUEST_A ? "hotel-a" : "hotel-b",
+      hotelStayId: userId === GUEST_A ? "stay-a" : "stay-b",
+      dayNumber: input.dayNumber ?? 1,
+      availableMinutes: 120,
+      generatedAt: new Date("2026-06-14T12:00:00Z"),
+    } as ItineraryDay;
+    days.push(day);
+    stops.push({ id: `${day.id}-stop`, dayId: day.id, position: 0, visitedAt: input.visited ? new Date("2026-06-14T13:00:00Z") : null, supersededAt: null } as ItineraryStop);
+    return day;
+  }
+
+  it("refuses a new plan while an earlier day with a visit has no feedback, and saves nothing", async () => {
+    earlierDay({ visited: true });
+    assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: false, reason: "feedback_required" });
+    assert.equal(days.length, 1, "today's day was not created");
+  });
+
+  it("allows the plan once that feedback is given", async () => {
+    const day = earlierDay({ visited: true });
+    feedbackGiven.add(day.id);
+    assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: true });
+  });
+
+  it("does not ask about an earlier day on which nothing was visited", async () => {
+    earlierDay({ visited: false });
+    assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: true });
+  });
+
+  it("ignores days set aside by the test-only restart, and other guests' days", async () => {
+    earlierDay({ visited: true, dayNumber: -1781438400 });
+    earlierDay({ visited: true, userId: GUEST_B });
+    assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: true });
   });
 });
 

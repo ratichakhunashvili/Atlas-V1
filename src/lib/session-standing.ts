@@ -33,6 +33,14 @@ export function sessionStanding(
   return authTime < account.sessionsValidAfter.getTime() ? "ended" : "valid";
 }
 
+/**
+ * Whether the session was signed in with a password. Tokens from before Google sign-in (Phase 3) carry no method and were
+ * all password sessions; any other value (Google, or something unexpected) is not.
+ */
+export function isPasswordSession(authMethod: unknown): boolean {
+  return authMethod === undefined || authMethod === "password";
+}
+
 /** The sign-in time to stamp into a new token, in epoch milliseconds. */
 export function authTimeFor(now: Date): number {
   return now.getTime();

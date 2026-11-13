@@ -44,6 +44,7 @@ const day = (id: string, dayNumber: number, overrides: Partial<ItineraryDay> = {
   availableMinutes: null,
   generatedAt: new Date(`2026-06-${12 + dayNumber}T08:00:00Z`),
   completedAt: null,
+  feedbackRequested: true,
   ...overrides,
 });
 

@@ -48,7 +48,7 @@ describe("guest sign-in redirects", () => {
   });
 
   it("protects the live guest screens that used to redirect to a bare /login", () => {
-    for (const path of ["/preferences", "/preferences/edit", "/plan", "/plan/unlocked", "/scan", "/directions", "/places/a71a5000-0000-4000-8000-000000001001", "/achievements", "/privacy/delete-account", "/profile", "/checkin/abc", "/unlock/abc"]) {
+    for (const path of ["/preferences", "/preferences/edit", "/plan", "/plan/unlocked", "/feedback", "/scan", "/directions", "/places/a71a5000-0000-4000-8000-000000001001", "/achievements", "/privacy/delete-account", "/profile", "/checkin/abc", "/unlock/abc"]) {
       assert.equal(isGuestProtectedPath(path), true, path);
       assert.ok(signedOut(path)?.startsWith("/login?callbackUrl="), path);
     }

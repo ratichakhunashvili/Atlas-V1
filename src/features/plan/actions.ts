@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { findPreferencesForUser, upsertPreferences } from "@/db/queries/preferences";
+import { findDaysOwingFeedback } from "@/features/feedback/owed";
 import { requireUser } from "@/lib/authorization";
 import { restartTodayForTesting, simulateScanForTesting, pickChoiceForUser, startDayForUser, type StartDayResult } from "@/services/advisor/daily-plan";
 import { removeUnavailableStopForUser } from "@/services/advisor/plan-repair";
@@ -27,6 +28,7 @@ const START_MESSAGES: Record<Exclude<StartDayResult, { ok: true }>["reason"], st
   no_active_stay: "You need an active hotel stay to plan your time.",
   outside_stay_period: "Your stay isn't active today, so there's nothing to plan.",
   already_started: "You've already planned today. Your new choices are saved for your next plan.",
+  feedback_required: "Tell us how your last plan went first.",
   invalid_time: "Choose how much time you have.",
   no_preferences: "Pick at least one interest.",
   no_eligible_experiences:
@@ -57,15 +59,20 @@ async function savePreferencesFrom(userId: string, formData: FormData): Promise<
   return { ok: true, minutes: minutesForTimeLabel(parsed.data.time)! };
 }
 
-/** "Plan my time": saves the choices, then starts today — once a day. */
+/**
+ * "Plan my time": saves the choices, then starts today — once a day. A day still owed private feedback comes first
+ * (Phase 2): checked here before anything is saved, and again inside startDayForUser, so a direct POST cannot skip it.
+ */
 export async function startPlanAction(_prev: PlanFormState, formData: FormData): Promise<PlanFormState> {
   const user = await requireUser();
+  if ((await findDaysOwingFeedback(user.id)).owed.length > 0) redirect("/feedback");
   const saved = await savePreferencesFrom(user.id, formData);
   if (!saved.ok) return saved.state;
 
   const result = await startDayForUser(user.id, saved.minutes);
   if (!result.ok) {
     if (result.reason === "no_active_stay" || result.reason === "outside_stay_period") redirect("/");
+    if (result.reason === "feedback_required") redirect("/feedback");
     return {
       time: String(formData.get("time")),
       interests: formData.getAll("interests").filter((value): value is Interest => (INTERESTS as readonly unknown[]).includes(value)),

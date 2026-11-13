@@ -7,6 +7,8 @@ import { createHash } from "node:crypto";
  * time cutoff alone cannot: a sign-in that read the old hash before the reset and stamped its token after it
  * (follow-up review, 2026-11-13). Node-only; the token itself is encrypted by Auth.js.
  */
-export function passwordFingerprint(passwordHash: string): string {
+/** Null for an account without a password (Google only): there is no password version to compare. */
+export function passwordFingerprint(passwordHash: string | null): string | null {
+  if (passwordHash === null) return null;
   return createHash("sha256").update(passwordHash).digest("base64url").slice(0, 22);
 }

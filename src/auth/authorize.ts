@@ -2,7 +2,7 @@ import { passwordFingerprint } from "@/lib/password-fingerprint";
 import { loginSchema } from "@/features/users/schema";
 import type { UserRole } from "@/db/schema";
 
-type Account = { id: string; email: string; role: UserRole; passwordHash: string };
+type Account = { id: string; email: string; role: UserRole; passwordHash: string | null };
 
 export type AuthorizeDependencies = {
   findUserByEmail: (email: string) => Promise<Account | null>;
@@ -22,7 +22,8 @@ export async function authorizeCredentials(deps: AuthorizeDependencies, credenti
   if (!parsed.success) return null;
 
   const user = await deps.findUserByEmail(parsed.data.email);
-  if (!user) return null;
+  // An account without a password (Google only) cannot sign in with one.
+  if (!user || user.passwordHash === null) return null;
 
   const valid = await deps.verifyPassword(parsed.data.password, user.passwordHash);
   if (!valid) return null;
@@ -30,5 +31,5 @@ export async function authorizeCredentials(deps: AuthorizeDependencies, credenti
   const current = await deps.findUserByEmail(parsed.data.email);
   if (!current || current.id !== user.id || current.passwordHash !== user.passwordHash) return null;
 
-  return { id: user.id, email: user.email, role: user.role, passwordVersion: passwordFingerprint(user.passwordHash) };
+  return { id: user.id, email: user.email, role: user.role, passwordVersion: passwordFingerprint(user.passwordHash) ?? undefined, authMethod: "password" as const };
 }

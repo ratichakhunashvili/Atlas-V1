@@ -40,6 +40,7 @@ const GROUPS: readonly { label: string; items: readonly NavItem[] }[] = [
     label: "Operations",
     items: [
       { href: "/admin/support", label: "Guest support", section: "/admin/support" },
+      { href: "/admin/feedback", label: "Guest feedback", section: "/admin/feedback" },
       { href: "/admin/staff", label: "Staff access", section: "/admin/staff" },
       { href: "/admin/analytics", label: "Analytics", section: "/admin/analytics" },
       { href: "/admin/audit", label: "Audit log", section: "/admin/audit" },

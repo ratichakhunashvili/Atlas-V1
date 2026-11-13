@@ -22,3 +22,5 @@ export * from "./itinerary-stops";
 export * from "./admin-audit-events";
 export * from "./guest-principals";
 export * from "./password-reset-tokens";
+export * from "./plan-day-feedback";
+export * from "./user-identities";

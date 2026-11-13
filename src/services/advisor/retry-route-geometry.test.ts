@@ -29,6 +29,7 @@ function day(routeGeoJson: unknown): ItineraryDay {
     availableMinutes: 120,
     generatedAt: NOW,
     completedAt: null,
+    feedbackRequested: true,
   };
 }
 

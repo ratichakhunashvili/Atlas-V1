@@ -14,7 +14,8 @@
  *  - script-src needs 'unsafe-inline' because Next.js emits inline bootstrap scripts and this app does not use a
  *    per-request nonce (a nonce would force every page to render dynamically). No third-party script origin is
  *    allowed. Development adds 'unsafe-eval' (React refresh) and ws: (hot reload) only.
- *  - Auth.js talks to this same origin only, so 'self' covers sign-in and form-action.
+ *  - Auth.js talks to this same origin, except Google sign-in, whose form POST redirects to accounts.google.com
+ *    (form-action). Google's pages are never framed or scripted here.
  *  - frame-ancestors: /present embeds the app in an iframe of itself, so ordinary routes allow 'self'; the admin
  *    console and API are never framed ('none' / DENY).
  */
@@ -44,7 +45,8 @@ export function buildContentSecurityPolicy({
     "frame-src": ["'self'"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
-    "form-action": ["'self'"],
+    // Google sign-in: the sign-in POST redirects to Google's consent screen, which form-action also governs.
+    "form-action": ["'self'", "https://accounts.google.com"],
     "frame-ancestors": [frameAncestors],
   };
   return Object.entries(directives)

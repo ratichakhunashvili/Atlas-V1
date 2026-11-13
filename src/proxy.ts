@@ -61,6 +61,7 @@ export const config = {
     "/unlock/:path*",
     // Live guest screens (GUEST_PROTECTED_* in lib/session-redirect.ts); a test keeps the two in step.
     "/plan",
+    "/feedback",
     "/scan",
     "/achievements",
     "/preferences/:path*",

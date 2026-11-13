@@ -22,7 +22,8 @@ async function seedGuestWithEverything(email: string) {
   const [hotel] = await db.insert(schema.hotels).values({ placeId: hotelPlace.id }).returning();
   const [stay] = await db.insert(schema.hotelStays).values({ userId: user.id, hotelId: hotel.id, checkIn: new Date("2026-06-15T08:00:00Z") }).returning();
   await db.insert(schema.userPreferences).values({ userId: user.id, categories: ["museum"] });
-  await db.insert(schema.itineraryDays).values({ userId: user.id, hotelId: hotel.id, hotelStayId: stay.id, dayNumber: 1, stopCount: 0 });
+  const [day] = await db.insert(schema.itineraryDays).values({ userId: user.id, hotelId: hotel.id, hotelStayId: stay.id, dayNumber: 1, stopCount: 0 }).returning();
+  await db.insert(schema.planDayFeedback).values({ userId: user.id, itineraryDayId: day.id, hotelId: hotel.id, overallRating: 3, overallNote: "private" });
   const [museum] = await db.insert(schema.places).values({ name: "Museum", latitude: 41.7, longitude: 44.8, category: "museum" }).returning();
   await db.insert(schema.achievements).values({ placeId: museum.id, name: "Badge" });
   await recordVerifiedVisit(db, { userId: user.id, placeId: museum.id, method: "gps", now: new Date("2026-06-15T10:00:00Z") });
@@ -30,7 +31,7 @@ async function seedGuestWithEverything(email: string) {
 }
 
 describe("deleteGuestAccount", () => {
-  it("removes the guest with their stay, preferences, plan, visits and badges", async () => {
+  it("removes the guest with their stay, preferences, plan, plan feedback, visits and badges", async () => {
     const { db, schema } = database;
     const { user, museum } = await seedGuestWithEverything("leaving@example.test");
 
@@ -42,6 +43,7 @@ describe("deleteGuestAccount", () => {
     assert.equal((await db.select().from(schema.itineraryDays).where(eq(schema.itineraryDays.userId, user.id))).length, 0);
     assert.equal((await db.select().from(schema.placeVisits).where(eq(schema.placeVisits.userId, user.id))).length, 0);
     assert.equal((await db.select().from(schema.achievementUnlocks).where(eq(schema.achievementUnlocks.userId, user.id))).length, 0);
+    assert.equal((await db.select().from(schema.planDayFeedback).where(eq(schema.planDayFeedback.userId, user.id))).length, 0);
     // Shared catalogue data is untouched.
     assert.equal((await db.select().from(schema.places).where(eq(schema.places.id, museum.id))).length, 1);
   });

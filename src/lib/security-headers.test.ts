@@ -51,7 +51,7 @@ test("the policy allows what the map, models and sign-in need, and nothing broad
     "'wasm-unsafe-eval'",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    "form-action 'self' https://accounts.google.com",
   ]) {
     assert.ok(csp.includes(part), `CSP lacks ${part}`);
   }

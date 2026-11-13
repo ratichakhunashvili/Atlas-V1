@@ -3,13 +3,20 @@ import { AtlasAsset, AtlasLogo } from "@/components/atlas-ui/asset";
 import { AtlasSignInForm } from "@/components/atlas-ui/sign-in-form";
 import { FlowScreen } from "@/components/atlas-ui/ui";
 import { SESSION_ENDED_REASON } from "@/lib/session-redirect";
+import { GoogleSignInForm } from "@/components/atlas-ui/google-sign-in";
+import { isGoogleSignInConfigured, signInErrorMessage } from "@/auth/google";
 
 /* SignIn · Sign in / create account — Figma frame 1:722, built on the Auth form set 1:4998. */
 
 export const metadata: Metadata = { title: "Sign in · Atlas" };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; reason?: string }> }) {
-  const { callbackUrl, reason } = await searchParams;
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string; reason?: string; error?: string }>;
+}) {
+  const { callbackUrl, reason, error } = await searchParams;
+  const google = isGoogleSignInConfigured(process.env);
   return (
     <main>
       <FlowScreen compact className="overflow-hidden">
@@ -23,8 +30,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <AtlasLogo tone="teal" width={38} height={44} />
         </div>
         <div className="relative flex w-full flex-1 flex-col">
-          <AtlasSignInForm callbackUrl={callbackUrl} sessionEnded={reason === SESSION_ENDED_REASON} />
+          <AtlasSignInForm
+            callbackUrl={callbackUrl}
+            sessionEnded={reason === SESSION_ENDED_REASON}
+            google={google}
+            notice={signInErrorMessage(error)}
+          />
         </div>
+        {google ? <GoogleSignInForm callbackUrl={callbackUrl} /> : null}
       </FlowScreen>
     </main>
   );

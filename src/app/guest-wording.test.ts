@@ -19,6 +19,7 @@ const GUEST_SOURCES = [
   "src/components/guest",
   "src/services/advisor",
   "src/features/plan",
+  "src/features/feedback",
 ];
 
 const FORBIDDEN = /approv|contract|commission|signed off/i;

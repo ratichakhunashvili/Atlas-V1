@@ -27,6 +27,7 @@ const day: ItineraryDay = {
   availableMinutes: null,
   generatedAt: new Date("2026-06-15T08:00:00Z"),
   completedAt: null,
+  feedbackRequested: true,
 };
 
 const stop = (id: string, placeId: string, position: number, overrides: Partial<ItineraryStop> = {}): ItineraryStop => ({

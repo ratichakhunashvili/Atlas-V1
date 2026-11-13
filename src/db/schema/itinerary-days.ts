@@ -1,5 +1,5 @@
 import { guestPrincipals } from "./guest-principals";
-import { integer, jsonb, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, pgTable, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { hotels } from "./hotels";
 import { hotelStays } from "./hotel-stays";
 import { users } from "./users";
@@ -46,6 +46,12 @@ export const itineraryDays = pgTable(
       .notNull()
       .defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    /**
+     * Whether this day asks the guest for private feedback once it is over (Phase 2). Migration 0036 set it false on
+     * every day that already existed, so guests are never asked about days from before feedback shipped (owner
+     * decision, 2026-11-13: "only new days"); every day created since gets the default, true.
+     */
+    feedbackRequested: boolean("feedback_requested").notNull().default(true),
   },
   (table) => [unique("itinerary_days_user_stay_day_unique").on(table.userId, table.hotelStayId, table.dayNumber)]
 );

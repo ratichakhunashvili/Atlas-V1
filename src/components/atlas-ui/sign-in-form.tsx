@@ -5,6 +5,7 @@ import { loginAction, type SignInState } from "@/auth/actions";
 import { callbackQuery, hasProtectedCallback } from "@/auth/callback";
 import { AtlasIcon } from "./asset";
 import { ConsentLine, SESSION_ENDED_MESSAGE, useAuthForm } from "./auth-parts";
+import { GoogleSignInButton } from "./google-sign-in";
 import { AtlasButton, AtlasField, AtlasLink, Spacer, type } from "./ui";
 
 /*
@@ -33,8 +34,22 @@ export function ErrorBanner({ children }: { children: string }) {
   );
 }
 
-/** `sessionEnded`: sent here because the session ended (expired, or signed out everywhere); said instead of the generic line. */
-export function AtlasSignInForm({ callbackUrl, sessionEnded = false }: { callbackUrl?: string; sessionEnded?: boolean }) {
+/**
+ * `sessionEnded`: sent here because the session ended (expired, or signed out everywhere); said instead of the generic line.
+ * `google`: show "Continue with Google" (the page renders its form, GoogleSignInForm). `notice`: a message for an
+ * ?error= code, e.g. a refused Google sign-in (auth/google.ts signInErrorMessage).
+ */
+export function AtlasSignInForm({
+  callbackUrl,
+  sessionEnded = false,
+  google = false,
+  notice = null,
+}: {
+  callbackUrl?: string;
+  sessionEnded?: boolean;
+  google?: boolean;
+  notice?: string | null;
+}) {
   const [state, action, pending] = useActionState<SignInState, FormData>(loginAction, {});
   const fieldErrors = state.fieldErrors ?? {};
   const failed = Boolean(state.error || state.fieldErrors);
@@ -64,7 +79,9 @@ export function AtlasSignInForm({ callbackUrl, sessionEnded = false }: { callbac
         </AtlasLink>
       </nav>
 
-      {state.error && !state.fieldErrors ? <ErrorBanner>{state.error}</ErrorBanner> : null}
+      {state.error && !state.fieldErrors ? <ErrorBanner>{state.error}</ErrorBanner> : notice && !failed ? <ErrorBanner>{notice}</ErrorBanner> : null}
+
+      {google ? <GoogleSignInButton /> : null}
 
       <div className="flex w-full flex-col items-start gap-[16px]">
         <AtlasField
