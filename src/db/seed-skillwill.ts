@@ -7,7 +7,7 @@ import postgres from "postgres";
 import { brandedQrSvg } from "../lib/branded-qr";
 import { qrLink } from "../lib/qr-links";
 import { isLocalDatabaseUrl } from "./operations/dev-seed";
-import { SKILLWILL_TEST_PLACES, seedSkillwillTest } from "./operations/skillwill-test";
+import { SKILLWILL_AREA_PLACES, SKILLWILL_TEST_PLACES, seedSkillwillTest } from "./operations/skillwill-test";
 import * as schema from "./schema";
 
 /*
@@ -39,7 +39,7 @@ async function main() {
     const result = await seedSkillwillTest(drizzle(client, { schema }));
     console.log(`Skillwill test base (${live ? "remote" : "local"} database):`);
     console.log(`  Skillwill hotel: ${result.hotel ? "added" : "already there"}`);
-    console.log(`  Places added: ${result.places} (of ${SKILLWILL_TEST_PLACES.length})`);
+    console.log(`  Places added: ${result.places} (of ${SKILLWILL_TEST_PLACES.length + SKILLWILL_AREA_PLACES.length})`);
     console.log(`  Pending Atlas contracts added: ${result.contracts}`);
     console.log(`  QR codes issued: ${result.codes.length}`);
 

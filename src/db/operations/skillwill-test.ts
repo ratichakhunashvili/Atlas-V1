@@ -1,6 +1,7 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { atlasPartnerContracts, hotels, places, qrCredentials, type NewPlace } from "@/db/schema";
 import { generateRawQrToken, hashQrToken } from "@/services/qr/token";
+import areaData from "@/db/data/skillwill-area.json";
 import type { AtlasDatabase } from "./types";
 
 /**
@@ -67,6 +68,37 @@ export const SKILLWILL_TEST_PLACES: readonly TestPlace[] = [
 
 export const skillwillPlaceId = (place: Pick<TestPlace, "n">) => ID(place.n);
 
+/**
+ * The wider area (owner request 2026-11-15: food, attractions and fun within 3 km, everything OpenStreetMap lists):
+ * src/db/data/skillwill-area.json, built from OpenStreetMap on 2026-11-15 by atlas-qa-tools/build-skillwill-area.mjs.
+ * Photos only where OpenStreetMap links a free-licensed Wikimedia Commons image, credited in the description. Same
+ * catalogue rule: attractions visible at once, every business only after an admin confirms its pending contract.
+ */
+export type AreaPlace = {
+  osm: string;
+  name: string;
+  category: NewPlace["category"];
+  kind: "attraction" | "business";
+  description: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  website: string | null;
+  phone: string | null;
+  visitDurationMinutes: number;
+  imageUrl: string | null;
+};
+
+export const SKILLWILL_AREA_PLACES = areaData as readonly AreaPlace[];
+
+const OSM_TYPE_DIGIT: Record<string, string> = { node: "1", way: "2", relation: "3" };
+
+/** A stable id from the OpenStreetMap element, so a re-run finds the same row: 5c111000-0000-4000-8001-<type><id hex>. */
+export function areaPlaceId(place: Pick<AreaPlace, "osm">): string {
+  const [type, id] = place.osm.split("/");
+  return `5c111000-0000-4000-8001-${OSM_TYPE_DIGIT[type] ?? "9"}${BigInt(id).toString(16).padStart(11, "0")}`;
+}
+
 /** A code issued just now. `kind` says which link the QR image must hold: /checkin/ (hotel) or /unlock/ (place). */
 export type IssuedTestCode = { label: string; kind: "hotel" | "place"; rawToken: string };
 
@@ -107,15 +139,42 @@ export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date(
       .onConflictDoNothing()
       .returning({ id: places.id });
 
+    const area: NewPlace[] = SKILLWILL_AREA_PLACES.map((place) => ({
+      id: areaPlaceId(place),
+      name: place.name,
+      description: place.description,
+      address: place.address,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      category: place.category,
+      kind: place.kind,
+      website: place.website,
+      phone: place.phone,
+      imageUrl: place.imageUrl,
+      visitDurationMinutes: place.visitDurationMinutes,
+      ...verified,
+    }));
+    for (let i = 0; i < area.length; i += 200) {
+      inserted.push(...(await tx.insert(places).values(area.slice(i, i + 200)).onConflictDoNothing().returning({ id: places.id })));
+    }
+
+    // Every place this run, by id: name and kind, for contracts and QR labels.
+    const all = [
+      ...SKILLWILL_TEST_PLACES.map((place) => ({ id: skillwillPlaceId(place), name: place.name, kind: place.kind })),
+      ...SKILLWILL_AREA_PLACES.map((place) => ({ id: areaPlaceId(place), name: place.name, kind: place.kind })),
+    ];
     const insertedIds = new Set(inserted.map((row) => row.id));
-    const businesses = SKILLWILL_TEST_PLACES.filter((place) => place.kind === "business" && insertedIds.has(skillwillPlaceId(place)));
-    const contracts = businesses.length
-      ? await tx
+    const businesses = all.filter((place) => place.kind === "business" && insertedIds.has(place.id));
+    const contracts: { id: string }[] = [];
+    for (let i = 0; i < businesses.length; i += 300) {
+      contracts.push(
+        ...(await tx
           .insert(atlasPartnerContracts)
-          .values(businesses.map((place) => ({ placeId: skillwillPlaceId(place), status: "pending_review" as const })))
+          .values(businesses.slice(i, i + 300).map((place) => ({ placeId: place.id, status: "pending_review" as const })))
           .onConflictDoNothing()
-          .returning({ id: atlasPartnerContracts.id })
-      : [];
+          .returning({ id: atlasPartnerContracts.id }))
+      );
+    }
 
     // QR codes, only where no live one exists (never rotates a code an admin may already have printed).
     const live = (subject: ReturnType<typeof eq>) =>
@@ -130,13 +189,23 @@ export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date(
       await tx.insert(qrCredentials).values({ purpose: "hotel_entry", hotelId: SKILLWILL_TEST_IDS.hotel, tokenHash: hashQrToken(rawToken), expiresAt: null });
       codes.push({ label: `${SKILLWILL_BASE.name} (hotel entry)`, kind: "hotel", rawToken });
     }
-    for (const place of SKILLWILL_TEST_PLACES) {
-      const placeId = skillwillPlaceId(place);
-      if ((await live(eq(qrCredentials.placeId, placeId))).length > 0) continue;
-      const rawToken = generateRawQrToken();
-      await tx.insert(qrCredentials).values({ purpose: "place_check_in", placeId, tokenHash: hashQrToken(rawToken), expiresAt: null });
-      codes.push({ label: place.name, kind: "place", rawToken });
+    // Places: one query for those that already have a live code, then one insert per batch for the rest.
+    const withCode = new Set<string>();
+    for (let i = 0; i < all.length; i += 500) {
+      const ids = all.slice(i, i + 500).map((place) => place.id);
+      const rows = await tx
+        .select({ placeId: qrCredentials.placeId })
+        .from(qrCredentials)
+        .where(and(inArray(qrCredentials.placeId, ids), isNull(qrCredentials.revokedAt)));
+      for (const row of rows) if (row.placeId) withCode.add(row.placeId);
     }
+    const toIssue = all.filter((place) => !withCode.has(place.id)).map((place) => ({ place, rawToken: generateRawQrToken() }));
+    for (let i = 0; i < toIssue.length; i += 300) {
+      await tx.insert(qrCredentials).values(
+        toIssue.slice(i, i + 300).map(({ place, rawToken }) => ({ purpose: "place_check_in" as const, placeId: place.id, tokenHash: hashQrToken(rawToken), expiresAt: null }))
+      );
+    }
+    for (const { place, rawToken } of toIssue) codes.push({ label: place.name, kind: "place", rawToken });
 
     return { hotel: hotel.length === 1, places: inserted.length, contracts: contracts.length, codes };
   });
