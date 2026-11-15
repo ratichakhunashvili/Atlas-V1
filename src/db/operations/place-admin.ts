@@ -28,6 +28,7 @@ export type PlaceUpdate = Partial<
     | "priceLevel"
     | "priceLevelSource"
     | "priceLevelVerifiedAt"
+    | "checkInMethod"
     | "publicationStatus"
     | "verificationStatus"
   >
@@ -51,6 +52,7 @@ export const PLACE_DETAIL_FIELDS = [
   "visitDurationMinutes",
   "priceLevel",
   "priceLevelSource",
+  "checkInMethod",
 ] as const satisfies readonly (keyof Place)[];
 
 type DetailField = (typeof PLACE_DETAIL_FIELDS)[number];

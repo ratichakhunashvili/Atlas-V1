@@ -61,10 +61,12 @@ test("a raw credential is generated in exactly one place and never stored", () =
   const generators = sourceFiles("src").filter((file) => /generateRawQrToken\s*\(/.test(read(file)));
 
   // The definition, plus the deliberate callers: the admin issue actions and the
-  // scenario tool (which generates and discards). Each hashes before storing.
+  // scenario tool (which generates and discards), and the Skillwill test seed (shows codes once on a printable sheet).
+  // Each hashes before storing.
   assert.deepEqual(
     generators.sort(),
     [
+      "src/db/operations/skillwill-test.ts",
       "src/features/advisor-testing/actions.ts",
       "src/features/qr-credentials/actions.ts",
       "src/services/advisor-testing/scenario.ts",

@@ -339,6 +339,7 @@ describe("changedPlaceDetails", () => {
     visitDurationMinutes: null,
     priceLevel: null,
     priceLevelSource: null,
+    checkInMethod: "qr_or_gps" as const,
   };
 
   it("is null when nothing descriptive changed", () => {

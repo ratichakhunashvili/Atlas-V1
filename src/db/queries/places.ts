@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, gte, ilike, lte, or } from "drizzle-orm";
 import { db } from "@/db";
-import { achievementUnlocks, achievements, places, type Place, type PlaceCategory, type PublicationStatus, type VerificationStatus } from "@/db/schema";
+import { achievementUnlocks, achievements, places, type Place, type PlaceCategory, type PlaceCheckInMethod, type PublicationStatus, type VerificationStatus } from "@/db/schema";
 import type { DuplicateCandidate } from "@/services/catalog/duplicates";
 import { boundingBoxForRadius, distanceMeters, type LatLng } from "@/lib/geo";
 import { updatePlaceRow } from "@/db/operations/place-admin";
@@ -23,6 +23,8 @@ export type PlaceInput = {
   /** Evidence for the price level: where it came from and when an admin last confirmed it. Both null when there is no level. */
   priceLevelSource?: string | null;
   priceLevelVerifiedAt?: Date | null;
+  /** How guests check in: QR only, location only, or either (the column default). */
+  checkInMethod?: PlaceCheckInMethod;
   // Not exposed on the admin Place form yet (reserved for future QR
   // provisioning UI) — the Advisor test-scenario tool is the first caller
   // that needs to set this at creation time.

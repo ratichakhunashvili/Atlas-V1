@@ -45,6 +45,13 @@ async function loadDefaultDependencies(): Promise<GuestModelDependencies> {
   };
 }
 
+/**
+ * Whether guests see 3D models on the map. Off (owner decision, 2026-11-15): the map shows no 3D objects, nothing is
+ * sent to the browser and Three.js is never loaded. Uploaded models and their admin settings are kept; set this back to
+ * true to show them again.
+ */
+export const GUEST_3D_MODELS_ENABLED = false;
+
 export async function listGuestPlaceModels(
   userId: string,
   now: Date = new Date(),

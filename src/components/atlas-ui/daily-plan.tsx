@@ -146,7 +146,7 @@ function CurrentRow({ state, testFinish }: { state: Extract<Started, { status: "
           <AtlasIcon src="/atlas-ui/icon-map-teal.svg" size={16} />
           Show the walking route
         </Link>
-        <CheckInPanel stopId={current.id} placeName={current.name} testScan={testFinish} />
+        <CheckInPanel stopId={current.id} placeName={current.name} checkInMethod={current.checkInMethod} testScan={testFinish} />
       </div>
     </Row>
   );

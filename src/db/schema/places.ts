@@ -51,6 +51,13 @@ export type PublicationStatus = (typeof PUBLICATION_STATUSES)[number];
 export const PLACE_KINDS = ["business", "attraction", "hotel"] as const;
 export type PlaceKind = (typeof PLACE_KINDS)[number];
 
+/**
+ * How guests may check in at this Place, chosen by an admin (0039). Copied into each itinerary stop when the stop is
+ * created, where services/advisor/check-in-method.ts enforces it on every attempt. "qr_or_gps" (both) is the default.
+ */
+export const PLACE_CHECK_IN_METHODS = ["qr", "gps", "qr_or_gps"] as const;
+export type PlaceCheckInMethod = (typeof PLACE_CHECK_IN_METHODS)[number];
+
 export const VERIFICATION_STATUSES = ["unverified", "verified"] as const;
 export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
 
@@ -105,6 +112,7 @@ export const places = pgTable(
      * from category, or the column default), so later phases can refuse to treat an unconfirmed "attraction" as one.
      */
     kindConfirmedAt: timestamp("kind_confirmed_at", { withTimezone: true }),
+    checkInMethod: text("check_in_method").notNull().default("qr_or_gps").$type<PlaceCheckInMethod>(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     // New and migrated Places start as draft / unverified so nothing becomes
     // recommendable by accident; an admin publishes and verifies explicitly.
@@ -138,6 +146,7 @@ export const places = pgTable(
     ),
     check("places_category_check", enumCheck(table.category, PLACE_CATEGORIES)),
     check("places_kind_check", enumCheck(table.kind, PLACE_KINDS)),
+    check("places_check_in_method_check", enumCheck(table.checkInMethod, PLACE_CHECK_IN_METHODS)),
     check("places_publication_status_check", enumCheck(table.publicationStatus, PUBLICATION_STATUSES)),
     check("places_verification_status_check", enumCheck(table.verificationStatus, VERIFICATION_STATUSES)),
     // Status and its timestamp must agree, so a status can never be set without leaving an audit trail.

@@ -18,7 +18,7 @@ import { requireUser } from "@/lib/authorization";
 import { getDailyPlanForUser } from "@/services/advisor/daily-plan";
 import { getEligibleMapPlacesForGuest, listUpcomingHotelEventsForGuest } from "@/services/eligibility";
 import { eventsByVenue } from "@/features/hotel-events/guest-display";
-import { listGuestPlaceModels } from "@/services/map3d";
+import { GUEST_3D_MODELS_ENABLED, listGuestPlaceModels } from "@/services/map3d";
 import { boundsAround } from "@/services/eligibility/viewport";
 
 /*
@@ -55,8 +55,9 @@ export default async function HomePage({
   const [map, testEntryOffered, models, events] = await Promise.all([
     getEligibleMapPlacesForGuest({ userId: user.id, bounds: area, radiusMeters: CATALOGUE_RADIUS_METERS }, now),
     isTestEntryOffered(user.id),
-    // Only enabled models of Places in this guest's own catalogue, plus their own hotel's (services/map3d).
-    listGuestPlaceModels(user.id),
+    // Only enabled models of Places in this guest's own catalogue, plus their own hotel's (services/map3d). Switched off
+    // for now: no 3D objects on the guest map (GUEST_3D_MODELS_ENABLED).
+    GUEST_3D_MODELS_ENABLED ? listGuestPlaceModels(user.id) : Promise.resolve([]),
     // The guest's OWN hotel's upcoming events, venue eligibility checked at the event's time (services/eligibility).
     listUpcomingHotelEventsForGuest({ userId: user.id }, now),
   ]);

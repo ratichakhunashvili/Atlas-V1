@@ -5,18 +5,31 @@ import { useState } from "react";
 import { simulateScanAction } from "@/features/plan/actions";
 import { AtlasIcon } from "./asset";
 import { PendingSubmit } from "./pending-submit";
-import { useStopCheckIn } from "./use-stop-check-in";
+import type { CheckInMethod } from "@/db/schema";
+import { acceptedProofs, useStopCheckIn } from "./use-stop-check-in";
 
 // The camera library is only loaded when the guest actually opens the scanner.
 const QrScannerModal = dynamic(() => import("@/components/qr/qr-scanner-modal").then((m) => m.QrScannerModal), { ssr: false });
 
 /*
- * "Go to <place>": check in by scanning the place's Atlas QR code OR by location. Either way the server decides —
+ * "Go to <place>": check in by scanning the place's Atlas QR code and/or by location, offering only the ways the
+ * stop accepts (its saved method, which an admin chose for the Place). Either way the server decides —
  * this component only collects the scanned text or a position reading and forwards it. Success opens the
  * Achievement unlocked screen for this stop.
  */
-export function CheckInPanel({ stopId, placeName, testScan }: { stopId: string; placeName: string; testScan: boolean }) {
+export function CheckInPanel({
+  stopId,
+  placeName,
+  checkInMethod,
+  testScan,
+}: {
+  stopId: string;
+  placeName: string;
+  checkInMethod: CheckInMethod;
+  testScan: boolean;
+}) {
   const [scanning, setScanning] = useState(false);
+  const proofs = acceptedProofs(checkInMethod);
   const { error, working, checkInWithCode, checkInByLocation } = useStopCheckIn({ stopId, placeName });
 
   async function onScan(decodedText: string) {
@@ -28,23 +41,34 @@ export function CheckInPanel({ stopId, placeName, testScan }: { stopId: string; 
 
   return (
     <div className="flex w-full flex-col items-start gap-[8px]">
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => setScanning(true)}
-        className="flex h-[48px] w-full items-center justify-center gap-[8px] rounded-[12px] bg-atlas-teal font-manrope text-[15px] font-semibold text-atlas-paper disabled:opacity-70"
-      >
-        <AtlasIcon src="/atlas-ui/icon-qr-light-17.svg" size={17} />
-        {working === "qr" ? "Checking the code…" : "Scan the QR code"}
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={checkInByLocation}
-        className="flex h-[48px] w-full items-center justify-center rounded-[12px] border border-atlas-teal font-manrope text-[15px] font-semibold text-atlas-teal disabled:opacity-70"
-      >
-        {working === "gps" ? "Checking your location…" : "Check in with my location"}
-      </button>
+      {proofs.qr !== proofs.gps ? (
+        <p className="font-manrope text-[14px] leading-[19px] text-atlas-slate">
+          {proofs.qr ? "This stop is checked in with its QR code at the counter." : "This stop is checked in with your location when you arrive."}
+        </p>
+      ) : null}
+      {proofs.qr ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setScanning(true)}
+          className="flex h-[48px] w-full items-center justify-center gap-[8px] rounded-[12px] bg-atlas-teal font-manrope text-[15px] font-semibold text-atlas-paper disabled:opacity-70"
+        >
+          <AtlasIcon src="/atlas-ui/icon-qr-light-17.svg" size={17} />
+          {working === "qr" ? "Checking the code…" : "Scan the QR code"}
+        </button>
+      ) : null}
+      {proofs.gps ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={checkInByLocation}
+          className={`flex h-[48px] w-full items-center justify-center rounded-[12px] font-manrope text-[15px] font-semibold disabled:opacity-70 ${
+            proofs.qr ? "border border-atlas-teal text-atlas-teal" : "bg-atlas-teal text-atlas-paper"
+          }`}
+        >
+          {working === "gps" ? "Checking your location…" : "Check in with my location"}
+        </button>
+      ) : null}
       {testScan ? (
         <form action={simulateScanAction} className="w-full">
           <PendingSubmit

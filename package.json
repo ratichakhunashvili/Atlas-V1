@@ -15,6 +15,7 @@
     "db:seed:admin": "tsx src/db/seed.ts",
     "db:seed:dev": "tsx src/db/seed-dev.ts",
     "db:seed:gurjaani": "tsx src/db/seed-gurjaani.ts",
+    "db:seed:skillwill": "tsx src/db/seed-skillwill.ts",
     "db:backfill:principals": "tsx src/db/backfill-principals.ts"
   },
   "dependencies": {

@@ -1,0 +1,2 @@
+ALTER TABLE "places" ADD COLUMN "check_in_method" text DEFAULT 'qr_or_gps' NOT NULL;--> statement-breakpoint
+ALTER TABLE "places" ADD CONSTRAINT "places_check_in_method_check" CHECK ("places"."check_in_method" in ('qr', 'gps', 'qr_or_gps'));

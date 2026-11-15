@@ -218,3 +218,21 @@ describe("daily plan stops: QR or location", () => {
     assert.equal(isCheckInMethodAllowed("qr", "gps"), false);
   });
 });
+
+describe("per-place check-in method (admin's choice, copied onto the stop)", () => {
+  it("QR code only: a scan is accepted, a location check-in is refused", () => {
+    assert.equal(isCheckInMethodAllowed("qr", "qr"), true);
+    assert.equal(isCheckInMethodAllowed("qr", "gps"), false);
+    assert.equal(isCheckInMethodAllowed("qr", "ar"), false);
+  });
+
+  it("Location only: a location check-in is accepted, a QR scan is refused", () => {
+    assert.equal(isCheckInMethodAllowed("gps", "gps"), true);
+    assert.equal(isCheckInMethodAllowed("gps", "qr"), false);
+  });
+
+  it("Both: either proof is accepted", () => {
+    assert.equal(isCheckInMethodAllowed("qr_or_gps", "qr"), true);
+    assert.equal(isCheckInMethodAllowed("qr_or_gps", "gps"), true);
+  });
+});

@@ -275,7 +275,11 @@ function StopScanner({ target }: { target: ScanTarget }) {
       <p className={EYEBROW}>Checking in at</p>
       <h1 className={TITLE}>{target.name}</h1>
       <p className={SUB}>
-        {proofs.qr ? "Point your camera at the Atlas code at the counter" : "This stop is confirmed by your location when you arrive"}
+        {proofs.qr && proofs.gps
+          ? "Scan the Atlas code at the counter, or check in with your location"
+          : proofs.qr
+            ? "This stop is confirmed by its QR code: point your camera at the Atlas code at the counter"
+            : "This stop is confirmed by your location when you arrive"}
       </p>
     </>
   );

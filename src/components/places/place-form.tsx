@@ -1,9 +1,15 @@
-import { PLACE_CATEGORIES, PUBLICATION_STATUSES, VERIFICATION_STATUSES, type Place } from "@/db/schema";
+import { PLACE_CATEGORIES, PLACE_CHECK_IN_METHODS, PUBLICATION_STATUSES, VERIFICATION_STATUSES, type Place } from "@/db/schema";
 import { Alert } from "@/components/shared/alert";
 import { Button } from "@/components/shared/button";
 import { Field } from "@/components/shared/field";
 import { Select } from "@/components/shared/select";
 import { PlaceLocationPicker } from "./place-location-picker";
+
+const CHECK_IN_METHOD_LABELS: Record<(typeof PLACE_CHECK_IN_METHODS)[number], string> = {
+  qr_or_gps: "Both: QR code or location",
+  qr: "QR code only",
+  gps: "Location (GPS) only",
+};
 
 function sentence(value: string) {
   const words = value.replaceAll("_", " ");
@@ -82,6 +88,17 @@ export function PlaceForm({
         defaultValue={place?.priceLevelSource ?? ""}
         hint="Required when a price level is set (for example, the venue's own menu, checked today). Confirmed at save time."
       />
+
+      <Select label="How guests check in" name="checkInMethod" defaultValue={place?.checkInMethod ?? "qr_or_gps"}>
+        {PLACE_CHECK_IN_METHODS.map((method) => (
+          <option key={method} value={method}>
+            {CHECK_IN_METHOD_LABELS[method]}
+          </option>
+        ))}
+      </Select>
+      <p className="-mt-3 text-xs text-slate-500">
+        Applies to stops planned from now on. QR code only needs the place&apos;s Atlas code at the counter.
+      </p>
 
       <div className="grid grid-cols-2 gap-4">
         <Select label="Publication" name="publicationStatus" defaultValue={place?.publicationStatus ?? "draft"}>

@@ -158,3 +158,17 @@ describe("buildDailyChoices", () => {
     assert.deepEqual(ids, ["park"]);
   });
 });
+
+describe("daily choices carry the place's own check-in method", () => {
+  it("copies QR-only, location-only and both from each Place", () => {
+    const pool = [
+      partner(near("qr-only", 1, { category: "restaurant", checkInMethod: "qr" })),
+      partner(near("gps-only", 2, { category: "museum", checkInMethod: "gps" })),
+      partner(near("both", 3, { category: "spa" })),
+    ];
+    const byId = new Map(buildDailyChoices(input(pool)).map((choice) => [choice.placeId, choice.checkInMethod]));
+    assert.equal(byId.get("qr-only"), "qr");
+    assert.equal(byId.get("gps-only"), "gps");
+    assert.equal(byId.get("both"), "qr_or_gps");
+  });
+});

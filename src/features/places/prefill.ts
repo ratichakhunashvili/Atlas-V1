@@ -1,4 +1,4 @@
-import { PLACE_CATEGORIES, PUBLICATION_STATUSES, VERIFICATION_STATUSES, type Place } from "@/db/schema";
+import { PLACE_CATEGORIES, PLACE_CHECK_IN_METHODS, PUBLICATION_STATUSES, VERIFICATION_STATUSES, type Place } from "@/db/schema";
 
 /**
  * The place form's fields. After a refused save the action sends the admin's typed values back in the
@@ -17,6 +17,7 @@ export const PLACE_FORM_FIELDS = [
   "visitDurationMinutes",
   "priceLevel",
   "priceLevelSource",
+  "checkInMethod",
   "publicationStatus",
   "verificationStatus",
 ] as const;
@@ -52,6 +53,7 @@ export function placePrefill(params: SearchParams): Partial<Place> {
     visitDurationMinutes: number(params.visitDurationMinutes) ?? null,
     priceLevel: number(params.priceLevel) ?? null,
     priceLevelSource: params.priceLevelSource ?? null,
+    checkInMethod: oneOf(params.checkInMethod, PLACE_CHECK_IN_METHODS),
     publicationStatus: oneOf(params.publicationStatus, PUBLICATION_STATUSES),
     verificationStatus: oneOf(params.verificationStatus, VERIFICATION_STATUSES),
   };

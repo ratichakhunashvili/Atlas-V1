@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PLACE_CATEGORIES, PUBLICATION_STATUSES, VERIFICATION_STATUSES } from "@/db/schema";
+import { PLACE_CATEGORIES, PLACE_CHECK_IN_METHODS, PUBLICATION_STATUSES, VERIFICATION_STATUSES } from "@/db/schema";
 import { normalizePhoneForTel } from "@/features/legal/front-desk";
 
 const optionalText = (max: number) =>
@@ -45,6 +45,8 @@ export const placeSchema = z.object({
     .transform((value) => (value === "" ? null : (value as number))),
   /** Where the price tier came from (a menu, the venue's own site, a phone call). Required whenever a price level is set. */
   priceLevelSource: optionalText(200),
+  /** How guests check in here: QR code only, location only, or either. Copied into each new stop at this Place. */
+  checkInMethod: z.enum([...PLACE_CHECK_IN_METHODS]).default("qr_or_gps"),
   publicationStatus: z.enum([...PUBLICATION_STATUSES]).default("draft"),
   verificationStatus: z.enum([...VERIFICATION_STATUSES]).default("unverified"),
 });

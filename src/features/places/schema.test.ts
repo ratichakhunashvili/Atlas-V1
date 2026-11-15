@@ -44,3 +44,23 @@ describe("a place's phone number", () => {
     }
   });
 });
+
+describe("how guests check in at a place", () => {
+  it("defaults to both when the form leaves it out", () => {
+    const parsed = placeSchema.safeParse({ ...base, phone: "" });
+    assert.equal(parsed.success && parsed.data.checkInMethod, "qr_or_gps");
+  });
+
+  it("accepts QR only, location only and both", () => {
+    for (const checkInMethod of ["qr", "gps", "qr_or_gps"]) {
+      const parsed = placeSchema.safeParse({ ...base, phone: "", checkInMethod });
+      assert.equal(parsed.success && parsed.data.checkInMethod, checkInMethod);
+    }
+  });
+
+  it("refuses any other value, including stop-only methods", () => {
+    for (const checkInMethod of ["ar", "auto", "QR", "", "anything"]) {
+      assert.equal(placeSchema.safeParse({ ...base, phone: "", checkInMethod }).success, false, checkInMethod);
+    }
+  });
+});

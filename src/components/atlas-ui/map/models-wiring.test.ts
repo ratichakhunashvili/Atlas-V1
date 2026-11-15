@@ -11,9 +11,14 @@ import { describe, it } from "node:test";
 const read = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 
 describe("3D models on the guest map", () => {
+  it("are switched off for now: the guest map shows no 3D objects", async () => {
+    const { GUEST_3D_MODELS_ENABLED } = await import("@/services/map3d");
+    assert.equal(GUEST_3D_MODELS_ENABLED, false);
+  });
+
   it("the home page gets the models from the server's own per-guest list, never from the request", () => {
     const page = read("src/app/(guest)/(map)/page.tsx");
-    assert.match(page, /listGuestPlaceModels\(user\.id\)/);
+    assert.match(page, /GUEST_3D_MODELS_ENABLED \? listGuestPlaceModels\(user\.id\) : Promise\.resolve\(\[\]\)/);
     assert.match(page, /models=\{models\}/);
   });
 

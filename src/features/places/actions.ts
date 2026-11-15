@@ -35,6 +35,7 @@ function parsePlaceForm(formData: FormData) {
     visitDurationMinutes: formData.get("visitDurationMinutes") ?? "",
     priceLevel: formData.get("priceLevel") ?? "",
     priceLevelSource: formData.get("priceLevelSource") ?? "",
+    checkInMethod: formData.get("checkInMethod") ?? undefined,
     publicationStatus: formData.get("publicationStatus") ?? undefined,
     verificationStatus: formData.get("verificationStatus") ?? undefined,
   });
@@ -124,6 +125,7 @@ export async function createPlaceAction(formData: FormData) {
     priceLevel: parsed.data.priceLevel,
     priceLevelSource: evidence.priceLevelSource,
     priceLevelVerifiedAt: evidence.priceLevelVerifiedAt,
+    checkInMethod: parsed.data.checkInMethod,
     publicationStatus: parsed.data.publicationStatus,
     verificationStatus: parsed.data.verificationStatus,
   });
@@ -180,6 +182,7 @@ export async function updatePlaceAction(id: string, formData: FormData) {
         priceLevel: parsed.data.priceLevel,
         priceLevelSource: evidence.priceLevelSource,
         priceLevelVerifiedAt: evidence.priceLevelVerifiedAt,
+        checkInMethod: parsed.data.checkInMethod,
         publicationStatus: parsed.data.publicationStatus,
         verificationStatus: parsed.data.verificationStatus,
       },
