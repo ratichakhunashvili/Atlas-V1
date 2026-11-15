@@ -68,7 +68,16 @@ export type RoutingResult<T> = { ok: true; route: T } | { ok: false; reason: Rou
 export type RoutingOptions = {
   /** Overrides the configured MAPBOX_SERVER_TOKEN. Exists for tests; production callers should omit this and let it fall back to mapboxServerConfig. */
   accessToken?: string;
+  /** How long to wait for Mapbox before giving up with reason "network". Exists for tests; production uses MAPBOX_TIMEOUT_MS. */
+  timeoutMs?: number;
 };
+
+/**
+ * A slow or stalled Mapbox answer must not hold a guest's request open until the server function times out: the
+ * walking-route screen keeps "Refresh route" disabled while it waits. Past this, the call fails as "network", which
+ * every caller already handles (error message and retry, or the itinerary's routing_failed fallback).
+ */
+export const MAPBOX_TIMEOUT_MS = 10_000;
 
 export function isValidCoordinate(coords: LatLng): boolean {
   return (
@@ -113,24 +122,31 @@ export function isValidRouteGeometry(value: unknown): value is RouteGeometry {
   return !!geometry && geometry.type === "LineString" && Array.isArray(geometry.coordinates);
 }
 
-async function fetchMapboxJson(url: string): Promise<RoutingResult<unknown>> {
+async function fetchMapboxJson(url: string, timeoutMs: number = MAPBOX_TIMEOUT_MS): Promise<RoutingResult<object>> {
+  const signal = AbortSignal.timeout(timeoutMs);
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, { signal });
   } catch {
-    return { ok: false, reason: "network", message: "Could not reach Mapbox." };
+    return { ok: false, reason: "network", message: signal.aborted ? "Mapbox took too long to answer." : "Could not reach Mapbox." };
   }
 
   if (!response.ok) {
     return { ok: false, reason: "http", message: `Mapbox request failed with status ${response.status}.` };
   }
 
+  let data: unknown;
   try {
-    const data: unknown = await response.json();
-    return { ok: true, route: data };
+    data = await response.json();
   } catch {
+    if (signal.aborted) return { ok: false, reason: "network", message: "Mapbox took too long to answer." };
     return { ok: false, reason: "malformed_response", message: "Mapbox returned a response that could not be parsed as JSON." };
   }
+  // Valid JSON is not necessarily an object: `null`, a number or a list would otherwise crash the readers below.
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    return { ok: false, reason: "malformed_response", message: "Mapbox returned a response that is not a JSON object." };
+  }
+  return { ok: true, route: data };
 }
 
 type OptimizationApiResponse = {
@@ -186,7 +202,7 @@ export async function optimizeWalkingRoute(
     `?roundtrip=${roundtripParam}&source=first${destinationParam}&geometries=geojson&overview=full` +
     `&access_token=${accessToken}`;
 
-  const result = await fetchMapboxJson(url);
+  const result = await fetchMapboxJson(url, options.timeoutMs);
   if (!result.ok) return result;
 
   const data = result.route as OptimizationApiResponse;
@@ -267,7 +283,7 @@ export async function getWalkingDirections(
     `${MAPBOX_API_BASE}/directions/v5/mapbox/walking/${coordinatesParam([origin, destination])}` +
     `?geometries=geojson&overview=full&access_token=${accessToken}`;
 
-  const result = await fetchMapboxJson(url);
+  const result = await fetchMapboxJson(url, options.timeoutMs);
   if (!result.ok) return result;
 
   const data = result.route as DirectionsApiResponse;
@@ -335,7 +351,7 @@ export async function getWalkingRouteInOrder(
     `${MAPBOX_API_BASE}/directions/v5/mapbox/walking/${coordinatesParam(points)}` +
     `?geometries=geojson&overview=full&access_token=${accessToken}`;
 
-  const result = await fetchMapboxJson(url);
+  const result = await fetchMapboxJson(url, options.timeoutMs);
   if (!result.ok) return result;
 
   const data = result.route as DirectionsApiResponse;

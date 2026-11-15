@@ -133,3 +133,47 @@ export async function hasVisitedPlace(db: AtlasDatabase, userId: string, placeId
 
   return row !== undefined;
 }
+
+/**
+ * Repair for a check-in whose stop was written but whose visit was not: the request died between markStopVisited and
+ * recordVerifiedVisit (two transactions). Called from the "already visited" path of a later check-in.
+ *
+ * Unlike recordVerifiedVisit it only INSERTS: when any visit row for this guest and Place already exists it changes
+ * nothing (no count bump, no new last-visited time), so a repeated scan of a finished stop is never counted as a
+ * second arrival. Only a visit it created can unlock the badge, which still does nothing on conflict.
+ */
+export async function recordMissingVisit(
+  db: AtlasDatabase,
+  input: { userId: string; placeId: string; method: CheckInMethod; visitedAt: Date }
+): Promise<{ repaired: boolean; unlockedAchievement: Achievement | null }> {
+  return db.transaction(async (tx) => {
+    const [visit] = await tx
+      .insert(placeVisits)
+      .values({
+        userId: input.userId,
+        placeId: input.placeId,
+        firstVisitedAt: input.visitedAt,
+        lastVisitedAt: input.visitedAt,
+        visitCount: 1,
+        firstVerificationMethod: input.method,
+      })
+      .onConflictDoNothing({ target: [placeVisits.userId, placeVisits.placeId] })
+      .returning();
+    if (!visit) return { repaired: false, unlockedAchievement: null };
+
+    const [achievement] = await tx.select().from(achievements).where(eq(achievements.placeId, input.placeId)).limit(1);
+    if (!achievement) return { repaired: true, unlockedAchievement: null };
+    const inserted = await tx
+      .insert(achievementUnlocks)
+      .values({
+        userId: input.userId,
+        achievementId: achievement.id,
+        placeVisitId: visit.id,
+        verificationMethod: input.method,
+        unlockedAt: input.visitedAt,
+      })
+      .onConflictDoNothing({ target: [achievementUnlocks.userId, achievementUnlocks.achievementId] })
+      .returning();
+    return { repaired: true, unlockedAchievement: inserted.length > 0 ? achievement : null };
+  });
+}

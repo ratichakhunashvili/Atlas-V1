@@ -6,6 +6,7 @@ import {
   hasVisitedPlace,
   listAchievementUnlocksForUser,
   listPlaceVisitsForUser,
+  recordMissingVisit,
   recordVerifiedVisit,
 } from "./operations/place-visits";
 
@@ -291,5 +292,40 @@ describe("history outlives everything around it", () => {
     for (const forbidden of ["points", "score", "xp", "level", "streak", "rank"]) {
       assert.equal(names.includes(forbidden), false, `${forbidden} has no place in an unlock model`);
     }
+  });
+});
+
+describe("repairing a check-in whose visit was never written", () => {
+  it("creates the missing visit and badge at the original arrival time", async () => {
+    const user = await seedUser();
+    const place = await seedPlace("A gallery");
+    const achievement = await seedAchievement(place.id);
+
+    const result = await recordMissingVisit(database.db, { userId: user.id, placeId: place.id, method: "qr", visitedAt: FIRST });
+
+    assert.equal(result.repaired, true);
+    assert.equal(result.unlockedAchievement?.id, achievement.id);
+    const [visit] = await listPlaceVisitsForUser(database.db, user.id);
+    assert.equal(visit.visitCount, 1);
+    assert.equal(visit.firstVisitedAt.toISOString(), FIRST.toISOString());
+    const unlocks = await listAchievementUnlocksForUser(database.db, user.id);
+    assert.equal(unlocks.length, 1);
+    assert.equal(unlocks[0].unlock.unlockedAt.toISOString(), FIRST.toISOString());
+  });
+
+  it("changes nothing when the visit already exists: a repeated scan is not a second arrival", async () => {
+    const user = await seedUser();
+    const place = await seedPlace("A tower");
+    await seedAchievement(place.id);
+    await recordVerifiedVisit(database.db, { userId: user.id, placeId: place.id, method: "gps", now: FIRST });
+
+    const result = await recordMissingVisit(database.db, { userId: user.id, placeId: place.id, method: "qr", visitedAt: LATER });
+
+    assert.equal(result.repaired, false);
+    assert.equal(result.unlockedAchievement, null);
+    const [visit] = await listPlaceVisitsForUser(database.db, user.id);
+    assert.equal(visit.visitCount, 1);
+    assert.equal(visit.lastVisitedAt.toISOString(), FIRST.toISOString());
+    assert.equal((await listAchievementUnlocksForUser(database.db, user.id)).length, 1);
   });
 });

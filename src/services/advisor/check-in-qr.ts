@@ -1,4 +1,5 @@
 import type { Achievement, CheckInMethod, Hotel, ItineraryDay, ItineraryStop, Place } from "@/db/schema";
+import { repairVisitIfMissing, type RecordMissingVisit } from "./visit-repair";
 import type { RecordVisitResult } from "@/db/operations/place-visits";
 import { calculateDayNumber, stayEndFor } from "./stay-day";
 import { firstUnvisitedStop } from "./check-in";
@@ -65,6 +66,8 @@ export type QrCheckInDependencies = {
   }) => Promise<RecordVisitResult>;
   /** Re-evaluates eligibility server-side from the authenticated guest's own stay. Called early (to decide) and again immediately before the write. */
   loadAvailabilityContext: AvailabilityContextLoader;
+  /** Repairs a stop written without its visit (see visit-repair.ts). Optional so test doubles may omit it. */
+  recordMissingVisit?: RecordMissingVisit;
 };
 
 // Type-only imports only here — same lazy-load pattern as every other
@@ -95,6 +98,7 @@ async function loadDefaultDependencies(): Promise<QrCheckInDependencies> {
     listItineraryStops: itineraryQ.listItineraryStops,
     markStopVisited: itineraryQ.markStopVisited,
     recordVerifiedVisit: visitsQ.recordVerifiedVisit,
+    recordMissingVisit: visitsQ.recordMissingVisit,
     loadAvailabilityContext: loadDefaultAvailabilityContext,
   };
 }
@@ -178,12 +182,14 @@ export async function checkInStopWithQr(
   }
 
   if (matchingStop.visitedAt !== null) {
+    const unlockedAchievement = await repairVisitIfMissing(d.recordMissingVisit, { userId: input.userId, stop: matchingStop, method: "qr", now });
     return {
       ok: true,
       stop: matchingStop,
       nextStop: firstUnvisitedStop(stops),
       dayCompleted: stops.every((stop) => stop.visitedAt !== null),
       alreadyVisited: true,
+      unlockedAchievement,
     };
   }
 

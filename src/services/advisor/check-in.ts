@@ -1,4 +1,5 @@
 import { distanceMeters, type LatLng } from "@/lib/geo";
+import { repairVisitIfMissing, type RecordMissingVisit } from "./visit-repair";
 import type { Achievement, CheckInMethod, ItineraryDay, ItineraryStop } from "@/db/schema";
 import type { RecordVisitResult } from "@/db/operations/place-visits";
 import { isCheckInMethodAllowed, wrongCheckInMethodMessage } from "./check-in-method";
@@ -57,6 +58,8 @@ export type CheckInDependencies = {
   }) => Promise<RecordVisitResult>;
   /** Re-evaluates eligibility server-side from the authenticated guest's own stay. Called twice per check-in: early (to decide) and again immediately before the write. */
   loadAvailabilityContext: AvailabilityContextLoader;
+  /** Repairs a stop written without its visit (see visit-repair.ts). Optional so test doubles may omit it. */
+  recordMissingVisit?: RecordMissingVisit;
 };
 
 // Type-only import, lazily resolved below — same reason as every other
@@ -76,6 +79,7 @@ async function loadDefaultDependencies(): Promise<CheckInDependencies> {
     listItineraryStops: itineraryQ.listItineraryStops,
     markStopVisited: itineraryQ.markStopVisited,
     recordVerifiedVisit: visitsQ.recordVerifiedVisit,
+    recordMissingVisit: visitsQ.recordMissingVisit,
     loadAvailabilityContext: loadDefaultAvailabilityContext,
   };
 }
@@ -130,6 +134,7 @@ export async function checkInStopWithGps(
   const { stop, day } = found;
 
   if (stop.visitedAt !== null) {
+    const unlockedAchievement = await repairVisitIfMissing(d.recordMissingVisit, { userId: input.userId, stop, method: "gps", now });
     const stops = await d.listItineraryStops(day.id);
     return {
       ok: true,
@@ -137,6 +142,7 @@ export async function checkInStopWithGps(
       nextStop: firstUnvisitedStop(stops),
       dayCompleted: stops.every((s) => s.visitedAt !== null),
       alreadyVisited: true,
+      unlockedAchievement,
     };
   }
 

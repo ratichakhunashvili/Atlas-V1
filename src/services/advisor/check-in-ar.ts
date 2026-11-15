@@ -1,4 +1,5 @@
 import { distanceMeters } from "@/lib/geo";
+import { repairVisitIfMissing, type RecordMissingVisit } from "./visit-repair";
 import type { Achievement, CheckInMethod, ItineraryDay, ItineraryStop } from "@/db/schema";
 import type { RecordVisitResult } from "@/db/operations/place-visits";
 import { CHECK_IN_RADIUS_METERS, firstUnvisitedStop } from "./check-in";
@@ -75,6 +76,8 @@ export type ArCheckInDependencies = {
   }) => Promise<RecordVisitResult>;
   /** Re-evaluates eligibility server-side from the authenticated guest's own stay. */
   loadAvailabilityContext: AvailabilityContextLoader;
+  /** Repairs a stop written without its visit (see visit-repair.ts). Optional so test doubles may omit it. */
+  recordMissingVisit?: RecordMissingVisit;
 };
 
 async function loadDefaultDependencies(): Promise<ArCheckInDependencies> {
@@ -90,6 +93,7 @@ async function loadDefaultDependencies(): Promise<ArCheckInDependencies> {
     findArTargetHash: arQ.findArTargetHash,
     markStopVisited: itineraryQ.markStopVisited,
     recordVerifiedVisit: visitsQ.recordVerifiedVisit,
+    recordMissingVisit: visitsQ.recordMissingVisit,
     loadAvailabilityContext: loadDefaultAvailabilityContext,
   };
 }
@@ -119,6 +123,7 @@ export async function checkInStopWithAr(
 
   // Already done: idempotent success, no second write and no second unlock.
   if (stop.visitedAt !== null) {
+    const unlockedAchievement = await repairVisitIfMissing(d.recordMissingVisit, { userId: input.userId, stop, method: "ar", now });
     const stops = await d.listItineraryStops(day.id);
     return {
       ok: true,
@@ -126,6 +131,7 @@ export async function checkInStopWithAr(
       nextStop: firstUnvisitedStop(stops),
       dayCompleted: stops.every((s) => s.visitedAt !== null),
       alreadyVisited: true,
+      unlockedAchievement,
     };
   }
 

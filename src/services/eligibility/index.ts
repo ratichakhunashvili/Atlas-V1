@@ -66,20 +66,37 @@ export type EligibilityDependencies = {
 
 // Lazy imports: db/queries/* start with `import "server-only"`, which throws
 // outside Next's bundler. Same pattern as every other services/* module.
-async function loadDefaultDependencies(): Promise<EligibilityDependencies> {
-  const [staysQ, partnershipsQ, facilitiesQ, contractsQ] = await Promise.all([
+//
+// The readers are wrapped in React's cache(), which shares one result per page render only: the home page asks for
+// the guest's stay and hotel catalogue from the map, the events and the plan, and now reads each once. It is never a
+// cache across requests or guests, and outside a render (server actions, route handlers) React calls straight
+// through, so a read after a write is always fresh. Bounded map reads get a new bounds object per call, so only
+// identical calls are shared.
+let defaultDependencies: Promise<EligibilityDependencies> | null = null;
+function loadDefaultDependencies(): Promise<EligibilityDependencies> {
+  defaultDependencies ??= Promise.all([
+    import("react"),
     import("@/db/queries/hotel-stays"),
     import("@/db/queries/hotel-partnerships"),
     import("@/db/queries/hotel-facilities"),
     import("@/db/queries/atlas-contracts"),
-  ]);
-  return {
-    findActiveStayForUser: staysQ.findActiveStayForUser,
-    listPartnershipsForHotel: partnershipsQ.listPartnershipRowsForHotel,
-    listFacilitiesForHotel: facilitiesQ.listFacilityRowsForHotel,
-    listContractsForCatalogue: contractsQ.listContractRowsForCatalogue,
-    listAttractionsForCatalogue: contractsQ.listAttractionPlacesForCatalogue,
-  };
+  ]).then(([{ cache }, staysQ, partnershipsQ, facilitiesQ, contractsQ]): EligibilityDependencies => {
+    const contracts = cache(contractsQ.listContractRowsForCatalogue);
+    const attractions = cache(contractsQ.listAttractionPlacesForCatalogue);
+    return {
+      findActiveStayForUser: cache(staysQ.findActiveStayForUser),
+      listPartnershipsForHotel: cache(partnershipsQ.listPartnershipRowsForHotel),
+      listFacilitiesForHotel: cache(facilitiesQ.listFacilityRowsForHotel),
+      // Always two arguments: React keys on the argument list, so (id) and (id, undefined) must not differ.
+      listContractsForCatalogue: (hotelId, bounds) => contracts(hotelId, bounds),
+      listAttractionsForCatalogue: (hotelId, bounds) => attractions(hotelId, bounds),
+    };
+  }).catch((error: unknown) => {
+    // A failed import must not be remembered for the life of the server: the next call tries again.
+    defaultDependencies = null;
+    throw error;
+  });
+  return defaultDependencies;
 }
 
 // ---------------------------------------------------------------------------

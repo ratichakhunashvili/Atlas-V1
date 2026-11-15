@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   getWalkingDirections,
+  getWalkingRouteInOrder,
   isValidCoordinate,
   isValidRouteGeometry,
   optimizeWalkingRoute,
@@ -279,5 +280,44 @@ describe("isValidRouteGeometry", () => {
     assert.equal(isValidRouteGeometry("a string"), false);
     assert.equal(isValidRouteGeometry(42), false);
     assert.equal(isValidRouteGeometry(undefined), false);
+  });
+});
+
+describe("Mapbox answers that are slow or not an object", () => {
+  const callers = {
+    optimize: (options: RoutingOptions) => optimizeWalkingRoute({ origin: HOTEL, stops: [STOP_A, STOP_B] }, options),
+    directions: (options: RoutingOptions) => getWalkingDirections({ origin: HOTEL, destination: STOP_A }, options),
+    inOrder: (options: RoutingOptions) => getWalkingRouteInOrder({ origin: HOTEL, stops: [STOP_A, STOP_B] }, options),
+  };
+
+  for (const [name, call] of Object.entries(callers)) {
+    for (const body of [null, 42, "Ok", [1, 2]]) {
+      test(`${name}: JSON ${JSON.stringify(body)} is a malformed_response, not a crash`, async (t) => {
+        t.mock.method(globalThis, "fetch", async () => jsonResponse(body));
+        const result = await call(TEST_TOKEN);
+        assert.equal(result.ok, false);
+        if (!result.ok) assert.equal(result.reason, "malformed_response");
+      });
+    }
+
+    test(`${name}: a Mapbox that never answers fails as "network" after the timeout`, async (t) => {
+      t.mock.method(globalThis, "fetch", (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        })
+      );
+      const started = Date.now();
+      const result = await call({ ...TEST_TOKEN, timeoutMs: 50 });
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.equal(result.reason, "network");
+      assert.ok(Date.now() - started < 2000, "gave up promptly");
+    });
+  }
+
+  test("every Mapbox request carries an abort signal", async (t) => {
+    const fetchMock = t.mock.method(globalThis, "fetch", async () => jsonResponse(null));
+    await getWalkingDirections({ origin: HOTEL, destination: STOP_A }, TEST_TOKEN);
+    const init = fetchMock.mock.calls[0].arguments[1] as RequestInit | undefined;
+    assert.ok(init?.signal instanceof AbortSignal);
   });
 });

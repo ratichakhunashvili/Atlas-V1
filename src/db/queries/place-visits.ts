@@ -5,6 +5,7 @@ import {
   hasVisitedPlace as hasVisitedOperation,
   listAchievementUnlocksForUser as listUnlocksOperation,
   listPlaceVisitsForUser as listVisitsOperation,
+  recordMissingVisit as recordMissingOperation,
   recordVerifiedVisit as recordOperation,
   type RecordVisitResult,
 } from "@/db/operations/place-visits";
@@ -35,4 +36,8 @@ export async function listAchievementUnlocksForUser(userId: string) {
 
 export async function hasVisitedPlace(userId: string, placeId: string) {
   return hasVisitedOperation(db, userId, placeId);
+}
+
+export async function recordMissingVisit(input: { userId: string; placeId: string; method: CheckInMethod; visitedAt: Date }) {
+  return recordMissingOperation(db, input);
 }

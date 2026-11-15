@@ -24,3 +24,15 @@ export function writeEmailDraft(storage: StorageLike | null, email: string): voi
     // Storage can be blocked (private windows); the form simply works without the draft.
   }
 }
+
+/**
+ * Forgets the draft. Called once a guest is signed in (components/atlas-ui/forget-email-draft.tsx): the draft only
+ * exists to carry an email between the sign-in screens, and must not pre-fill the next person's sign-in after sign-out.
+ */
+export function clearEmailDraft(storage: StorageLike | null): void {
+  try {
+    storage?.removeItem(KEY);
+  } catch {
+    // Blocked storage holds no draft to clear.
+  }
+}

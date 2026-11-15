@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readEmailDraft, writeEmailDraft } from "./email-draft";
+import { clearEmailDraft, readEmailDraft, writeEmailDraft } from "./email-draft";
 
 function fakeStorage() {
   const data = new Map<string, string>();
@@ -39,4 +39,18 @@ test("blocked or missing storage never throws", () => {
   assert.equal(readEmailDraft(blocked), "");
   assert.doesNotThrow(() => writeEmailDraft(blocked, "a@b.co"));
   assert.equal(readEmailDraft(null), "");
+});
+
+test("clearEmailDraft forgets the draft so the next sign-in starts empty", () => {
+  const store = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+  };
+  writeEmailDraft(storage, "guest@example.test");
+  assert.equal(readEmailDraft(storage), "guest@example.test");
+  clearEmailDraft(storage);
+  assert.equal(readEmailDraft(storage), "");
+  clearEmailDraft(null);
 });

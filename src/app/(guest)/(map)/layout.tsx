@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AtlasMap } from "@/components/atlas-ui/map/atlas-map";
 import { MapSceneProvider } from "@/components/atlas-ui/map/scene";
+import { ForgetEmailDraft } from "@/components/atlas-ui/forget-email-draft";
 
 /*
  * The guest's main screens: home, the walking routes, and every bottom-bar tab (My plan, Scan,
@@ -14,6 +15,7 @@ import { MapSceneProvider } from "@/components/atlas-ui/map/scene";
 export default function MapScreensLayout({ children }: { children: ReactNode }) {
   return (
     <MapSceneProvider>
+      <ForgetEmailDraft />
       <div className="relative min-h-[100dvh] w-full">
         <div className="fixed inset-0">
           <AtlasMap />

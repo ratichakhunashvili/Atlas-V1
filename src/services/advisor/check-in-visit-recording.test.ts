@@ -285,3 +285,67 @@ describe("the QR path behaves the same way", () => {
     assert.deepEqual(recorder.calls, []);
   });
 });
+
+describe("a check-in whose visit was never written (the request died between the two writes)", () => {
+  const ACHIEVEMENT = { id: "ach-1", placeId: PLACE_ID, name: "Badge" } as unknown as import("@/db/schema").Achievement;
+
+  function repairWorld() {
+    const repairs: { placeId: string; method: string; visitedAt: string }[] = [];
+    const recordMissingVisit: NonNullable<CheckInDependencies["recordMissingVisit"]> = async (input) => {
+      repairs.push({ placeId: input.placeId, method: input.method, visitedAt: input.visitedAt.toISOString() });
+      return { repaired: true, unlockedAchievement: ACHIEVEMENT };
+    };
+    return { repairs, recordMissingVisit };
+  }
+
+  it("GPS: retrying later repairs the visit at the original time and reports the badge", async () => {
+    const stop = makeStop({ visitedAt: NOW });
+    const { deps, recorder } = gpsWorld([stop]);
+    const { repairs, recordMissingVisit } = repairWorld();
+    const later = new Date(NOW.getTime() + 5 * 60_000);
+
+    const result = await checkInStopWithGps({ userId: "user-1", stopId: stop.id, ...goodEvidence, capturedAtMs: later.getTime() }, { ...deps, recordMissingVisit }, later);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ok && result.alreadyVisited, true);
+    assert.equal(result.ok && result.unlockedAchievement?.id, ACHIEVEMENT.id);
+    assert.deepEqual(repairs, [{ placeId: PLACE_ID, method: "gps", visitedAt: NOW.toISOString() }]);
+    assert.deepEqual(recorder.calls, [], "the counting recorder is never used for a stop already done");
+  });
+
+  it("GPS: a double tap while the first request is still finishing does not repair", async () => {
+    const stop = makeStop({ visitedAt: NOW });
+    const { deps } = gpsWorld([stop]);
+    const { repairs, recordMissingVisit } = repairWorld();
+    const moments = new Date(NOW.getTime() + 2_000);
+
+    const result = await checkInStopWithGps({ userId: "user-1", stopId: stop.id, ...goodEvidence, capturedAtMs: moments.getTime() }, { ...deps, recordMissingVisit }, moments);
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(repairs, []);
+  });
+
+  it("QR: scanning a finished stop's code later repairs a missing visit too", async () => {
+    const stop = makeStop({ checkInMethod: "qr", visitedAt: NOW });
+    const { repairs, recordMissingVisit } = repairWorld();
+    const place = { id: PLACE_ID } as Place;
+    const deps: QrCheckInDependencies = {
+      findPlaceByCheckInCredential: async () => place,
+      findActiveStayForUser: async () => ({ id: "stay-1", checkIn: NOW, checkOut: null, hotel: { id: "hotel-1" } as Hotel, place: {} as Place }),
+      findItineraryDay: async () => makeDay(),
+      listItineraryStops: async () => [stop],
+      markStopVisited: async () => null,
+      recordVerifiedVisit: async () => {
+        throw new Error("must not be called");
+      },
+      loadAvailabilityContext: loadAllAvailable,
+      recordMissingVisit,
+    } as unknown as QrCheckInDependencies;
+    const later = new Date(NOW.getTime() + 5 * 60_000);
+
+    const result = await checkInStopWithQr({ userId: "user-1", qrToken: "token" }, later, deps);
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(repairs, [{ placeId: PLACE_ID, method: "qr", visitedAt: NOW.toISOString() }]);
+  });
+});
