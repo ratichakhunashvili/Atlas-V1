@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import { atlasPartnerContracts, hotelDayProgramSteps, hotelFacilities, hotels, places, qrCredentials, type NewPlace } from "@/db/schema";
 import { generateRawQrToken, hashQrToken } from "@/services/qr/token";
+import { newPermanentQrCredential } from "@/services/qr/permanent";
 import areaData from "@/db/data/skillwill-area.json";
 import type { AtlasDatabase } from "./types";
 
@@ -181,7 +182,12 @@ export type SeedSkillwillResult = {
   codes: IssuedTestCode[];
 };
 
-export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date()): Promise<SeedSkillwillResult> {
+/**
+ * `qrSecret`: with the server's QR secret, new codes are permanent (services/qr/permanent.ts) and can be shown again
+ * from the admin pages; without it (tests), they are random. Existing live codes are never replaced either way.
+ */
+export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date(), qrSecret: string | null = null): Promise<SeedSkillwillResult> {
+  const newCode = (): { id?: string; rawToken: string } => (qrSecret ? newPermanentQrCredential(qrSecret) : { rawToken: generateRawQrToken() });
   return db.transaction(async (tx) => {
     const verified = { publicationStatus: "published", publishedAt: now, verificationStatus: "verified", verifiedAt: now, kindConfirmedAt: now } as const;
 
@@ -357,8 +363,8 @@ export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date(
         .limit(1);
     const codes: IssuedTestCode[] = [];
     if ((await live(eq(qrCredentials.hotelId, SKILLWILL_TEST_IDS.hotel))).length === 0) {
-      const rawToken = generateRawQrToken();
-      await tx.insert(qrCredentials).values({ purpose: "hotel_entry", hotelId: SKILLWILL_TEST_IDS.hotel, tokenHash: hashQrToken(rawToken), expiresAt: null });
+      const { id, rawToken } = newCode();
+      await tx.insert(qrCredentials).values({ ...(id ? { id } : {}), purpose: "hotel_entry", hotelId: SKILLWILL_TEST_IDS.hotel, tokenHash: hashQrToken(rawToken), expiresAt: null });
       codes.push({ label: `${SKILLWILL_BASE.name} (hotel entry)`, kind: "hotel", rawToken });
     }
     // Places: one query for those that already have a live code, then one insert per batch for the rest.
@@ -371,10 +377,10 @@ export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date(
         .where(and(inArray(qrCredentials.placeId, ids), isNull(qrCredentials.revokedAt)));
       for (const row of rows) if (row.placeId) withCode.add(row.placeId);
     }
-    const toIssue = all.filter((place) => !withCode.has(place.id)).map((place) => ({ place, rawToken: generateRawQrToken() }));
+    const toIssue = all.filter((place) => !withCode.has(place.id)).map((place) => ({ place, ...newCode() }));
     for (let i = 0; i < toIssue.length; i += 300) {
       await tx.insert(qrCredentials).values(
-        toIssue.slice(i, i + 300).map(({ place, rawToken }) => ({ purpose: "place_check_in" as const, placeId: place.id, tokenHash: hashQrToken(rawToken), expiresAt: null }))
+        toIssue.slice(i, i + 300).map(({ place, id, rawToken }) => ({ ...(id ? { id } : {}), purpose: "place_check_in" as const, placeId: place.id, tokenHash: hashQrToken(rawToken), expiresAt: null }))
       );
     }
     for (const { place, rawToken } of toIssue) codes.push({ label: place.name, kind: "place", rawToken });

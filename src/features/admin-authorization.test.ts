@@ -143,10 +143,15 @@ test("QR raw credentials are never read back from storage by an admin screen", (
     assert.doesNotMatch(source, /rawToken/, `${page} must not render a raw credential`);
   }
 
-  // Only the issuing action produces a raw value, and it returns it rather than storing it.
+  // Permanent codes (2026-11-16): the actions calculate the code from the server secret and the row id, store only its
+  // hash, and hand it back only from admin-gated actions. Every exported action starts with requireAdmin().
   const issuing = stripComments(read("src/features/qr-credentials/actions.ts"));
-  assert.match(issuing, /generateRawQrToken\(\)/);
+  assert.match(issuing, /newPermanentQrCredential\(secret\)/);
   assert.match(issuing, /hashQrToken\(rawToken\)/);
+  assert.match(issuing, /revealPermanentQrToken\(secret, existing\)/);
+  const exported = issuing.split(/export async function /).slice(1);
+  assert.ok(exported.length >= 6);
+  for (const body of exported) assert.match(body.slice(0, 200), /await requireAdmin\(\)/, `${body.slice(0, 40)} must check the admin first`);
 });
 
 test("the new catalog views read the canonical model and create no duplicate Place", () => {

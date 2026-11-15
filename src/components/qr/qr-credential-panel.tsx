@@ -6,16 +6,14 @@ import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
 import { QrPrintCard } from "@/components/qr/qr-print-card";
 import { qrLink, type QrLinkKind } from "@/lib/qr-links";
-import type { IssueCredentialResult, RevokeCredentialResult } from "@/features/qr-credentials/actions";
+import type { IssueCredentialResult, RevealCredentialResult, RevokeCredentialResult } from "@/features/qr-credentials/actions";
 
 /**
- * Issue / rotate / revoke one subject's QR credential, with the one-time reveal.
+ * One subject's permanent QR code (services/qr/permanent.ts): show and download it any time, create it once, and
+ * replace or revoke it only in an emergency (both stop the printed code).
  *
- * The raw token lives only in this component's state, for as long as the admin
- * leaves the page open. It is never part of the server-rendered payload, never
- * re-fetchable, and never stored anywhere but the printed code itself — the
- * database holds a hash. Navigating away loses it, which is the intended
- * behaviour: the replacement for a lost code is a new code.
+ * The code itself only ever arrives as the return value of an action the admin pressed, and lives in this
+ * component's state while the page is open. It is never part of the server-rendered page.
  */
 export function QrCredentialPanel({
   label,
@@ -24,6 +22,7 @@ export function QrCredentialPanel({
   issuedAt,
   linkKind,
   issue,
+  reveal,
   revoke,
 }: {
   label: string;
@@ -33,29 +32,31 @@ export function QrCredentialPanel({
   /** When set, the QR image holds this site's short link (lib/qr-links.ts), so a phone's own camera app opens Atlas. */
   linkKind?: QrLinkKind;
   issue: () => Promise<IssueCredentialResult>;
+  reveal: () => Promise<RevealCredentialResult>;
   revoke: () => Promise<RevokeCredentialResult>;
 }) {
   const [pending, startTransition] = useTransition();
   const [revealed, setRevealed] = useState<string | null>(null);
+  const [legacy, setLegacy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const run = (operation: () => Promise<IssueCredentialResult | RevokeCredentialResult>) => {
+  const run = (operation: () => Promise<IssueCredentialResult | RevealCredentialResult | RevokeCredentialResult>) => {
     setError(null);
     setNotice(null);
     startTransition(async () => {
       const result = await operation();
       if (!result.ok) {
         setError(result.error);
+        setLegacy("legacy" in result && result.legacy === true);
         return;
       }
+      setLegacy(false);
       if ("rawToken" in result) {
         setRevealed(result.rawToken);
-        setNotice(
-          result.replacedExisting
-            ? "A new code was issued. The previous code stopped working immediately."
-            : "Code issued."
-        );
+        if ("replacedExisting" in result) {
+          setNotice(result.replacedExisting ? "A new code was made. The previous printed code stopped working." : "Code created. It stays the same from now on.");
+        }
         return;
       }
       setRevealed(null);
@@ -71,46 +72,51 @@ export function QrCredentialPanel({
       </div>
 
       <p className="text-sm text-slate-700">
-        {hasActiveCredential ? (
-          <>
-            Active{issuedAt ? ` — issued ${issuedAt.toISOString().slice(0, 10)}` : ""}. The code itself is stored only
-            as a hash and cannot be shown again.
-          </>
-        ) : (
-          "No active code. Issue one to print."
-        )}
+        {hasActiveCredential
+          ? `Active${issuedAt ? ` since ${issuedAt.toISOString().slice(0, 10)}` : ""}. This code stays the same; show it to download or print it again.`
+          : "No code yet. Create one to print."}
       </p>
 
       {error && <Alert variant="error">{error}</Alert>}
       {notice && !error && <Alert variant="success">{notice}</Alert>}
 
       {revealed && (
-        <div className="space-y-2 rounded border border-amber-300 bg-amber-50 p-3">
-          <p className="text-xs font-medium text-amber-900">
-            Shown once. Download or print the QR image now — it cannot be retrieved later.
-          </p>
+        <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-3">
           <QrPrintCard value={linkKind ? qrLink(window.location.origin, linkKind, revealed) : revealed} title={label} />
-          <code className="block break-all rounded bg-white px-2 py-1 font-mono text-xs text-slate-900">
-            {revealed}
-          </code>
+          <code className="block break-all rounded bg-white px-2 py-1 font-mono text-xs text-slate-900">{revealed}</code>
           <Button type="button" variant="secondary" onClick={() => setRevealed(null)}>
-            Done, hide it
+            Hide
           </Button>
         </div>
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            // Replacing a code stops the printed one at once, so that case asks first.
-            if (hasActiveCredential && !window.confirm("Issue a new code? The current printed code stops working immediately.")) return;
-            run(issue);
-          }}
-        >
-          {hasActiveCredential ? "Issue new code (revokes current)" : "Issue code"}
-        </Button>
+        {hasActiveCredential ? (
+          <Button type="button" disabled={pending} onClick={() => run(reveal)}>
+            Show code
+          </Button>
+        ) : (
+          <Button type="button" disabled={pending} onClick={() => run(issue)}>
+            Create code
+          </Button>
+        )}
+        {hasActiveCredential && (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() => {
+              // Replacing changes the code, so the printed one stops working: only for a lost, stolen or misused code.
+              const question = legacy
+                ? "Make a permanent code? The code printed now stops working and must be reprinted."
+                : "Replace this code? Only do this if it was stolen or misused: the printed code stops working immediately.";
+              if (!window.confirm(question)) return;
+              run(issue);
+            }}
+          >
+            {legacy ? "Make a permanent code" : "Replace code"}
+          </Button>
+        )}
         {hasActiveCredential && (
           <Button
             type="button"

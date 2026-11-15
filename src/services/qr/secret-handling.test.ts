@@ -60,15 +60,14 @@ test("the legacy qr_token columns are documented as unused rather than quietly r
 test("a raw credential is generated in exactly one place and never stored", () => {
   const generators = sourceFiles("src").filter((file) => /generateRawQrToken\s*\(/.test(read(file)));
 
-  // The definition, plus the deliberate callers: the admin issue actions and the
-  // scenario tool (which generates and discards), and the Skillwill test seed (shows codes once on a printable sheet).
+  // The definition, plus the deliberate callers: the scenario tool (which generates and discards) and the Skillwill
+  // test seed when it has no QR secret (tests). The admin actions make permanent codes instead (services/qr/permanent.ts).
   // Each hashes before storing.
   assert.deepEqual(
     generators.sort(),
     [
       "src/db/operations/skillwill-test.ts",
       "src/features/advisor-testing/actions.ts",
-      "src/features/qr-credentials/actions.ts",
       "src/services/advisor-testing/scenario.ts",
       "src/services/qr/token.ts",
     ],
@@ -109,13 +108,19 @@ test("admin screens report only whether a credential exists", () => {
   assert.doesNotMatch(listFunction, /tokenHash/, "the QR list query must not select the hash");
 });
 
-test("the one-time reveal keeps the raw token in client memory only", () => {
+test("a permanent code reaches the admin only on request, and lives in client memory only", () => {
   const panel = read("src/components/qr/qr-credential-panel.tsx");
   assert.match(panel, /useState<string \| null>\(null\)/);
-  assert.match(panel, /Shown once/);
+  assert.match(panel, /run\(reveal\)/, "the code is fetched when the admin presses Show code");
   // It arrives as the return value of an action the admin triggered — never as a
   // server-rendered prop, which would put it in the page payload.
   assert.doesNotMatch(panel, /rawToken[?]?:\s*string/);
+
+  // The code is calculated, never stored: the permanent module derives it and the database keeps only its hash.
+  const permanent = read("src/services/qr/permanent.ts");
+  assert.match(permanent, /createHmac\("sha256", secret\)/);
+  assert.match(permanent, /QR_CODE_SECRET/);
+  assert.doesNotMatch(read("src/db/schema/qr-credentials.ts"), /rawToken|raw_token/, "no column holds a code");
 });
 
 test("the scenario tool exercises a real scan without holding a secret", () => {

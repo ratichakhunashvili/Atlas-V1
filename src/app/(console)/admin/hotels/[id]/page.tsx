@@ -18,6 +18,7 @@ import { listDayProgram } from "@/db/operations/hotel-day-program";
 import { listEligiblePlacesForStay } from "@/services/eligibility";
 import {
   issueHotelEntryCredentialAction,
+  revealHotelEntryCredentialAction,
   revokeHotelEntryCredentialAction,
 } from "@/features/qr-credentials/actions";
 import { uuidOrNotFound } from "@/lib/route-ids";
@@ -90,6 +91,7 @@ export default async function EditHotelPage({
         issuedAt={entryCredential?.createdAt ?? null}
         linkKind="hotel"
         issue={issueHotelEntryCredentialAction.bind(null, hotel.id)}
+        reveal={revealHotelEntryCredentialAction.bind(null, hotel.id)}
         revoke={revokeHotelEntryCredentialAction.bind(null, hotel.id)}
       />
       <Card className="space-y-3">

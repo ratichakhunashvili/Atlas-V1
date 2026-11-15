@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { brandedQrSvg } from "../lib/branded-qr";
 import { qrLink } from "../lib/qr-links";
+import { qrCodeSecret } from "../services/qr/permanent";
 import { isLocalDatabaseUrl } from "./operations/dev-seed";
 import { SKILLWILL_AREA_PLACES, SKILLWILL_TEST_PLACES, seedSkillwillTest } from "./operations/skillwill-test";
 import * as schema from "./schema";
@@ -36,7 +37,8 @@ async function main() {
 
   const client = postgres(connectionString, { max: 1 });
   try {
-    const result = await seedSkillwillTest(drizzle(client, { schema }));
+    // New codes are permanent when this machine has the server's QR secret (services/qr/permanent.ts).
+    const result = await seedSkillwillTest(drizzle(client, { schema }), new Date(), qrCodeSecret());
     console.log(`Skillwill test base (${live ? "remote" : "local"} database):`);
     console.log(`  Skillwill hotel: ${result.hotel ? "added" : "already there"}`);
     console.log(`  Places added: ${result.places} (of ${SKILLWILL_TEST_PLACES.length + SKILLWILL_AREA_PLACES.length})`);

@@ -12,8 +12,8 @@ const TOKEN_BYTES = 16;
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-/** RFC 4648 base32, upper case, no padding: 16 bytes -> 26 characters. */
-function toBase32(bytes: Uint8Array): string {
+/** RFC 4648 base32, upper case, no padding: 16 bytes -> 26 characters. Shared with the permanent codes (permanent.ts). */
+export function toBase32(bytes: Uint8Array): string {
   let out = "";
   let buffer = 0;
   let bits = 0;

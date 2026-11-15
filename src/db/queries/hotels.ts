@@ -26,6 +26,12 @@ export async function listHotelsWithPlace() {
 }
 export type HotelWithPlace = Awaited<ReturnType<typeof listHotelsWithPlace>>[number];
 
+/** The hotel whose own building this Place is, or null. Its QR code is the hotel's entry code, not a check-in code. */
+export async function findHotelIdByPlaceId(placeId: string): Promise<string | null> {
+  const [row] = await db.select({ id: hotels.id }).from(hotels).where(eq(hotels.placeId, placeId)).limit(1);
+  return row?.id ?? null;
+}
+
 /*
  * findHotelByQrToken is deliberately gone: a hotel is no longer resolved by
  * comparing a raw column value. Hotel entry resolves a hashed, purpose-bound

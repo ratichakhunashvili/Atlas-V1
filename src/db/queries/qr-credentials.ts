@@ -39,6 +39,8 @@ export async function findActiveQrCredentialForPlace(placeId: string): Promise<Q
  * at the database level if two admins rotate at the same moment.
  */
 export async function issueQrCredential(input: {
+  /** The row id, chosen by the caller for a permanent code (services/qr/permanent.ts derives the code from it). */
+  id?: string;
   purpose: QrPurpose;
   hotelId?: string | null;
   placeId?: string | null;
@@ -59,6 +61,7 @@ export async function issueQrCredential(input: {
     const [created] = await tx
       .insert(qrCredentials)
       .values({
+        ...(input.id ? { id: input.id } : {}),
         purpose: input.purpose,
         hotelId: input.hotelId ?? null,
         placeId: input.placeId ?? null,

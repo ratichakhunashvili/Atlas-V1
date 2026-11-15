@@ -8,12 +8,14 @@ import { Alert } from "@/components/shared/alert";
 import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
 import { listContractsForPlace } from "@/db/queries/atlas-contracts";
+import { findHotelIdByPlaceId } from "@/db/queries/hotels";
 import { findPlaceById } from "@/db/queries/places";
 import { findActiveQrCredentialForPlace } from "@/db/queries/qr-credentials";
 import { archivePlaceAction, deletePlaceAction, unarchivePlaceAction, updatePlaceAction } from "@/features/places/actions";
 import { hasReturnedPlaceForm, placePrefill } from "@/features/places/prefill";
 import {
   issuePlaceCheckInCredentialAction,
+  revealPlaceCheckInCredentialAction,
   revokePlaceCheckInCredentialAction,
 } from "@/features/qr-credentials/actions";
 import { uuidOrNotFound } from "@/lib/route-ids";
@@ -35,8 +37,12 @@ export default async function EditPlacePage({
     notFound();
   }
 
-  // Presence only — the credential is stored as a hash and is never recoverable.
-  const [checkInCredential, contracts] = await Promise.all([findActiveQrCredentialForPlace(place.id), listContractsForPlace(place.id)]);
+  // Presence only — the page never carries the code; "Show code" asks the server for it (features/qr-credentials).
+  const [checkInCredential, contracts, hotelId] = await Promise.all([
+    findActiveQrCredentialForPlace(place.id),
+    listContractsForPlace(place.id),
+    findHotelIdByPlaceId(place.id),
+  ]);
   const returnTo = `/admin/places/${place.id}`;
   // After a refused save, show what the admin typed rather than the saved row.
   const typed = Object.fromEntries(Object.entries(placePrefill(query)).filter(([, value]) => value !== undefined));
@@ -65,15 +71,29 @@ export default async function EditPlacePage({
           <ContractControls placeId={place.id} placeName={place.name} kind={place.kind} contracts={contracts} now={new Date()} returnTo={returnTo} />
         ) : null}
       </Card>
-      <QrCredentialPanel
-        label="Place check-in QR"
-        description="Displayed at this Place for guests to scan on arrival. It cannot be used to start a hotel stay."
-        linkKind="place"
-        hasActiveCredential={checkInCredential !== null}
-        issuedAt={checkInCredential?.createdAt ?? null}
-        issue={issuePlaceCheckInCredentialAction.bind(null, place.id)}
-        revoke={revokePlaceCheckInCredentialAction.bind(null, place.id)}
-      />
+      {hotelId ? (
+        // A hotel's own building: its QR code is the hotel entry code, which attaches guests to the hotel.
+        <Card className="space-y-2">
+          <h2 className="font-medium">Hotel entry QR</h2>
+          <p className="text-sm text-slate-600">
+            This place is a hotel. Its QR code is the hotel entry code: scanning it attaches a guest to this hotel.
+          </p>
+          <Link href={`/admin/hotels/${hotelId}`} className="atlas-hit inline-block text-sm font-medium text-slate-800 underline">
+            Show the hotel entry code
+          </Link>
+        </Card>
+      ) : (
+        <QrCredentialPanel
+          label="Place check-in QR"
+          description="Displayed at this Place for guests to scan on arrival. It cannot be used to start a hotel stay."
+          linkKind="place"
+          hasActiveCredential={checkInCredential !== null}
+          issuedAt={checkInCredential?.createdAt ?? null}
+          issue={issuePlaceCheckInCredentialAction.bind(null, place.id)}
+          reveal={revealPlaceCheckInCredentialAction.bind(null, place.id)}
+          revoke={revokePlaceCheckInCredentialAction.bind(null, place.id)}
+        />
+      )}
       <Card className="space-y-3">
         <h2 className="font-medium">Details</h2>
         <PlaceForm action={updatePlaceAction.bind(null, place.id)} place={formValues} />
