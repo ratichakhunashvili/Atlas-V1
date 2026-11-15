@@ -87,7 +87,7 @@ export default async function HomePage({
           <p className={`w-full ${type.body} text-atlas-slate`}>
             {stateCopy
               ? stateCopy.body
-              : "Atlas shows what you can do from your hotel. Type the code from the Atlas card at reception to start your stay."}
+              : "Atlas shows what you can do from your hotel. Scan the QR code on the Atlas card at reception, or type its code, to start your stay."}
           </p>
           {stateCopy ? (
             // The guest declared these dates and may have mistyped them: the stay pill's date editor fixes that.
@@ -103,9 +103,13 @@ export default async function HomePage({
               {checkinError}
             </p>
           ) : null}
+          {/* The camera screen reads the hotel's QR code and opens its /checkin landing (scan-hotel/page.tsx). */}
+          <AtlasButton to="ScanHotel">Scan the hotel code</AtlasButton>
           <form action={checkInToHotelFormAction} className="flex w-full flex-col items-start gap-[12px]">
-            <AtlasField id="token" label="Hotel code" autoComplete="off" required />
-            <AtlasButton type="submit">Start my stay</AtlasButton>
+            <AtlasField id="token" label="Or type the hotel code" autoComplete="off" required />
+            <AtlasButton type="submit" tone="outline">
+              Start my stay
+            </AtlasButton>
           </form>
           {testEntryOffered && (
             <form action={enterTestStayFormAction} className="w-full">

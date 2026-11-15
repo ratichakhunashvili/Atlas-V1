@@ -11,19 +11,16 @@ import {
   switchActiveStay,
   updateStayDates,
 } from "@/db/queries/hotel-stays";
-import { findHotelById } from "@/db/queries/hotels";
-import { findQrCredentialByHash } from "@/db/queries/qr-credentials";
 import {
   clearPendingHotelSwitch,
   findPendingHotelSwitch,
   recordPendingHotelSwitch,
 } from "@/db/queries/pending-hotel-switches";
-import { resolveScannedQrToken } from "@/services/qr";
 import { checkAttemptAllowed, recordFailedAttempt } from "@/db/queries/rate-limit";
 import { rateLimitedMessage } from "@/services/rate-limit/policy";
 import { decideHotelEntry } from "@/services/stays/hotel-entry";
 import { validateStayDates } from "@/services/stays/stay-dates";
-import { checkInTokenSchema } from "./schema";
+import { resolveHotelFromToken } from "./resolve-hotel-token";
 
 type HotelSummary = { id: string; name: string };
 
@@ -42,24 +39,6 @@ export type HotelEntryResult =
 export type HotelSwitchOutcome = Exclude<HotelEntryResult, { status: "switch_required" }>;
 
 export type PendingSwitch = { currentHotel: HotelSummary; scannedHotel: HotelSummary };
-
-/**
- * Resolves a scanned hotel-entry credential to its hotel, server-side.
- *
- * Every failure — unknown, revoked, expired, or a Place check-in code presented
- * here — returns the same message on purpose: telling a scanner *why* a code was
- * refused tells an attacker which codes exist. services/qr keeps the specific
- * reason for tests and logs.
- */
-async function resolveHotelFromToken(rawToken: string, now: Date) {
-  const parsed = checkInTokenSchema.safeParse({ token: rawToken });
-  if (!parsed.success) return null;
-
-  const resolution = await resolveScannedQrToken(parsed.data.token, "hotel_entry", findQrCredentialByHash, now);
-  if (!resolution.ok || !resolution.credential.hotelId) return null;
-
-  return findHotelById(resolution.credential.hotelId);
-}
 
 /**
  * READ-ONLY: what this scanned code means for this guest, right now.

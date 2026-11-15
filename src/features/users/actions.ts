@@ -13,6 +13,7 @@ import { isAuthAttemptAllowed, recordAuthAttempt } from "@/db/queries/auth-rate-
 import { clientIp } from "@/lib/client-ip";
 import { authRateLimitKey, authRateLimitedMessage } from "@/services/rate-limit/auth-policy";
 import { safeCallback } from "@/auth/callback";
+import { joinScannedHotelAfterSignup } from "@/features/hotel-stays/join-after-signup";
 
 /**
  * Create account (Figma SignUp, SignUpEmailUsed, SignUpWeak). Problems come back as form state —
@@ -62,8 +63,9 @@ export async function signupAction(_previous: SignUpState, formData: FormData): 
   // Every new account starts as "user" (the DB column default) — admin
   // status is never granted here. See db/seed.ts for the explicit, manual
   // promotion path.
+  let created: Awaited<ReturnType<typeof createUser>>;
   try {
-    await createUser({ email: parsed.data.email, passwordHash, name: parsed.data.name });
+    created = await createUser({ email: parsed.data.email, passwordHash, name: parsed.data.name });
   } catch (error) {
     // Two sign-ups for the same email at once: the unique index decides, and the loser sees the same message.
     if (hasPgErrorCode(error, PG_UNIQUE_VIOLATION)) return emailUsed;
@@ -72,7 +74,16 @@ export async function signupAction(_previous: SignUpState, formData: FormData): 
 
   // Signed straight in, as the design continues from Create account into the app.
   // Straight on to wherever they were headed, e.g. the hotel code they scanned before having an account.
-  const redirectTo = safeCallback(formData.get("callbackUrl"), "/");
+  const callbackUrl = safeCallback(formData.get("callbackUrl"), "/");
+  // A hotel code scanned before signing up starts the new account's stay now (features/hotel-stays/join-after-signup.ts).
+  // If that fails for any reason, the account still exists and the guest lands on the code's page to tap instead.
+  let joined: string | null = null;
+  try {
+    joined = await joinScannedHotelAfterSignup({ userId: created.id, callbackUrl, now });
+  } catch (error) {
+    console.error("Joining the scanned hotel after sign-up failed", error instanceof Error ? error.name : "unknown");
+  }
+  const redirectTo = joined ?? callbackUrl;
   await signIn("credentials", { email: parsed.data.email, password: parsed.data.password, redirectTo });
   return {};
 }
