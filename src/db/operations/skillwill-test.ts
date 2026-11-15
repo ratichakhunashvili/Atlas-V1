@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { atlasPartnerContracts, hotels, places, qrCredentials, type NewPlace } from "@/db/schema";
+import { atlasPartnerContracts, hotelFacilities, hotels, places, qrCredentials, type NewPlace } from "@/db/schema";
 import { generateRawQrToken, hashQrToken } from "@/services/qr/token";
 import areaData from "@/db/data/skillwill-area.json";
 import type { AtlasDatabase } from "./types";
@@ -15,6 +15,11 @@ import type { AtlasDatabase } from "./types";
  *   - Attractions (museums, landmarks, a park) need no contract: published and verified, so visible at once.
  *   - Businesses (cafés, restaurants) get a PENDING Atlas contract only. They stay hidden until an admin confirms it
  *     in /admin/contracts (owner decision 2026-11-15: "I'll confirm in admin"). No contract or partnership is invented.
+ *
+ *   - Campus facilities (Kombinati, PlayStation Room; owner decision 2026-11-15) are Skillwill's OWN facilities: an
+ *     active hotel_facilities row each, so only Skillwill guests ever see them. Their Places are kind "business" with
+ *     NO contract, so they reach no other hotel's guests (and disappear entirely if the facility is switched off).
+ *     Check-in is QR only. Written directly, like the contracts above, since a seed has no admin actor for the audit.
  *
  * QR codes: one hotel-entry code for Skillwill and one check-in code for every place, issued only where none is live
  * yet. Raw codes exist only in this function's return value (for the printable sheet); the database keeps hashes.
@@ -68,6 +73,26 @@ export const SKILLWILL_TEST_PLACES: readonly TestPlace[] = [
 
 export const skillwillPlaceId = (place: Pick<TestPlace, "n">) => ID(place.n);
 
+/** Skillwill's own campus facilities: Places 301-302, facility rows 311-312. QR check-in only. */
+export const SKILLWILL_TEST_FACILITIES = [
+  {
+    n: 301,
+    facilityN: 311,
+    name: "Kombinati",
+    description: "Kombinati, a space on the Skillwill campus at 16 Bochorma Street.",
+    visitDurationMinutes: 30,
+  },
+  {
+    n: 302,
+    facilityN: 312,
+    name: "PlayStation Room",
+    description: "The PlayStation room on the Skillwill campus: a quick game or two between classes.",
+    visitDurationMinutes: 30,
+  },
+] as const;
+
+export const skillwillFacilityId = (facility: { facilityN: number }) => ID(facility.facilityN);
+
 /**
  * The wider area (owner request 2026-11-15: food, attractions and fun within 3 km, everything OpenStreetMap lists):
  * src/db/data/skillwill-area.json, built from OpenStreetMap on 2026-11-15 by atlas-qa-tools/build-skillwill-area.mjs.
@@ -102,7 +127,7 @@ export function areaPlaceId(place: Pick<AreaPlace, "osm">): string {
 /** A code issued just now. `kind` says which link the QR image must hold: /checkin/ (hotel) or /unlock/ (place). */
 export type IssuedTestCode = { label: string; kind: "hotel" | "place"; rawToken: string };
 
-export type SeedSkillwillResult = { hotel: boolean; places: number; contracts: number; codes: IssuedTestCode[] };
+export type SeedSkillwillResult = { hotel: boolean; places: number; contracts: number; facilities: number; codes: IssuedTestCode[] };
 
 export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date()): Promise<SeedSkillwillResult> {
   return db.transaction(async (tx) => {
@@ -176,6 +201,46 @@ export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date(
       );
     }
 
+    // Campus facilities: the Place (business, no contract, QR only) and its active facility row for Skillwill.
+    inserted.push(
+      ...(await tx
+        .insert(places)
+        .values(
+          SKILLWILL_TEST_FACILITIES.map(
+            (facility): NewPlace => ({
+              id: ID(facility.n),
+              name: facility.name,
+              description: facility.description,
+              address: SKILLWILL_BASE.address,
+              latitude: SKILLWILL_BASE.latitude,
+              longitude: SKILLWILL_BASE.longitude,
+              category: "activity",
+              kind: "business",
+              checkInMethod: "qr",
+              visitDurationMinutes: facility.visitDurationMinutes,
+              ...verified,
+            })
+          )
+        )
+        .onConflictDoNothing()
+        .returning({ id: places.id }))
+    );
+    const facilities = await tx
+      .insert(hotelFacilities)
+      .values(
+        SKILLWILL_TEST_FACILITIES.map((facility) => ({
+          id: skillwillFacilityId(facility),
+          hotelId: SKILLWILL_TEST_IDS.hotel,
+          placeId: ID(facility.n),
+          facilityType: "other" as const,
+          status: "active" as const,
+        }))
+      )
+      .onConflictDoNothing()
+      .returning({ id: hotelFacilities.id });
+    // The facilities get QR codes like every other place (after the contract step: they never get a contract).
+    all.push(...SKILLWILL_TEST_FACILITIES.map((facility) => ({ id: ID(facility.n), name: facility.name, kind: "business" as const })));
+
     // QR codes, only where no live one exists (never rotates a code an admin may already have printed).
     const live = (subject: ReturnType<typeof eq>) =>
       tx
@@ -207,6 +272,6 @@ export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date(
     }
     for (const { place, rawToken } of toIssue) codes.push({ label: place.name, kind: "place", rawToken });
 
-    return { hotel: hotel.length === 1, places: inserted.length, contracts: contracts.length, codes };
+    return { hotel: hotel.length === 1, places: inserted.length, contracts: contracts.length, facilities: facilities.length, codes };
   });
 }

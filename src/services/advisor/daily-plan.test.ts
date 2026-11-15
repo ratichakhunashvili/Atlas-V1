@@ -185,9 +185,16 @@ describe("daily plan: starting the day", () => {
   });
 
   it("saves nothing when the hotel has nothing approved that matches", async () => {
-    preferences[GUEST_A] = prefs(GUEST_A, ["beach"]);
-    assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: false, reason: "no_eligible_experiences" });
+    // Hotel B has no facilities, so the first (campus) step falls back to the interest-filtered options: none.
+    preferences[GUEST_B] = prefs(GUEST_B, ["beach"]);
+    assert.deepEqual(await startDayForUser(GUEST_B, 120, NOW, deps()), { ok: false, reason: "no_eligible_experiences" });
     assert.equal(days.length, 0, "the guest's one day is not used up");
+  });
+
+  it("starts even when no interest matches, if the hotel's own facility fits (the campus step ignores interests)", async () => {
+    preferences[GUEST_A] = prefs(GUEST_A, ["beach"]);
+    assert.deepEqual(await startDayForUser(GUEST_A, 120, NOW, deps()), { ok: true });
+    assert.deepEqual(await choicesFor(GUEST_A), [sauna.id]);
   });
 
   it("test restart frees today's slot so the day can start again, keeping the old day as history", async () => {
@@ -249,8 +256,12 @@ describe("daily plan: private feedback before the next plan (Phase 2)", () => {
 });
 
 describe("daily plan: choosing 1 of 3 (hotel-specific eligibility)", () => {
-  it("offers three of Hotel A's own facilities and partners, never a nearby non-partner", async () => {
-    await startDayForUser(GUEST_A, 120, NOW, deps());
+  it("offers three of Hotel A's partners, never a nearby non-partner", async () => {
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    await pickChoiceForUser(GUEST_A, sauna.id, NOW, deps()); // 1st: the campus
+    await simulateScanForTesting(GUEST_A, NOW, deps());
+    await pickChoiceForUser(GUEST_A, cafe.id, NOW, deps()); // 2nd: food
+    await simulateScanForTesting(GUEST_A, NOW, deps());
     const offered = await choicesFor(GUEST_A);
     assert.equal(offered.length, 3);
     assert.ok(!offered.includes(decoy.id));
@@ -350,12 +361,120 @@ describe("daily plan: the day's progress", () => {
 
   it("never offers a second place from a group the day already has", async () => {
     await startDayForUser(GUEST_A, 240, NOW, deps());
-    await pickChoiceForUser(GUEST_A, cafe.id, NOW, deps());
+    await pickChoiceForUser(GUEST_A, sauna.id, NOW, deps());
+    await simulateScanForTesting(GUEST_A, NOW, deps());
+    assert.deepEqual(await pickChoiceForUser(GUEST_A, cafe.id, NOW, deps()), { ok: true });
     await simulateScanForTesting(GUEST_A, NOW, deps());
     const offered = await choicesFor(GUEST_A);
     assert.ok(offered.length > 0);
     assert.ok(!offered.includes(decoy.id) && offered.every((id) => id !== cafe.id));
     const state = await getDailyPlanForUser(GUEST_A, NOW, deps());
     assert.ok(state.status === "choosing" && state.choices.every((choice) => choice.category !== "restaurant" && choice.category !== "nightlife"));
+  });
+});
+
+describe("daily plan: order of the day (campus, then food, then anything)", () => {
+  const visitFirst = async (userId: string) => {
+    const [choice] = await choicesFor(userId);
+    assert.deepEqual(await pickChoiceForUser(userId, choice, NOW, deps()), { ok: true });
+    await simulateScanForTesting(userId, NOW, deps());
+    return choice;
+  };
+
+  it("1st task: only the hotel's own facilities; 2nd: only food; 3rd: anything eligible", async () => {
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    assert.deepEqual(await choicesFor(GUEST_A), [sauna.id], "1st: the campus only");
+    await visitFirst(GUEST_A);
+    assert.deepEqual(await choicesFor(GUEST_A), [cafe.id], "2nd: food only");
+    await visitFirst(GUEST_A);
+    const third = await choicesFor(GUEST_A);
+    assert.equal(third.length, 3);
+    assert.deepEqual(new Set(third), new Set([tour.id, bistro.id, deli.id]));
+  });
+
+  it("the campus and food steps ignore interests, but only ever offer eligible places", async () => {
+    preferences[GUEST_A] = prefs(GUEST_A, ["tour"]);
+    eligibleByHotel["hotel-a"].push(entry(place("bar", 6, "nightlife")));
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    assert.deepEqual(await choicesFor(GUEST_A), [sauna.id]);
+    await visitFirst(GUEST_A);
+    const food = await choicesFor(GUEST_A);
+    assert.ok(food.length > 0 && food.every((id) => id === cafe.id || id === "bar"), "restaurant and nightlife count as food");
+    assert.ok(!food.includes(decoy.id), "a non-eligible restaurant next door is never offered");
+  });
+
+  it("falls back to the normal options when the hotel has no facility", async () => {
+    eligibleByHotel["hotel-a"] = eligibleByHotel["hotel-a"].filter((e) => e.source !== "facility");
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    assert.equal((await choicesFor(GUEST_A)).length, 3);
+  });
+
+  it("falls back to the normal options when no food is eligible (e.g. contracts still pending)", async () => {
+    eligibleByHotel["hotel-a"] = eligibleByHotel["hotel-a"].filter((e) => e.place.category !== "restaurant");
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    await visitFirst(GUEST_A);
+    const second = await choicesFor(GUEST_A);
+    assert.deepEqual(new Set(second), new Set([tour.id, bistro.id, deli.id]));
+  });
+
+  it("falls back when the campus facility does not fit the time left", async () => {
+    const farSauna = place("far-sauna", 400, "spa"); // ~44 km away: never fits
+    eligibleByHotel["hotel-a"] = [entry(farSauna, "facility"), ...eligibleByHotel["hotel-a"].filter((e) => e.source !== "facility")];
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    const offered = await choicesFor(GUEST_A);
+    assert.ok(offered.length > 0 && !offered.includes(farSauna.id));
+  });
+});
+
+describe("daily plan: the hotel's tasks per day", () => {
+  const withLimit = (limit: number) => {
+    stays[GUEST_A] = { ...stays[GUEST_A], hotel: { ...stays[GUEST_A].hotel, dailyTaskLimit: limit } };
+  };
+  const doOne = async () => {
+    const [choice] = await choicesFor(GUEST_A);
+    assert.deepEqual(await pickChoiceForUser(GUEST_A, choice, NOW, deps()), { ok: true });
+    await simulateScanForTesting(GUEST_A, NOW, deps());
+  };
+  beforeEach(() => withLimit(4));
+
+  for (const limit of [1, 2, 3, 4]) {
+    it(`ends the day after ${limit} when the hotel allows ${limit}, and shows "x of ${limit}"`, async () => {
+      withLimit(limit);
+      await startDayForUser(GUEST_A, 240, NOW, deps());
+      for (let i = 0; i < limit; i++) {
+        const state = await getDailyPlanForUser(GUEST_A, NOW, deps());
+        assert.equal(state.status, "choosing");
+        assert.equal(state.status === "choosing" && state.maxPicks, limit);
+        await doOne();
+      }
+      const state = await getDailyPlanForUser(GUEST_A, NOW, deps());
+      assert.equal(state.status, "finished");
+      assert.equal(state.status === "finished" && state.reason, "limit");
+      assert.equal(state.status === "finished" && state.completed.length, limit);
+      assert.equal(state.status === "finished" && state.maxPicks, limit);
+    });
+  }
+
+  it("treats a missing limit as 4, the most there can be", async () => {
+    stays[GUEST_A] = { ...stays[GUEST_A], hotel: { id: "hotel-a" } as Hotel };
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    const state = await getDailyPlanForUser(GUEST_A, NOW, deps());
+    assert.equal(state.status === "choosing" && state.maxPicks, MAX_DAILY_ACTIVITIES);
+  });
+
+  it("is read live: lowering it mid-day ends a day that already has that many, but the picked stop can still be done", async () => {
+    await startDayForUser(GUEST_A, 240, NOW, deps());
+    await doOne();
+    const [second] = await choicesFor(GUEST_A);
+    await pickChoiceForUser(GUEST_A, second, NOW, deps()); // picked, not yet visited
+    withLimit(1);
+    const during = await getDailyPlanForUser(GUEST_A, NOW, deps());
+    assert.equal(during.status, "in_progress", "the stop already picked can still be completed");
+    assert.equal(during.status === "in_progress" && during.maxPicks, 2, "never fewer dots than activities");
+    await simulateScanForTesting(GUEST_A, NOW, deps());
+    const after = await getDailyPlanForUser(GUEST_A, NOW, deps());
+    assert.equal(after.status === "finished" && after.reason, "limit");
+    withLimit(3);
+    assert.equal((await getDailyPlanForUser(GUEST_A, NOW, deps())).status, "choosing", "raising it lets the day continue");
   });
 });

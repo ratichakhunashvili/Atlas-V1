@@ -56,7 +56,7 @@ function deps(stops: ItineraryStop[], eligible: string[], counters = { reads: 0,
       id: STAY,
       checkIn: new Date("2026-06-15T08:00:00Z"),
       checkOut: null,
-      hotel: { id: HOTEL, placeId: hotelPlace.id, qrToken: "x", createdAt: NOW, updatedAt: NOW },
+      hotel: { id: HOTEL, placeId: hotelPlace.id, dailyTaskLimit: 4, qrToken: "x", createdAt: NOW, updatedAt: NOW },
       place: hotelPlace,
     }),
     findItineraryDay: async () => {

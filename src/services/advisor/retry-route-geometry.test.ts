@@ -6,7 +6,7 @@ import { makeTestPlace } from "./test-utils";
 
 const NOW = new Date("2026-03-10T12:00:00Z");
 const hotelPlace = makeTestPlace({ id: "hotel-place", category: "hotel", latitude: 41.7, longitude: 44.8 });
-const hotel: Hotel = { id: "hotel-1", placeId: hotelPlace.id, qrToken: null, createdAt: NOW, updatedAt: NOW };
+const hotel: Hotel = { id: "hotel-1", placeId: hotelPlace.id, dailyTaskLimit: 4, qrToken: null, createdAt: NOW, updatedAt: NOW };
 
 const GOOD_LINE = {
   type: "Feature" as const,

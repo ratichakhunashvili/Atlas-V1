@@ -22,7 +22,7 @@ const STAY = "stay-1";
 const DAY = "day-1";
 
 const hotelPlace = makeTestPlace({ id: "hotel-place", category: "hotel", name: "Test Hotel", latitude: 41.7, longitude: 44.8 });
-const hotel: Hotel = { id: HOTEL, placeId: hotelPlace.id, qrToken: null, createdAt: NOW, updatedAt: NOW };
+const hotel: Hotel = { id: HOTEL, placeId: hotelPlace.id, dailyTaskLimit: 4, qrToken: null, createdAt: NOW, updatedAt: NOW };
 
 const PLACES = {
   first: "place-first",

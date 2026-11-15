@@ -54,6 +54,7 @@ function makeHotel(placeId: string, id = "hotel-1"): Hotel {
   return {
     id,
     placeId,
+    dailyTaskLimit: 4,
     qrToken: "hotel-qr-token",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),

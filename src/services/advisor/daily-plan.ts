@@ -1,8 +1,9 @@
+import { MAX_DAILY_TASK_LIMIT, MIN_DAILY_TASK_LIMIT } from "@/db/schema";
 import type { CheckInMethod, ItineraryDay, ItineraryStop, PlaceCategory, UserPreferences } from "@/db/schema";
 import type { LatLng } from "@/lib/geo";
 import type { EligiblePlace } from "@/services/eligibility/rules";
 import type { GuestHotelContext, GuestStay } from "@/services/eligibility";
-import { buildDailyChoices, MAX_DAILY_ACTIVITIES, type DailyChoice } from "./daily-choices";
+import { buildDailyChoices, stepFocusFor, type DailyChoice } from "./daily-choices";
 import type { UsageHistory } from "./scoring";
 import { calculateDayNumber, stayEndFor } from "./stay-day";
 import { isAvailableMinutesOption, remainingBudgetMinutes } from "./time-budget";
@@ -11,12 +12,20 @@ import { groupsUsedBy, type CategoryGroup } from "./category-groups";
 import { dayNeedsFeedback, NO_TODAY, type FeedbackCandidate } from "@/services/feedback/needs-feedback";
 
 /*
- * The guest's day as "choose 1 of 3", up to four activities. One day per calendar day of the stay.
+ * The guest's day as "choose 1 of 3", up to the hotel's "Tasks per day" (1-4, hotels.daily_task_limit). One day per calendar day of the stay.
  *
  *   start   -> the guest's free time is recorded on a new itinerary day (no stops yet)
  *   choose  -> up to three eligible options that fit the time left (daily-choices.ts)
  *   pick    -> the chosen option becomes the day's one pending stop
  *   visit   -> only after that stop is checked in are new options offered
+ *
+ * Plan order (daily-choices.ts, stepFocusFor): the 1st task offers the hotel's own facilities (the campus), the 2nd
+ * food, later ones anything eligible; each falls back to the normal options when its group has nothing that fits.
+ *
+ * The daily limit is read LIVE from the guest's hotel on every request, never stored on the day. An admin's change
+ * applies from the next decision on, today's day included: lowering it to 2 ends a day that already has 2 activities
+ * (a stop already picked can still be completed, since the pending stop is checked first); raising it lets a
+ * finished day continue.
  *
  * Every decision is made here, on the server, from the guest's own active stay. A pick is accepted only if the
  * Place is one of the options the server would offer right now — a client-supplied place id is a claim, never an
@@ -43,7 +52,10 @@ type DayBase = {
   /** What is left of the guest's window; null only for a day with no recorded window. */
   remainingMinutes: number | null;
   picksUsed: number;
+  /** For "x of N done": the hotel's limit, or more when a lowered limit is below what today already has. */
   maxPicks: number;
+  /** The hotel's "Tasks per day" right now: the only number that decides whether another pick is allowed. */
+  taskLimit: number;
   completed: DailyStopView[];
 };
 
@@ -134,6 +146,13 @@ function toStopView(stop: ItineraryStop): DailyStopView {
   };
 }
 
+/** The guest's hotel's "Tasks per day", kept inside 1-4 (the database CHECK holds the same range). */
+export function dailyTaskLimitOf(stay: Pick<GuestStay, "hotel">): number {
+  const limit = stay.hotel.dailyTaskLimit;
+  if (!Number.isInteger(limit)) return MAX_DAILY_TASK_LIMIT;
+  return Math.min(MAX_DAILY_TASK_LIMIT, Math.max(MIN_DAILY_TASK_LIMIT, limit));
+}
+
 function dayNumberFor(stay: GuestStay, now: Date): number | null {
   const result = calculateDayNumber(stay.checkIn, stayEndFor(stay as GuestStay & { expectedCheckOut?: Date | null }), now);
   return result.ok ? result.dayNumber : null;
@@ -148,6 +167,8 @@ function choicesFor(input: {
   usedCategoryGroups?: ReadonlySet<CategoryGroup>;
   remainingMinutes: number;
   usageHistory: UsageHistory;
+  /** Activities today already has (picked or visited): decides the plan-order step. */
+  picksUsed: number;
 }): DailyChoice[] {
   return buildDailyChoices({
     eligiblePlaces: input.eligible,
@@ -161,6 +182,7 @@ function choicesFor(input: {
     usedCategoryGroups: input.usedCategoryGroups,
     remainingMinutes: input.remainingMinutes,
     usageHistory: input.usageHistory,
+    focus: stepFocusFor(input.picksUsed),
   });
 }
 
@@ -181,6 +203,7 @@ export async function getDailyPlanForUser(userId: string, now: Date = new Date()
   const stops = (await d.listItineraryStops(day.id)).slice().sort((a, b) => a.position - b.position);
   const completed = stops.filter((stop) => stop.visitedAt !== null).map(toStopView);
   const pending = stops.find((stop) => stop.visitedAt === null) ?? null;
+  const taskLimit = dailyTaskLimitOf(stay);
   const remainingMinutes = remainingBudgetMinutes({ availableMinutes: day.availableMinutes, generatedAt: day.generatedAt, now });
 
   const base: DayBase = {
@@ -190,7 +213,8 @@ export async function getDailyPlanForUser(userId: string, now: Date = new Date()
     startedAt: day.generatedAt,
     remainingMinutes,
     picksUsed: stops.length,
-    maxPicks: MAX_DAILY_ACTIVITIES,
+    maxPicks: Math.max(taskLimit, stops.length),
+    taskLimit,
     completed,
   };
 
@@ -202,7 +226,7 @@ export async function getDailyPlanForUser(userId: string, now: Date = new Date()
     return { ...base, status: "in_progress", current: toStopView(pending), currentAvailable };
   }
 
-  if (stops.length >= MAX_DAILY_ACTIVITIES) return { ...base, status: "finished", reason: "limit" };
+  if (stops.length >= taskLimit) return { ...base, status: "finished", reason: "limit" };
 
   const preferences = await d.findPreferencesForUser(userId);
   const lastVisited = stops.at(-1);
@@ -211,7 +235,7 @@ export async function getDailyPlanForUser(userId: string, now: Date = new Date()
   // One place per category group per day: whatever today already has (picked or visited) is off the table.
   const usedCategoryGroups = groupsUsedBy(stops);
   const usageHistory = await d.getStopUsageHistory(userId, stay.hotel.id);
-  const shared = { stay, eligible, preferences, origin, excludePlaceIds, usedCategoryGroups, usageHistory };
+  const shared = { stay, eligible, preferences, origin, excludePlaceIds, usedCategoryGroups, usageHistory, picksUsed: stops.length };
 
   const choices = choicesFor({ ...shared, remainingMinutes: remainingMinutes ?? 0 });
   if (choices.length > 0) return { ...base, status: "choosing", choices };
@@ -274,6 +298,7 @@ export async function startDayForUser(
     origin: { lat: stay.place.latitude, lng: stay.place.longitude },
     excludePlaceIds: new Set<string>(),
     usageHistory,
+    picksUsed: 0,
   };
 
   if (choicesFor({ ...shared, remainingMinutes: availableMinutes }).length === 0) {
@@ -313,7 +338,7 @@ export async function pickChoiceForUser(
 
   const appended = await d.appendPickedStop({
     dayId: state.dayId,
-    maxActivities: MAX_DAILY_ACTIVITIES,
+    maxActivities: state.taskLimit,
     stop: {
       placeId: choice.placeId,
       checkInMethod: choice.checkInMethod,

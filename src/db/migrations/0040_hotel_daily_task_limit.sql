@@ -1,0 +1,2 @@
+ALTER TABLE "hotels" ADD COLUMN "daily_task_limit" integer DEFAULT 4 NOT NULL;--> statement-breakpoint
+ALTER TABLE "hotels" ADD CONSTRAINT "hotels_daily_task_limit_check" CHECK ("hotels"."daily_task_limit" between 1 and 4);

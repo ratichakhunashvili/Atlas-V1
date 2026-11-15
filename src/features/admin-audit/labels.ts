@@ -27,7 +27,7 @@ export const AUDIT_ACTION_LABELS: Record<AdminAuditAction, string> = {
   "place.unarchived": "Place unarchived",
   "place.deleted": "Place deleted",
   "hotel.created": "Hotel created",
-  "hotel.updated": "Hotel's place changed",
+  "hotel.updated": "Hotel changed",
   "facility.added": "Hotel facility added",
   "facility.deactivated": "Hotel facility deactivated",
   "facility.reactivated": "Hotel facility activated",

@@ -1,4 +1,4 @@
-import type { BudgetLevel, CheckInMethod, PlaceCategory } from "@/db/schema";
+import { MAX_DAILY_TASK_LIMIT, PLACE_CATEGORIES, type BudgetLevel, type CheckInMethod, type PlaceCategory } from "@/db/schema";
 import type { LatLng } from "@/lib/geo";
 import type { EligiblePlace, EligibilitySource } from "@/services/eligibility/rules";
 import { buildCandidates, type AdvisorCandidate } from "./candidates";
@@ -24,7 +24,30 @@ import { resolveVisitDuration } from "./visit-duration";
  */
 
 export const CHOICES_PER_STEP = 3;
-export const MAX_DAILY_ACTIVITIES = 4;
+/** The most activities a day can ever have. Each hotel sets its own limit, 1 to this (hotels.daily_task_limit, 0040). */
+export const MAX_DAILY_ACTIVITIES = MAX_DAILY_TASK_LIMIT;
+
+/**
+ * Plan order (owner decision 2026-11-15): which kind of place a step of the day prefers.
+ *   - "campus": the 1st task: the guest's own hotel's facilities (eligibility source "facility").
+ *   - "food":   the 2nd task: food places, the "food" category group (restaurant and nightlife).
+ *   - null:     the 3rd task on: any eligible place, as before.
+ * The preferred group IGNORES the guest's interest filters, so a guest who did not tick "restaurant" still gets lunch
+ * and the campus is offered to everyone. Distance, time fit, no repeat place and one place per category group still
+ * apply. When nothing in the preferred group fits, the step offers the normal best options (interest-filtered) instead
+ * of nothing. Both pools are drawn from the eligible catalogue only, so ordering can never add an ineligible place.
+ */
+export type DailyStepFocus = "campus" | "food";
+
+export function stepFocusFor(picksUsed: number): DailyStepFocus | null {
+  if (picksUsed === 0) return "campus";
+  if (picksUsed === 1) return "food";
+  return null;
+}
+
+function matchesFocus(entry: EligiblePlace, focus: DailyStepFocus): boolean {
+  return focus === "campus" ? entry.source === "facility" : categoryGroupOf(entry.place.category) === "food";
+}
 
 
 export type DailyChoice = {
@@ -62,6 +85,8 @@ export type BuildDailyChoicesInput = {
   usedCategoryGroups?: ReadonlySet<CategoryGroup>;
   remainingMinutes: number;
   usageHistory: UsageHistory;
+  /** Which group this step prefers (stepFocusFor); none = any eligible place. */
+  focus?: DailyStepFocus | null;
 };
 
 /**
@@ -104,13 +129,22 @@ function fits(candidate: AdvisorCandidate, origin: LatLng, hotelLocation: LatLng
  * no unpromoted candidate is left to fill the slot — never in place of one.
  */
 export function buildDailyChoices(input: BuildDailyChoicesInput): DailyChoice[] {
-  const entryById = new Map(input.eligiblePlaces.map((entry) => [entry.place.id, entry]));
+  if (input.focus) {
+    // The preferred group, interests ignored (see DailyStepFocus). Still only eligible places.
+    const preferred = chooseFrom(input, input.eligiblePlaces.filter((entry) => matchesFocus(entry, input.focus!)), PLACE_CATEGORIES);
+    if (preferred.length > 0) return preferred;
+  }
+  return chooseFrom(input, input.eligiblePlaces, input.categories);
+}
+
+function chooseFrom(input: BuildDailyChoicesInput, pool: readonly EligiblePlace[], categories: readonly PlaceCategory[]): DailyChoice[] {
+  const entryById = new Map(pool.map((entry) => [entry.place.id, entry]));
 
   const candidates = buildCandidates({
     hotelLocation: input.hotelLocation,
     hotelPlaceId: input.hotelPlaceId,
-    eligiblePlaces: input.eligiblePlaces,
-    selectedCategories: input.categories,
+    eligiblePlaces: pool,
+    selectedCategories: categories,
     preferredMaxDistanceMeters: input.preferredMaxDistanceMeters,
   }).filter(
     (candidate) =>

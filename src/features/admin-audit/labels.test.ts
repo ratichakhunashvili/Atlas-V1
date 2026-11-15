@@ -15,7 +15,7 @@ describe("audit log labels", () => {
 
   it("labels the hotel, facility and place-edit actions", () => {
     assert.equal(auditActionLabel("hotel.created"), "Hotel created");
-    assert.equal(auditActionLabel("hotel.updated"), "Hotel's place changed");
+    assert.equal(auditActionLabel("hotel.updated"), "Hotel changed");
     assert.equal(auditActionLabel("facility.added"), "Hotel facility added");
     assert.equal(auditActionLabel("facility.deactivated"), "Hotel facility deactivated");
     assert.equal(auditActionLabel("facility.reactivated"), "Hotel facility activated");

@@ -119,7 +119,7 @@ function makeWorld(options: WorldOptions) {
     findUserById: async (userId) => (userId === USER ? user : null),
     findActiveStayForUser: async (userId) =>
       userId === USER && options.validStay !== false
-        ? { id: STAY, checkIn: new Date("2026-06-15T08:00:00Z"), checkOut: null, hotel: { id: HOTEL, placeId: HOTEL_PLACE, qrToken: "x", createdAt: NOW, updatedAt: NOW }, place: hotelPlace }
+        ? { id: STAY, checkIn: new Date("2026-06-15T08:00:00Z"), checkOut: null, hotel: { id: HOTEL, placeId: HOTEL_PLACE, dailyTaskLimit: 4, qrToken: "x", createdAt: NOW, updatedAt: NOW }, place: hotelPlace }
         : null,
     findPreferencesForUser: async () => ({ userId: USER, principalId: null, categories: [...VARIED], budget: null, activityLevel: null, maxDistanceMeters: null, updatedAt: NOW }),
     findItineraryDay: async (userId, hotelId, dayNumber) => (userId === USER && hotelId === HOTEL && dayNumber === 1 ? state.day : null),

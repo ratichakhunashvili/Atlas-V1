@@ -100,7 +100,7 @@ function makeWorld(options: WorldOptions) {
       id: STAY,
       checkIn: new Date("2026-06-15T08:00:00Z"),
       checkOut: null,
-      hotel: { id: HOTEL, placeId: HOTEL_PLACE, qrToken: null, createdAt: NOW, updatedAt: NOW },
+      hotel: { id: HOTEL, placeId: HOTEL_PLACE, dailyTaskLimit: 4, qrToken: null, createdAt: NOW, updatedAt: NOW },
       place: hotelPlace,
     }),
     findPreferencesForUser: async () => ({

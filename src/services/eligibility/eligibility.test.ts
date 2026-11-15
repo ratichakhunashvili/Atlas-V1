@@ -27,7 +27,7 @@ const NOW = new Date("2026-06-15T12:00:00Z");
 const CONFIRMED = new Date("2026-01-01T00:00:00Z");
 
 function hotel(id: string, placeId: string): Hotel {
-  return { id, placeId, qrToken: `${id}-qr`, createdAt: CONFIRMED, updatedAt: CONFIRMED };
+  return { id, placeId, dailyTaskLimit: 4, qrToken: `${id}-qr`, createdAt: CONFIRMED, updatedAt: CONFIRMED };
 }
 
 const hotelAPlace = makeTestPlace({ id: "hotel-a-place", category: "hotel", latitude: 41.7, longitude: 44.8 });

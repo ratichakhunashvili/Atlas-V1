@@ -115,7 +115,7 @@ function makeWorld(initialEligible: string[], initialStops: ItineraryStop[], day
             id: STAY,
             checkIn: new Date("2026-06-15T08:00:00Z"),
             checkOut: null,
-            hotel: { id: HOTEL, placeId: "hotel-place", qrToken: "x", createdAt: NOW, updatedAt: NOW },
+            hotel: { id: HOTEL, placeId: "hotel-place", dailyTaskLimit: 4, qrToken: "x", createdAt: NOW, updatedAt: NOW },
             place: makeTestPlace({ id: "hotel-place", category: "hotel" }),
           }
         : null,

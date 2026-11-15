@@ -110,7 +110,7 @@ const venue = makeTestPlace({
   visitDurationMinutes: 30,
 });
 
-const hotel: Hotel = { id: HOTEL_ID, placeId: hotelPlace.id, qrToken: null, createdAt: NOW, updatedAt: NOW };
+const hotel: Hotel = { id: HOTEL_ID, placeId: hotelPlace.id, dailyTaskLimit: 4, qrToken: null, createdAt: NOW, updatedAt: NOW };
 const user: User = {
   id: "user-1",
   email: "arrival@example.test",

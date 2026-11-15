@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { eq } from "drizzle-orm";
 import { createTestDatabase, type TestDatabase } from "./test-support/pglite";
-import { createHotelWithAudit, updateHotelPlaceWithAudit } from "./operations/hotel-admin";
+import { createHotelWithAudit, updateHotelDailyTaskLimitWithAudit, updateHotelPlaceWithAudit } from "./operations/hotel-admin";
 import { addFacilityWithAudit, setFacilityStatusWithAudit } from "./operations/hotel-facility-admin";
 import { changedPlaceDetails, updatePlaceWithAudit } from "./operations/place-admin";
 
@@ -351,5 +351,58 @@ describe("changedPlaceDetails", () => {
       before: { latitude: 41.7, phone: "+1" },
       after: { latitude: 41.8, phone: null },
     });
+  });
+});
+
+describe("hotel 'Tasks per day'", () => {
+  it("writes exactly one hotel.updated with the old and new limit, and keeps it until changed", async () => {
+    const place = await seedPlace({ kind: "hotel" });
+    const hotel = await createHotelWithAudit(database.db, { actorUserId: adminId, placeId: place.id });
+    assert.equal(hotel.dailyTaskLimit, 4, "a new hotel allows 4");
+    await mark();
+
+    const result = await updateHotelDailyTaskLimitWithAudit(database.db, { actorUserId: adminId, hotelId: hotel.id, dailyTaskLimit: 2, now: NOW });
+    assert.equal(result?.changed, true);
+    assert.equal(result?.hotel.dailyTaskLimit, 2);
+    const entries = await newEntries();
+    assert.equal(entries.length, 1);
+    const [entry] = entries;
+    assert.equal(entry.action, "hotel.updated");
+    assert.equal(entry.actorUserId, adminId);
+    assert.equal(entry.targetId, hotel.id);
+    assert.equal(entry.hotelId, hotel.id);
+    assert.deepEqual(entry.before, { dailyTaskLimit: 4 });
+    assert.deepEqual(entry.after, { dailyTaskLimit: 2 });
+
+    await mark();
+    const same = await updateHotelDailyTaskLimitWithAudit(database.db, { actorUserId: adminId, hotelId: hotel.id, dailyTaskLimit: 2 });
+    assert.equal(same?.changed, false);
+    const missing = await updateHotelDailyTaskLimitWithAudit(database.db, {
+      actorUserId: adminId,
+      hotelId: "11111111-1111-4111-8111-111111111111",
+      dailyTaskLimit: 3,
+    });
+    assert.equal(missing, null);
+    assert.equal((await newEntries()).length, 0, "an unchanged or missing hotel writes nothing");
+  });
+
+  it("refuses a limit outside 1-4 in the database and writes nothing", async () => {
+    const place = await seedPlace({ kind: "hotel" });
+    const hotel = await createHotelWithAudit(database.db, { actorUserId: adminId, placeId: place.id });
+    await mark();
+    for (const bad of [0, 5]) {
+      await assert.rejects(() => updateHotelDailyTaskLimitWithAudit(database.db, { actorUserId: adminId, hotelId: hotel.id, dailyTaskLimit: bad }));
+    }
+    assert.equal((await newEntries()).length, 0);
+    const [unchanged] = await database.db.select().from(database.schema.hotels).where(eq(database.schema.hotels.id, hotel.id));
+    assert.equal(unchanged.dailyTaskLimit, 4);
+  });
+
+  it("rolls the change back when its audit entry cannot be written", async () => {
+    const place = await seedPlace({ kind: "hotel" });
+    const hotel = await createHotelWithAudit(database.db, { actorUserId: adminId, placeId: place.id });
+    await assert.rejects(() => updateHotelDailyTaskLimitWithAudit(database.db, { actorUserId: MISSING_ACTOR, hotelId: hotel.id, dailyTaskLimit: 1 }));
+    const [unchanged] = await database.db.select().from(database.schema.hotels).where(eq(database.schema.hotels.id, hotel.id));
+    assert.equal(unchanged.dailyTaskLimit, 4);
   });
 });

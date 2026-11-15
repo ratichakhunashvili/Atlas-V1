@@ -132,7 +132,7 @@ function build(overrides: Partial<World> = {}) {
             id: w.stay.id,
             checkIn: w.stay.checkIn,
             checkOut: w.stay.checkOut,
-            hotel: { id: w.stay.hotelId, placeId: "hotel-place", qrToken: "x", createdAt: DAY_3_NOON, updatedAt: DAY_3_NOON },
+            hotel: { id: w.stay.hotelId, placeId: "hotel-place", dailyTaskLimit: 4, qrToken: "x", createdAt: DAY_3_NOON, updatedAt: DAY_3_NOON },
             place: makeTestPlace({ id: "hotel-place", category: "hotel" }),
           }
         : null,

@@ -6,13 +6,13 @@ import { db } from "@/db";
 import { requireAdmin } from "@/lib/authorization";
 import { isUuid } from "@/lib/route-ids";
 import { countHotelDeletionBlockers, deleteHotel, findHotelById } from "@/db/queries/hotels";
-import { createHotelWithAudit, updateHotelPlaceWithAudit } from "@/db/operations/hotel-admin";
+import { createHotelWithAudit, updateHotelDailyTaskLimitWithAudit, updateHotelPlaceWithAudit } from "@/db/operations/hotel-admin";
 import { hasHotelDeletionBlockers, hotelDeletionBlockedMessage } from "@/db/operations/hotel-deletion";
 import { loadContractFacts } from "@/db/operations/atlas-contracts";
 import { placeHasPartnershipRows } from "@/db/queries/hotel-partnerships";
 import { findPlaceById } from "@/db/queries/places";
 import { hasPgErrorCode, PG_UNIQUE_VIOLATION } from "@/db/errors";
-import { hotelSchema } from "./schema";
+import { hotelSchema, hotelTaskLimitSchema } from "./schema";
 import { validateHotelPlaceCandidate } from "./rules";
 
 // The hotel list is the admin home, /admin. Every hotel action reports back with ?ok= or ?error=.
@@ -86,6 +86,25 @@ export async function updateHotelAction(id: string, formData: FormData) {
   revalidatePath(HOTELS_PATH);
   revalidatePath(editPath);
   redirect(withMessage(editPath, { ok: "Hotel saved." }));
+}
+
+/**
+ * "Tasks per day" for one hotel (admin only, validated here on the server). Written with its `hotel.updated` audit
+ * entry in one transaction. It applies until changed again; guests' daily plans read it live.
+ */
+export async function updateHotelTaskLimitAction(id: string, formData: FormData) {
+  const admin = await requireAdmin();
+  if (!isUuid(id)) redirect(HOTELS_PATH);
+
+  const editPath = `/admin/hotels/${id}`;
+  const parsed = hotelTaskLimitSchema.safeParse({ dailyTaskLimit: formData.get("dailyTaskLimit") ?? "" });
+  if (!parsed.success) redirect(withMessage(editPath, { error: parsed.error.issues[0]?.message ?? "Invalid input" }));
+
+  const updated = await updateHotelDailyTaskLimitWithAudit(db, { actorUserId: admin.id, hotelId: id, dailyTaskLimit: parsed.data.dailyTaskLimit });
+  if (!updated) redirect(withMessage(HOTELS_PATH, { error: "That hotel no longer exists." }));
+
+  revalidatePath(editPath);
+  redirect(withMessage(editPath, { ok: updated.changed ? "Tasks per day saved." : "Tasks per day unchanged." }));
 }
 
 export async function deleteHotelAction(formData: FormData) {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Place } from "@/db/schema";
 import type { EligiblePlace } from "@/services/eligibility/rules";
-import { buildDailyChoices, CHOICES_PER_STEP, type BuildDailyChoicesInput } from "./daily-choices";
+import { buildDailyChoices, CHOICES_PER_STEP, stepFocusFor, type BuildDailyChoicesInput } from "./daily-choices";
 import { makeTestPlace } from "./test-utils";
 
 const HOTEL = { lat: 41.7, lng: 44.8 };
@@ -170,5 +170,59 @@ describe("daily choices carry the place's own check-in method", () => {
     assert.equal(byId.get("qr-only"), "qr");
     assert.equal(byId.get("gps-only"), "gps");
     assert.equal(byId.get("both"), "qr_or_gps");
+  });
+});
+
+describe("plan order: campus first, food second, then anything (pure)", () => {
+  const gym = near("gym", 1, { category: "activity" });
+  const lounge = near("lounge", 2, { category: "spa" });
+  const cafe = near("cafe", 3, { category: "restaurant" });
+  const bar = near("bar", 4, { category: "nightlife" });
+  const museum = near("museum", 5, { category: "museum" });
+  const pool = [facility(gym), facility(lounge), partner(cafe), partner(bar), partner(museum)];
+  const ids = (choices: { placeId: string }[]) => choices.map((choice) => choice.placeId).sort();
+
+  it("maps the step to its focus: 1st campus, 2nd food, then none", () => {
+    assert.deepEqual([0, 1, 2, 3].map(stepFocusFor), ["campus", "food", null, null]);
+  });
+
+  it("campus: only the hotel's own facilities, even when the guest's interests exclude them", () => {
+    assert.deepEqual(ids(buildDailyChoices(input(pool, { focus: "campus", categories: ["museum"] }))), ["gym", "lounge"]);
+  });
+
+  it("food: only food places (restaurant and nightlife), whatever the interests", () => {
+    // One place per category group: restaurant and nightlife are both "food", so only the better-ranked one is offered.
+    const offered = ids(buildDailyChoices(input(pool, { focus: "food", categories: ["museum"] })));
+    assert.equal(offered.length, 1);
+    assert.ok(["bar", "cafe"].includes(offered[0]));
+  });
+
+  it("no focus: anything eligible that matches the interests, as before", () => {
+    assert.deepEqual(ids(buildDailyChoices(input(pool, { focus: null, categories: ["museum", "restaurant"] }))), ["cafe", "museum"]);
+  });
+
+  it("falls back to the normal (interest-filtered) options when the focus group has nothing that fits", () => {
+    const noFacilities = pool.filter((entry) => entry.source !== "facility");
+    assert.deepEqual(ids(buildDailyChoices(input(noFacilities, { focus: "campus", categories: ["museum"] }))), ["museum"]);
+    const noFood = pool.filter((entry) => !["cafe", "bar"].includes(entry.place.id));
+    assert.deepEqual(ids(buildDailyChoices(input(noFood, { focus: "food", categories: ["museum"] }))), ["museum"]);
+    // A facility that does not fit the time left does not count: fall back.
+    const far = near("far-gym", 300, { category: "activity" });
+    assert.deepEqual(ids(buildDailyChoices(input([facility(far), partner(museum)], { focus: "campus", categories: ["museum"] }))), ["museum"]);
+  });
+
+  it("falls back when the focus group was used up earlier in the day, and never repeats a place", () => {
+    const offered = ids(buildDailyChoices(input(pool, { focus: "food", categories: ["museum"], usedCategoryGroups: new Set(["food"]) })));
+    assert.deepEqual(offered, ["museum"]);
+    const excluded = ids(buildDailyChoices(input(pool, { focus: "campus", excludePlaceIds: new Set(["gym"]) })));
+    assert.deepEqual(excluded, ["lounge"]);
+  });
+
+  it("never offers a place outside the eligible pool, with or without a focus", () => {
+    for (const focus of ["campus", "food", null] as const) {
+      const offered = buildDailyChoices(input(pool, { focus, categories: [...VARIED, "activity", "nightlife"] }));
+      for (const choice of offered) assert.ok(pool.some((entry) => entry.place.id === choice.placeId), `${focus}: ${choice.placeId}`);
+    }
+    assert.deepEqual(buildDailyChoices(input([], { focus: "campus" })), []);
   });
 });

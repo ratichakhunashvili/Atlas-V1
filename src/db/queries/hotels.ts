@@ -38,6 +38,7 @@ export async function findHotelById(id: string) {
     .select({
       id: hotels.id,
       placeId: hotels.placeId,
+      dailyTaskLimit: hotels.dailyTaskLimit,
       createdAt: hotels.createdAt,
       updatedAt: hotels.updatedAt,
       place: places,

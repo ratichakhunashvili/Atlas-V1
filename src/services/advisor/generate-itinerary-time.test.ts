@@ -45,6 +45,7 @@ const hotelPlace = makeTestPlace({
 const hotel: Hotel = {
   id: HOTEL_ID,
   placeId: hotelPlace.id,
+  dailyTaskLimit: 4,
   qrToken: null,
   createdAt: NOW,
   updatedAt: NOW,

@@ -4,11 +4,14 @@ import { ConfirmSubmit } from "@/components/admin/confirm-submit";
 import { HotelForm } from "@/components/hotel/hotel-form";
 import { QrCredentialPanel } from "@/components/qr/qr-credential-panel";
 import { Alert } from "@/components/shared/alert";
+import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
+import { Select } from "@/components/shared/select";
+import { MAX_DAILY_TASK_LIMIT, MIN_DAILY_TASK_LIMIT } from "@/db/schema";
 import { findHotelById } from "@/db/queries/hotels";
 import { listPlaces } from "@/db/queries/places";
 import { findActiveQrCredentialForHotel } from "@/db/queries/qr-credentials";
-import { deleteHotelAction, updateHotelAction } from "@/features/hotels/actions";
+import { deleteHotelAction, updateHotelAction, updateHotelTaskLimitAction } from "@/features/hotels/actions";
 import {
   issueHotelEntryCredentialAction,
   revokeHotelEntryCredentialAction,
@@ -80,6 +83,23 @@ export default async function EditHotelPage({
           places={placeOptions.map(({ id, name }) => ({ id, name }))}
           currentPlaceId={hotel.placeId}
         />
+      </Card>
+      <Card className="space-y-3">
+        <h2 className="font-medium">Tasks per day</h2>
+        <p className="text-sm text-slate-500">
+          How many activities a guest&apos;s day can have here. It stays until you change it, and applies from the guest&apos;s
+          next step: lowering it ends a day that already has that many activities.
+        </p>
+        <form action={updateHotelTaskLimitAction.bind(null, hotel.id)} className="space-y-4">
+          <Select label="Tasks per day" name="dailyTaskLimit" defaultValue={String(hotel.dailyTaskLimit)} required>
+            {Array.from({ length: MAX_DAILY_TASK_LIMIT - MIN_DAILY_TASK_LIMIT + 1 }, (_, i) => MIN_DAILY_TASK_LIMIT + i).map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </Select>
+          <Button type="submit">Save tasks per day</Button>
+        </form>
       </Card>
       <Card className="space-y-3">
         <h2 className="font-medium">Delete hotel</h2>

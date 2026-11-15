@@ -82,3 +82,37 @@ export async function updateHotelPlaceWithAudit(
     return { hotel, changed: true };
   });
 }
+
+/**
+ * Sets the hotel's "Tasks per day" (1-4) and writes `hotel.updated` with the old and new limit, in one transaction.
+ * Saving the same number again changes nothing and writes nothing. Returns null when the hotel does not exist. The
+ * database CHECK (0040) refuses a value outside 1-4 even if a caller skipped validation. The daily plan reads the
+ * limit live, so the change applies from the guest's next step on, today's day included.
+ */
+export async function updateHotelDailyTaskLimitWithAudit(
+  db: AtlasDatabase,
+  input: { actorUserId: string; hotelId: string; dailyTaskLimit: number; now?: Date }
+): Promise<{ hotel: Hotel; changed: boolean } | null> {
+  return db.transaction(async (tx) => {
+    const [current] = await tx.select().from(hotels).where(eq(hotels.id, input.hotelId)).for("update").limit(1);
+    if (!current) return null;
+    if (current.dailyTaskLimit === input.dailyTaskLimit) return { hotel: current, changed: false };
+
+    const [hotel] = await tx
+      .update(hotels)
+      .set({ dailyTaskLimit: input.dailyTaskLimit, updatedAt: input.now ?? new Date() })
+      .where(eq(hotels.id, input.hotelId))
+      .returning();
+    await recordAdminAudit(tx, {
+      actorUserId: input.actorUserId,
+      action: "hotel.updated",
+      targetType: "hotel",
+      targetId: hotel.id,
+      hotelId: hotel.id,
+      before: { dailyTaskLimit: current.dailyTaskLimit },
+      after: { dailyTaskLimit: hotel.dailyTaskLimit },
+      now: input.now,
+    });
+    return { hotel, changed: true };
+  });
+}
