@@ -5,6 +5,7 @@ import { Alert } from "@/components/shared/alert";
 import { Button } from "@/components/shared/button";
 import { Card } from "@/components/shared/card";
 import { QrPrintCard } from "@/components/qr/qr-print-card";
+import { qrLink, type QrLinkKind } from "@/lib/qr-links";
 import type { IssueCredentialResult, RevokeCredentialResult } from "@/features/qr-credentials/actions";
 
 /**
@@ -21,7 +22,7 @@ export function QrCredentialPanel({
   description,
   hasActiveCredential,
   issuedAt,
-  linkPath,
+  linkKind,
   issue,
   revoke,
 }: {
@@ -29,8 +30,8 @@ export function QrCredentialPanel({
   description: string;
   hasActiveCredential: boolean;
   issuedAt: Date | null;
-  /** When set, the QR image holds this site's `${linkPath}<code>` link, so a phone's own camera app opens Atlas. */
-  linkPath?: string;
+  /** When set, the QR image holds this site's short link (lib/qr-links.ts), so a phone's own camera app opens Atlas. */
+  linkKind?: QrLinkKind;
   issue: () => Promise<IssueCredentialResult>;
   revoke: () => Promise<RevokeCredentialResult>;
 }) {
@@ -88,7 +89,7 @@ export function QrCredentialPanel({
           <p className="text-xs font-medium text-amber-900">
             Shown once. Download or print the QR image now — it cannot be retrieved later.
           </p>
-          <QrPrintCard value={linkPath ? `${window.location.origin}${linkPath}${revealed}` : revealed} title={label} />
+          <QrPrintCard value={linkKind ? qrLink(window.location.origin, linkKind, revealed) : revealed} title={label} />
           <code className="block break-all rounded bg-white px-2 py-1 font-mono text-xs text-slate-900">
             {revealed}
           </code>

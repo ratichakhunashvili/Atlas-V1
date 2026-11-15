@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Hotel, ItineraryDay, ItineraryStop, Place } from "@/db/schema";
 import { fakeRecordVerifiedVisit, loadAllAvailable, makeTestPlace } from "./test-utils";
-import { checkInStopWithQr, type QrCheckInDependencies } from "./check-in-qr";
+import { checkInStopWithQr, placeCodeHasTask, type QrCheckInDependencies } from "./check-in-qr";
 
 // Same calendar date as every fixture's checkIn below -> dayNumber resolves to 1.
 const NOW = new Date("2026-03-10T09:00:00Z");
@@ -299,4 +299,27 @@ test("concurrency: two simultaneous QR scans for the same stop result in exactly
   const alreadyVisitedFlags = [a, b].map((r) => (r.ok ? r.alreadyVisited : null)).sort();
   assert.deepEqual(alreadyVisitedFlags, [false, true], "exactly one request performs the real transition");
   assert.equal(getStops()[0].visitedAt !== null, true);
+});
+
+// Where /unlock/<code> sends a signed-in guest (owner rule, 2026-11-15): a task -> the check-in page, none -> home.
+test("placeCodeHasTask: true only when the code's place is a stop in today's plan of the guest's own stay", async () => {
+  const partner = makeTestPlace({ id: "partner-1", category: "restaurant", qrToken: "PARTNERCODE" });
+  const elsewhere = makeTestPlace({ id: "elsewhere-1", category: "museum", qrToken: "ELSEWHERECODE" });
+  const stop = makeStop({ placeId: partner.id });
+  const { deps } = createFakeDeps({ places: [partner, elsewhere], stops: [stop] });
+
+  assert.equal(await placeCodeHasTask({ userId: "user-1", qrToken: " PARTNERCODE " }, NOW, deps), true, "today's stop");
+  assert.equal(await placeCodeHasTask({ userId: "user-1", qrToken: "ELSEWHERECODE" }, NOW, deps), false, "a place not in today's plan");
+  assert.equal(await placeCodeHasTask({ userId: "user-1", qrToken: "NOT-A-CODE" }, NOW, deps), false, "an invalid code");
+  assert.equal(await placeCodeHasTask({ userId: "user-1", qrToken: "  " }, NOW, deps), false, "an empty code");
+  assert.equal(await placeCodeHasTask({ userId: "someone-else", qrToken: "PARTNERCODE" }, NOW, deps), false, "another guest's plan never counts");
+
+  const visited = createFakeDeps({ places: [partner], stops: [makeStop({ placeId: partner.id, visitedAt: NOW })] });
+  assert.equal(await placeCodeHasTask({ userId: "user-1", qrToken: "PARTNERCODE" }, NOW, visited.deps), true, "an already-visited stop still opens the page, which reports it");
+
+  const noStay = createFakeDeps({ places: [partner], stops: [stop], noActiveStay: true });
+  assert.equal(await placeCodeHasTask({ userId: "user-1", qrToken: "PARTNERCODE" }, NOW, noStay.deps), false, "no active stay");
+
+  const noPlan = createFakeDeps({ places: [partner], stops: [stop], day: null });
+  assert.equal(await placeCodeHasTask({ userId: "user-1", qrToken: "PARTNERCODE" }, NOW, noPlan.deps), false, "no plan today");
 });

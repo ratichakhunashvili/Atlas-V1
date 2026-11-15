@@ -26,9 +26,14 @@ describe("QR token generation and hashing", () => {
     const first = generateRawQrToken();
     const second = generateRawQrToken();
     assert.notEqual(first, second);
-    // 32 random bytes in base64url — 43 characters, no padding.
-    assert.equal(first.length, 43);
-    assert.match(first, /^[A-Za-z0-9_-]+$/);
+    // 16 random bytes (128 bits) in upper-case base32 — 26 characters, no padding, QR alphanumeric-mode safe.
+    assert.equal(first.length, 26);
+    assert.match(first, /^[A-Z2-7]{26}$/);
+  });
+
+  it("spreads its characters over the whole base32 alphabet (the encoding is not stuck on a few letters)", () => {
+    const seen = new Set(Array.from({ length: 200 }, () => generateRawQrToken()).join(""));
+    assert.equal(seen.size, 32);
   });
 
   it("hashes deterministically, so a scan resolves by a single indexed lookup", () => {
@@ -57,6 +62,12 @@ describe("QR token generation and hashing", () => {
     assert.equal(extractQrToken("https://atlas.example/checkin/abc123?utm=qr"), "abc123");
     assert.equal(extractQrToken("abc123"), "abc123");
     assert.equal(extractQrToken("  abc123  "), "abc123");
+  });
+
+  it("unwraps the short printed links, /C/ for hotels and /U/ for places", () => {
+    assert.equal(extractQrToken("HTTPS://ATLAS.EXAMPLE/C/ABC234"), "ABC234");
+    assert.equal(extractQrToken("HTTPS://ATLAS.EXAMPLE/U/XYZ567"), "XYZ567");
+    assert.equal(extractQrToken("https://atlas.example/unlock/abc123"), "abc123");
   });
 });
 
@@ -161,7 +172,7 @@ describe("the formats the entry and admin flows must accept", () => {
   it("accepts a freshly generated token through the hotel-entry input schema", async () => {
     const { checkInTokenSchema } = await import("@/features/hotel-stays/schema");
 
-    // The old hotel tokens were UUIDs; these are 43-character base64url strings.
+    // The old hotel tokens were UUIDs, then 43-character base64url; new ones are 26-character base32.
     // A format-bound schema here would refuse every code this layer issues.
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const parsed = checkInTokenSchema.safeParse({ token: generateRawQrToken() });

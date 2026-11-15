@@ -1,23 +1,46 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
- * 32 bytes = 256 bits of entropy. Printed codes cannot be rate-limited at the
- * paper, so the token itself has to be the defence: guessing one is not a
- * feasible attack at this size, which is also why no slow KDF is needed when
- * hashing it (see db/schema/qr-credentials.ts).
+ * 16 bytes = 128 bits of entropy. Printed codes cannot be rate-limited at the
+ * paper, so the token itself has to be the defence: guessing one of 2^128 is not
+ * a feasible attack, which is also why no slow KDF is needed when hashing it
+ * (see db/schema/qr-credentials.ts). 128 rather than 256 bits keeps the printed
+ * code small (owner decision, 2026-11-15): with the upper-case link it fits a
+ * 33x33 QR grid instead of 53x53.
  */
-const TOKEN_BYTES = 32;
+const TOKEN_BYTES = 16;
+
+const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+/** RFC 4648 base32, upper case, no padding: 16 bytes -> 26 characters. */
+function toBase32(bytes: Uint8Array): string {
+  let out = "";
+  let buffer = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32[(buffer >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += BASE32[(buffer << (5 - bits)) & 31];
+  return out;
+}
 
 /**
- * Creates a raw credential. base64url so the value survives a QR payload, a
- * URL and a copy-paste unchanged — no padding, no characters needing escaping.
+ * Creates a raw credential. Upper-case base32 (A–Z, 2–7) so the whole QR link
+ * can use the QR "alphanumeric" mode, which stores it far more compactly, and
+ * the value survives a URL and a copy-paste unchanged. Codes issued before
+ * (43-character base64url) still resolve: lookup is by hash of whatever was scanned.
  *
  * The return value is the ONLY time this string exists outside the scanner:
  * callers show it once and store `hashToken(raw)`. Never log it, never put it
  * in a server-component payload, never return it from a read.
  */
 export function generateRawQrToken(): string {
-  return randomBytes(TOKEN_BYTES).toString("base64url");
+  return toBase32(randomBytes(TOKEN_BYTES));
 }
 
 /** The stored form. Stable and deterministic, so a scan resolves with a single indexed lookup. */

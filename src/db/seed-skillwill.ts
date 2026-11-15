@@ -4,7 +4,8 @@ config({ path: ".env.local" });
 import { writeFileSync } from "node:fs";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import QRCode from "qrcode";
+import { brandedQrSvg } from "../lib/branded-qr";
+import { qrLink } from "../lib/qr-links";
 import { isLocalDatabaseUrl } from "./operations/dev-seed";
 import { SKILLWILL_TEST_PLACES, seedSkillwillTest } from "./operations/skillwill-test";
 import * as schema from "./schema";
@@ -45,8 +46,8 @@ async function main() {
     if (result.codes.length > 0) {
       const cards = await Promise.all(
         result.codes.map(async (code) => {
-          const link = `${site}${code.kind === "hotel" ? "/checkin/" : "/unlock/"}${code.rawToken}`;
-          const image = await QRCode.toDataURL(link, { margin: 2, width: 360, errorCorrectionLevel: "M" });
+          const link = qrLink(site, code.kind === "hotel" ? "hotel" : "place", code.rawToken);
+          const image = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(brandedQrSvg(link))}`;
           return `<div class="card"><img src="${image}" alt=""><h2>${escape(code.label)}</h2><p>${code.kind === "hotel" ? "Scan to join this hotel" : "Scan to check in here"}</p><a class="link" href="${escape(link)}">${escape(link)}</a></div>`;
         })
       );

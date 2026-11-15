@@ -68,7 +68,7 @@ export default async function EditPlacePage({
       <QrCredentialPanel
         label="Place check-in QR"
         description="Displayed at this Place for guests to scan on arrival. It cannot be used to start a hotel stay."
-        linkPath="/unlock/"
+        linkKind="place"
         hasActiveCredential={checkInCredential !== null}
         issuedAt={checkInCredential?.createdAt ?? null}
         issue={issuePlaceCheckInCredentialAction.bind(null, place.id)}

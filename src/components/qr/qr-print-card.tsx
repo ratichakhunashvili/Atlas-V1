@@ -1,21 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
 import { Button } from "@/components/shared/button";
+import { brandedQrSvg } from "@/lib/branded-qr";
 
 /**
- * A scannable, printable picture of a freshly issued code. The image is drawn in the browser from the one-time
- * token, so the token never travels anywhere else. High error correction keeps a scuffed or partly covered
- * print readable.
+ * A scannable, printable picture of a freshly issued code, in the Atlas design (lib/branded-qr.ts). The image is
+ * drawn in the browser from the one-time token, so the token never travels anywhere else. The design uses the
+ * highest error correction, which also keeps a scuffed or partly covered print readable.
  */
+
+/** The branded SVG drawn to a PNG, for the preview, Download PNG and Print. */
+async function toPng(svg: string, size = 1024): Promise<string> {
+  const img = new Image();
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  await img.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas is not available");
+  context.drawImage(img, 0, 0, size, size);
+  return canvas.toDataURL("image/png");
+}
 export function QrPrintCard({ value, title }: { value: string; title: string }) {
   const [image, setImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    QRCode.toDataURL(value, { errorCorrectionLevel: "H", margin: 4, width: 1024 })
+    toPng(brandedQrSvg(value))
       .then((url) => !cancelled && setImage(url))
       .catch(() => !cancelled && setError("Couldn't draw the QR image. Copy the code below into a QR generator instead."));
     return () => {

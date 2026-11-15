@@ -100,6 +100,33 @@ async function loadDefaultDependencies(): Promise<QrCheckInDependencies> {
 }
 
 /**
+ * Read-only: is this scanned place code part of a task the guest has right now, meaning the code resolves to a Place
+ * that is a stop in today's plan of their own active stay? Decides only where /unlock/<code> sends a signed-in guest
+ * (owner rule, 2026-11-15): with a task they see the check-in page; without one (no stay, no plan today, another
+ * place, or an invalid code) they go to their Atlas home. Writes nothing; the check-in itself still runs every rule in
+ * checkInStopWithQr.
+ */
+export async function placeCodeHasTask(
+  input: { userId: string; qrToken: string },
+  now: Date = new Date(),
+  deps?: Pick<QrCheckInDependencies, "findPlaceByCheckInCredential" | "findActiveStayForUser" | "findItineraryDay" | "listItineraryStops">
+): Promise<boolean> {
+  const d = deps ?? (await loadDefaultDependencies());
+  const token = input.qrToken.trim();
+  if (!token) return false;
+  const place = await d.findPlaceByCheckInCredential(token, now);
+  if (!place) return false;
+  const stay = await d.findActiveStayForUser(input.userId);
+  if (!stay) return false;
+  const dayNumber = calculateDayNumber(stay.checkIn, stayEndFor(stay), now);
+  if (!dayNumber.ok) return false;
+  const day = await d.findItineraryDay(input.userId, stay.hotel.id, dayNumber.dayNumber, stay.id);
+  if (!day) return false;
+  const stops = await d.listItineraryStops(day.id);
+  return stops.some((stop) => stop.placeId === place.id);
+}
+
+/**
  * Server-authoritative QR check-in. Unlike GPS check-in, the client supplies
  * no stopId — only an opaque token. The server resolves token -> Place,
  * resolves the authenticated user's own active stay -> today's itinerary day
