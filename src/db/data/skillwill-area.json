@@ -5110,20 +5110,6 @@
   "imageUrl": null
  },
  {
-  "osm": "node/13232743560",
-  "name": "Kombinati",
-  "category": "restaurant",
-  "kind": "business",
-  "description": "Café · coffee shop, bakery, salad in Tbilisi (კომბინატი). Hours: 08:00-20:30.",
-  "address": "Tbilisi",
-  "latitude": 41.680898,
-  "longitude": 44.823888,
-  "website": null,
-  "phone": null,
-  "visitDurationMinutes": 25,
-  "imageUrl": null
- },
- {
   "osm": "node/13234885902",
   "name": "Taverna Dariani",
   "category": "restaurant",
@@ -7134,20 +7120,6 @@
   "address": "Tbilisi",
   "latitude": 41.684346,
   "longitude": 44.857066,
-  "website": null,
-  "phone": null,
-  "visitDurationMinutes": 15,
-  "imageUrl": null
- },
- {
-  "osm": "node/14294272477",
-  "name": "Kombinati",
-  "category": "shop",
-  "kind": "business",
-  "description": "Bakery in Tbilisi (კომბინატი). Hours: 08:00-21:00.",
-  "address": "Tbilisi",
-  "latitude": 41.682072,
-  "longitude": 44.859728,
   "website": null,
   "phone": null,
   "visitDurationMinutes": 15,
@@ -9657,20 +9629,6 @@
   "website": "http://www.galleryartbeat.com/",
   "phone": null,
   "visitDurationMinutes": 30,
-  "imageUrl": null
- },
- {
-  "osm": "node/6851508553",
-  "name": "Kombinati",
-  "category": "restaurant",
-  "kind": "business",
-  "description": "Café in Tbilisi (კომბინატი). Hours: Mo-Fr 08:00-21:00; Sa,Su 09:00-19:00.",
-  "address": "Tbilisi",
-  "latitude": 41.698181,
-  "longitude": 44.804816,
-  "website": null,
-  "phone": null,
-  "visitDurationMinutes": 25,
   "imageUrl": null
  },
  {
