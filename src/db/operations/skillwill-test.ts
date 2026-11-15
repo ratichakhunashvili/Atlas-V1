@@ -1,5 +1,5 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
-import { atlasPartnerContracts, hotelFacilities, hotels, places, qrCredentials, type NewPlace } from "@/db/schema";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { atlasPartnerContracts, hotelDayProgramSteps, hotelFacilities, hotels, places, qrCredentials, type NewPlace } from "@/db/schema";
 import { generateRawQrToken, hashQrToken } from "@/services/qr/token";
 import areaData from "@/db/data/skillwill-area.json";
 import type { AtlasDatabase } from "./types";
@@ -16,10 +16,15 @@ import type { AtlasDatabase } from "./types";
  *   - Businesses (cafés, restaurants) get a PENDING Atlas contract only. They stay hidden until an admin confirms it
  *     in /admin/contracts (owner decision 2026-11-15: "I'll confirm in admin"). No contract or partnership is invented.
  *
- *   - Campus facilities (Kombinati, PlayStation Room; owner decision 2026-11-15) are Skillwill's OWN facilities: an
+ *   - Campus facilities (Kombinati, Gamezone, Auditorium 402, Auditorium 102, Fablab; owner decisions 2026-11-15) are Skillwill's OWN facilities: an
  *     active hotel_facilities row each, so only Skillwill guests ever see them. Their Places are kind "business" with
  *     NO contract, so they reach no other hotel's guests (and disappear entirely if the facility is switched off).
  *     Check-in is QR only. Written directly, like the contracts above, since a seed has no admin actor for the audit.
+ *
+ *   - Owner-approved activations (2026-11-15): the Atlas contracts of "Bangkok" and "Tema" are made ACTIVE (confirmed
+ *     and starting at seed time, no end), only while they are still pending_review, so an admin's later decision stands.
+ *   - Skillwill's day program (owner decision 2026-11-15): 1) Auditorium 402 / Auditorium 102 / Gamezone,
+ *     2) Kombinati / Tema / Bangkok, 3) Fablab. Inserted only while Skillwill has no program, never over an admin's.
  *
  * QR codes: one hotel-entry code for Skillwill and one check-in code for every place, issued only where none is live
  * yet. Raw codes exist only in this function's return value (for the printable sheet); the database keeps hashes.
@@ -69,11 +74,16 @@ export const SKILLWILL_TEST_PLACES: readonly TestPlace[] = [
   { n: 204, name: "Bangkok", category: "restaurant", kind: "business", description: "Thai restaurant next to Skillwill.", address: "Isani, Tbilisi", latitude: 41.685464, longitude: 44.832094, visitDurationMinutes: 45 },
   { n: 205, name: "Saffron Mess", category: "restaurant", kind: "business", description: "Restaurant in Avlabari.", address: "Avlabari, Tbilisi", latitude: 41.690573, longitude: 44.8288, visitDurationMinutes: 45 },
   { n: 206, name: "Megastar", category: "restaurant", kind: "business", description: "Café in Avlabari.", address: "Avlabari, Tbilisi", latitude: 41.691296, longitude: 44.831572, visitDurationMinutes: 25 },
+  // OpenStreetMap node/4388766699. Outside the campus, so the default check-in (QR or location).
+  { n: 207, name: "Tema", category: "restaurant", kind: "business", description: "Restaurant next to Skillwill, on Bochorma Street.", address: "14 Bochorma Street, Tbilisi", latitude: 41.686092, longitude: 44.830502, visitDurationMinutes: 45 },
 ];
+
+/** Businesses whose contracts the owner approved as active (2026-11-15). */
+export const SKILLWILL_ACTIVE_CONTRACT_PLACES: readonly string[] = ["Bangkok", "Tema"];
 
 export const skillwillPlaceId = (place: Pick<TestPlace, "n">) => ID(place.n);
 
-/** Skillwill's own campus facilities: Places 301-302, facility rows 311-312. QR check-in only. */
+/** Skillwill's own campus facilities: Places 301-305, facility rows 311-315. QR check-in only (everything in the campus is). */
 export const SKILLWILL_TEST_FACILITIES = [
   {
     n: 301,
@@ -85,11 +95,43 @@ export const SKILLWILL_TEST_FACILITIES = [
   {
     n: 302,
     facilityN: 312,
-    name: "PlayStation Room",
+    // Was "PlayStation Room" (renamed 2026-11-15; same id and QR code). The seed renames it only while it has the old name.
+    name: "Gamezone",
     description: "The PlayStation room on the Skillwill campus: a quick game or two between classes.",
     visitDurationMinutes: 30,
   },
+  {
+    n: 303,
+    facilityN: 313,
+    name: "Auditorium 402",
+    description: "Auditorium 402 on the Skillwill campus at 16 Bochorma Street.",
+    visitDurationMinutes: 30,
+  },
+  {
+    n: 304,
+    facilityN: 314,
+    name: "Auditorium 102",
+    description: "Auditorium 102 on the Skillwill campus at 16 Bochorma Street.",
+    visitDurationMinutes: 30,
+  },
+  {
+    n: 305,
+    facilityN: 315,
+    name: "Fablab",
+    description: "Skillwill College's Fab Lab, on the campus at 16 Bochorma Street.",
+    visitDurationMinutes: 30,
+  },
 ] as const;
+
+/** The facility's name before the 2026-11-15 rename, replaced by the seed only where it is still the name. */
+export const SKILLWILL_GAMEZONE_OLD_NAME = "PlayStation Room";
+
+/** Skillwill's day program, by place name (hand-picked places and campus facilities). */
+export const SKILLWILL_DAY_PROGRAM: readonly (readonly string[])[] = [
+  ["Auditorium 402", "Auditorium 102", "Gamezone"],
+  ["Kombinati", "Tema", "Bangkok"],
+  ["Fablab"],
+];
 
 export const skillwillFacilityId = (facility: { facilityN: number }) => ID(facility.facilityN);
 
@@ -127,7 +169,17 @@ export function areaPlaceId(place: Pick<AreaPlace, "osm">): string {
 /** A code issued just now. `kind` says which link the QR image must hold: /checkin/ (hotel) or /unlock/ (place). */
 export type IssuedTestCode = { label: string; kind: "hotel" | "place"; rawToken: string };
 
-export type SeedSkillwillResult = { hotel: boolean; places: number; contracts: number; facilities: number; codes: IssuedTestCode[] };
+export type SeedSkillwillResult = {
+  hotel: boolean;
+  places: number;
+  contracts: number;
+  facilities: number;
+  /** Pending contracts made active this run (Bangkok, Tema). */
+  activatedContracts: number;
+  /** Whether the day program was inserted this run. */
+  program: boolean;
+  codes: IssuedTestCode[];
+};
 
 export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date()): Promise<SeedSkillwillResult> {
   return db.transaction(async (tx) => {
@@ -238,6 +290,61 @@ export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date(
       )
       .onConflictDoNothing()
       .returning({ id: hotelFacilities.id });
+    // The rename (keeps id and QR code), only where the old name is still there: an admin's own rename stands.
+    const gamezone = SKILLWILL_TEST_FACILITIES.find((facility) => facility.n === 302)!;
+    await tx
+      .update(places)
+      .set({ name: gamezone.name, updatedAt: now })
+      .where(and(eq(places.id, ID(gamezone.n)), eq(places.name, SKILLWILL_GAMEZONE_OLD_NAME)));
+    // Everything in the campus is QR only (owner decision 2026-11-15), also for facility places seeded earlier.
+    await tx
+      .update(places)
+      .set({ checkInMethod: "qr", updatedAt: now })
+      .where(and(inArray(places.id, SKILLWILL_TEST_FACILITIES.map((facility) => ID(facility.n))), ne(places.checkInMethod, "qr")));
+
+    // Owner-approved activation: confirmed and starting now, no end; only contracts still pending_review, and never
+    // where the Place already has an active one (one active contract per Place). No admin actor: confirmed_by stays null.
+    const activeIds = SKILLWILL_TEST_PLACES.filter((place) => SKILLWILL_ACTIVE_CONTRACT_PLACES.includes(place.name)).map(skillwillPlaceId);
+    const alreadyActive = new Set(
+      (
+        await tx
+          .select({ placeId: atlasPartnerContracts.placeId })
+          .from(atlasPartnerContracts)
+          .where(and(inArray(atlasPartnerContracts.placeId, activeIds), eq(atlasPartnerContracts.status, "active")))
+      ).map((row) => row.placeId)
+    );
+    const toActivate = activeIds.filter((id) => !alreadyActive.has(id));
+    const activated =
+      toActivate.length === 0
+        ? []
+        : await tx
+            .update(atlasPartnerContracts)
+            .set({ status: "active", confirmedAt: now, startsAt: now, endsAt: null, updatedAt: now })
+            .where(and(inArray(atlasPartnerContracts.placeId, toActivate), eq(atlasPartnerContracts.status, "pending_review")))
+            .returning({ id: atlasPartnerContracts.id });
+
+    // The day program, only while Skillwill has none (never over an admin's).
+    const nameToId = new Map<string, string>([
+      ...SKILLWILL_TEST_PLACES.map((place) => [place.name, skillwillPlaceId(place)] as const),
+      ...SKILLWILL_TEST_FACILITIES.map((facility) => [facility.name, ID(facility.n)] as const),
+    ]);
+    const existingProgram = await tx
+      .select({ id: hotelDayProgramSteps.id })
+      .from(hotelDayProgramSteps)
+      .where(eq(hotelDayProgramSteps.hotelId, SKILLWILL_TEST_IDS.hotel))
+      .limit(1);
+    if (existingProgram.length === 0) {
+      await tx.insert(hotelDayProgramSteps).values(
+        SKILLWILL_DAY_PROGRAM.map((names, i) => ({
+          hotelId: SKILLWILL_TEST_IDS.hotel,
+          position: i + 1,
+          placeIds: names.map((name) => nameToId.get(name)!),
+          createdAt: now,
+          updatedAt: now,
+        }))
+      );
+    }
+
     // The facilities get QR codes like every other place (after the contract step: they never get a contract).
     all.push(...SKILLWILL_TEST_FACILITIES.map((facility) => ({ id: ID(facility.n), name: facility.name, kind: "business" as const })));
 
@@ -272,6 +379,14 @@ export async function seedSkillwillTest(db: AtlasDatabase, now: Date = new Date(
     }
     for (const { place, rawToken } of toIssue) codes.push({ label: place.name, kind: "place", rawToken });
 
-    return { hotel: hotel.length === 1, places: inserted.length, contracts: contracts.length, facilities: facilities.length, codes };
+    return {
+      hotel: hotel.length === 1,
+      places: inserted.length,
+      contracts: contracts.length,
+      facilities: facilities.length,
+      activatedContracts: activated.length,
+      program: existingProgram.length === 0,
+      codes,
+    };
   });
 }

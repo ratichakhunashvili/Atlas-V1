@@ -3,7 +3,7 @@ import type { CheckInMethod, ItineraryDay, ItineraryStop, PlaceCategory, UserPre
 import type { LatLng } from "@/lib/geo";
 import type { EligiblePlace } from "@/services/eligibility/rules";
 import type { GuestHotelContext, GuestStay } from "@/services/eligibility";
-import { buildDailyChoices, stepFocusFor, type DailyChoice } from "./daily-choices";
+import { buildDailyChoices, buildProgramChoices, stepFocusFor, type DailyChoice } from "./daily-choices";
 import type { UsageHistory } from "./scoring";
 import { calculateDayNumber, stayEndFor } from "./stay-day";
 import { isAvailableMinutesOption, remainingBudgetMinutes } from "./time-budget";
@@ -21,6 +21,11 @@ import { dayNeedsFeedback, NO_TODAY, type FeedbackCandidate } from "@/services/f
  *
  * Plan order (daily-choices.ts, stepFocusFor): the 1st task offers the hotel's own facilities (the campus), the 2nd
  * food, later ones anything eligible; each falls back to the normal options when its group has nothing that fits.
+ *
+ * Day program (owner decision 2026-11-15, hotel_day_program_steps): when the hotel has one, task k offers program
+ * step k's places (buildProgramChoices: eligible only, interests/distance/time fit ignored, no repeats). A step with
+ * no eligible place left falls back to the normal behaviour above for that task. The day finishes after the last
+ * program step, or at the hotel's "Tasks per day" when that is lower. Without a program nothing changes.
  *
  * The daily limit is read LIVE from the guest's hotel on every request, never stored on the day. An admin's change
  * applies from the next decision on, today's day included: lowering it to 2 ends a day that already has 2 activities
@@ -54,7 +59,7 @@ type DayBase = {
   picksUsed: number;
   /** For "x of N done": the hotel's limit, or more when a lowered limit is below what today already has. */
   maxPicks: number;
-  /** The hotel's "Tasks per day" right now: the only number that decides whether another pick is allowed. */
+  /** The day's limit right now: the hotel's "Tasks per day", capped by its day program's step count. The only number that decides whether another pick is allowed. */
   taskLimit: number;
   completed: DailyStopView[];
 };
@@ -104,16 +109,20 @@ export type DailyPlanDependencies = {
   setDayAside: (dayId: string, now: Date) => Promise<boolean>;
   /** The guest's days that may still be owed private feedback (Phase 2): a new plan waits until it is given. */
   listFeedbackCandidates: (userId: string) => Promise<FeedbackCandidate[]>;
+  /** The hotel's day program, steps in order; empty = none. Optional so a caller without one gets the normal plan. */
+  listDayProgram?: (hotelId: string) => Promise<{ position: number; placeIds: string[] }[]>;
 };
 
 async function loadDefaultDependencies(): Promise<DailyPlanDependencies> {
-  const [eligibilityM, preferencesQ, itineraryQ, achievementsQ, visitsQ, feedbackQ] = await Promise.all([
+  const [eligibilityM, preferencesQ, itineraryQ, achievementsQ, visitsQ, feedbackQ, dbM, programOps] = await Promise.all([
     import("@/services/eligibility"),
     import("@/db/queries/preferences"),
     import("@/db/queries/itinerary"),
     import("@/db/queries/achievements"),
     import("@/db/queries/place-visits"),
     import("@/db/queries/plan-day-feedback"),
+    import("@/db"),
+    import("@/db/operations/hotel-day-program"),
   ]);
   return {
     resolveGuestHotelContext: (userId, now) => eligibilityM.resolveGuestHotelContext(userId, now),
@@ -129,6 +138,7 @@ async function loadDefaultDependencies(): Promise<DailyPlanDependencies> {
     recordVerifiedVisit: visitsQ.recordVerifiedVisit,
     setDayAside: itineraryQ.setItineraryDayAsideForTesting,
     listFeedbackCandidates: feedbackQ.listFeedbackCandidates,
+    listDayProgram: (hotelId) => programOps.listDayProgram(dbM.db, hotelId),
   };
 }
 
@@ -169,7 +179,22 @@ function choicesFor(input: {
   usageHistory: UsageHistory;
   /** Activities today already has (picked or visited): decides the plan-order step. */
   picksUsed: number;
+  /** The hotel's day-program step for this task, if any: offered first (see the header). */
+  programPlaceIds?: readonly string[] | null;
 }): DailyChoice[] {
+  const hotelLocation = { lat: input.stay.place.latitude, lng: input.stay.place.longitude };
+  if (input.programPlaceIds && input.programPlaceIds.length > 0) {
+    const program = buildProgramChoices({
+      programPlaceIds: input.programPlaceIds,
+      eligiblePlaces: input.eligible,
+      hotelPlaceId: input.stay.place.id,
+      hotelLocation,
+      origin: input.origin,
+      excludePlaceIds: input.excludePlaceIds,
+    });
+    // Nothing eligible left in this program step: the normal step below instead of an empty choice.
+    if (program.length > 0) return program;
+  }
   return buildDailyChoices({
     eligiblePlaces: input.eligible,
     hotelPlaceId: input.stay.place.id,
@@ -184,6 +209,23 @@ function choicesFor(input: {
     usageHistory: input.usageHistory,
     focus: stepFocusFor(input.picksUsed),
   });
+}
+
+/** The program's place list for task `picksUsed + 1`, or null when there is no program or it has no such step. */
+function programStepFor(program: readonly { placeIds: string[] }[], picksUsed: number): string[] | null {
+  return program[picksUsed]?.placeIds ?? null;
+}
+
+/**
+ * The day's limit: the hotel's "Tasks per day", and with a program at most its number of steps (the day finishes
+ * after the last program step).
+ */
+export function effectiveTaskLimit(hotelLimit: number, programSteps: number): number {
+  return programSteps > 0 ? Math.min(hotelLimit, programSteps) : hotelLimit;
+}
+
+async function dayProgramOf(d: DailyPlanDependencies, hotelId: string) {
+  return d.listDayProgram ? (await d.listDayProgram(hotelId)).slice().sort((a, b) => a.position - b.position) : [];
 }
 
 /** Read-only: what the guest's day looks like right now. Never creates or changes anything. */
@@ -203,7 +245,8 @@ export async function getDailyPlanForUser(userId: string, now: Date = new Date()
   const stops = (await d.listItineraryStops(day.id)).slice().sort((a, b) => a.position - b.position);
   const completed = stops.filter((stop) => stop.visitedAt !== null).map(toStopView);
   const pending = stops.find((stop) => stop.visitedAt === null) ?? null;
-  const taskLimit = dailyTaskLimitOf(stay);
+  const program = await dayProgramOf(d, stay.hotel.id);
+  const taskLimit = effectiveTaskLimit(dailyTaskLimitOf(stay), program.length);
   const remainingMinutes = remainingBudgetMinutes({ availableMinutes: day.availableMinutes, generatedAt: day.generatedAt, now });
 
   const base: DayBase = {
@@ -235,7 +278,8 @@ export async function getDailyPlanForUser(userId: string, now: Date = new Date()
   // One place per category group per day: whatever today already has (picked or visited) is off the table.
   const usedCategoryGroups = groupsUsedBy(stops);
   const usageHistory = await d.getStopUsageHistory(userId, stay.hotel.id);
-  const shared = { stay, eligible, preferences, origin, excludePlaceIds, usedCategoryGroups, usageHistory, picksUsed: stops.length };
+  const programPlaceIds = programStepFor(program, stops.length);
+  const shared = { stay, eligible, preferences, origin, excludePlaceIds, usedCategoryGroups, usageHistory, picksUsed: stops.length, programPlaceIds };
 
   const choices = choicesFor({ ...shared, remainingMinutes: remainingMinutes ?? 0 });
   if (choices.length > 0) return { ...base, status: "choosing", choices };
@@ -299,6 +343,7 @@ export async function startDayForUser(
     excludePlaceIds: new Set<string>(),
     usageHistory,
     picksUsed: 0,
+    programPlaceIds: programStepFor(await dayProgramOf(d, stay.hotel.id), 0),
   };
 
   if (choicesFor({ ...shared, remainingMinutes: availableMinutes }).length === 0) {

@@ -41,6 +41,8 @@ async function main() {
     console.log(`  Skillwill hotel: ${result.hotel ? "added" : "already there"}`);
     console.log(`  Places added: ${result.places} (of ${SKILLWILL_TEST_PLACES.length + SKILLWILL_AREA_PLACES.length})`);
     console.log(`  Pending Atlas contracts added: ${result.contracts}`);
+    console.log(`  Contracts made active (owner-approved): ${result.activatedContracts}`);
+    console.log(`  Day program: ${result.program ? "added" : "already there"}`);
     console.log(`  QR codes issued: ${result.codes.length}`);
 
     if (result.codes.length > 0) {

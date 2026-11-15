@@ -93,7 +93,7 @@ export type BuildDailyChoicesInput = {
  * A daily-plan stop is completed the way an admin chose for its Place: QR only, location only, or either ("qr_or_gps",
  * the default). The stop keeps its own copy, so a later admin change never alters a stop already planned.
  */
-function toChoice(candidate: AdvisorCandidate, entry: EligiblePlace, origin: LatLng, hotelLocation: LatLng): DailyChoice {
+function toChoice(candidate: Pick<AdvisorCandidate, "place">, entry: EligiblePlace, origin: LatLng, hotelLocation: LatLng): DailyChoice {
   const { place } = candidate;
   const at = { lat: place.latitude, lng: place.longitude };
   return {
@@ -120,6 +120,39 @@ function fits(candidate: AdvisorCandidate, origin: LatLng, hotelLocation: LatLng
   const at = { lat: candidate.place.latitude, lng: candidate.place.longitude };
   const needed = estimateWalkMinutes(origin, at) + resolveVisitDuration(candidate.place).minutes + estimateWalkMinutes(at, hotelLocation);
   return needed <= remainingMinutes;
+}
+
+/**
+ * A hotel's "Day program" step (owner decision 2026-11-15, hotel_day_program_steps): the admin chose these 1-3 places
+ * for this step of the day, and the guest picks one of them (a 1-place step is mandatory: just that one).
+ *
+ * Decisions:
+ *   - Only ELIGIBLE places: every id goes through the guest's eligible catalogue. A place the program lists that is not
+ *     eligible right now (archived, unpublished, contract lapsed, another hotel's facility...) is silently skipped. The
+ *     program orders what is offered; it never widens the catalogue.
+ *   - The owner's choice overrides the guest's interest filters, the distance cap and the one-place-per-category-group
+ *     rule (a program step may list two restaurants).
+ *   - The time fit is NOT applied: the places are shown even when the estimate is tight. Each option still carries its
+ *     walk there and its walk back to the hotel (returnWalkMinutes), so the return-to-hotel timing stays visible.
+ *   - No repeats: a place already part of today is not offered again.
+ *   - Offered in the order the admin listed them. An empty result means the caller falls back to the normal step.
+ */
+export function buildProgramChoices(input: {
+  programPlaceIds: readonly string[];
+  eligiblePlaces: readonly EligiblePlace[];
+  hotelPlaceId: string;
+  hotelLocation: LatLng;
+  origin: LatLng;
+  excludePlaceIds: ReadonlySet<string>;
+}): DailyChoice[] {
+  const entryById = new Map(input.eligiblePlaces.map((entry) => [entry.place.id, entry]));
+  const choices: DailyChoice[] = [];
+  for (const placeId of new Set(input.programPlaceIds)) {
+    const entry = entryById.get(placeId);
+    if (!entry || placeId === input.hotelPlaceId || input.excludePlaceIds.has(placeId)) continue;
+    choices.push(toChoice(entry, entry, input.origin, input.hotelLocation));
+  }
+  return choices;
 }
 
 /**

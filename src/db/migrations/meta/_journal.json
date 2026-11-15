@@ -288,6 +288,13 @@
       "when": 1794766073303,
       "tag": "0040_hotel_daily_task_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794769789178,
+      "tag": "0041_hotel_day_program",
+      "breakpoints": true
     }
   ]
 }

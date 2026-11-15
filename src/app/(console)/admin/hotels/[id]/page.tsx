@@ -11,7 +11,11 @@ import { MAX_DAILY_TASK_LIMIT, MIN_DAILY_TASK_LIMIT } from "@/db/schema";
 import { findHotelById } from "@/db/queries/hotels";
 import { listPlaces } from "@/db/queries/places";
 import { findActiveQrCredentialForHotel } from "@/db/queries/qr-credentials";
-import { deleteHotelAction, updateHotelAction, updateHotelTaskLimitAction } from "@/features/hotels/actions";
+import { deleteHotelAction, updateHotelAction, updateHotelDayProgramAction, updateHotelTaskLimitAction } from "@/features/hotels/actions";
+import { DayProgramForm } from "@/components/hotel/day-program-form";
+import { db } from "@/db";
+import { listDayProgram } from "@/db/operations/hotel-day-program";
+import { listEligiblePlacesForStay } from "@/services/eligibility";
 import {
   issueHotelEntryCredentialAction,
   revokeHotelEntryCredentialAction,
@@ -37,7 +41,19 @@ export default async function EditHotelPage({
 
   // Only whether a live credential exists and when it was issued — never the
   // credential itself, which is stored as a hash and cannot be recovered.
-  const entryCredential = await findActiveQrCredentialForHotel(hotel.id);
+  const [entryCredential, dayProgram, eligible] = await Promise.all([
+    findActiveQrCredentialForHotel(hotel.id),
+    listDayProgram(db, hotel.id),
+    // The day program may only list places this hotel's guests can see: its eligible catalogue, facilities included.
+    listEligiblePlacesForStay({ hotel: { id: hotel.id }, place: { id: hotel.placeId } }),
+  ]);
+  const programOptions = eligible
+    .map((entry) => ({
+      id: entry.place.id,
+      name: entry.place.name,
+      note: entry.source === "facility" ? "hotel facility" : entry.source === "partner" ? "Atlas partner" : "attraction",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   // The hotel's own place, plus places that could become it. Other hotels' places are never offered.
   const placeOptions = places.filter(
     (place) => place.id === hotel.placeId || (place.archivedAt === null && place.kind !== "hotel")
@@ -100,6 +116,17 @@ export default async function EditHotelPage({
           </Select>
           <Button type="submit">Save tasks per day</Button>
         </form>
+      </Card>
+      <Card className="space-y-3">
+        <h2 className="font-medium">Day program</h2>
+        <p className="text-sm text-slate-500">
+          Optional. Up to 4 steps in order; each step lists 1 to 3 places and the guest picks one (a step with one place is
+          that place). A place can be in the program only once. Guests are only ever offered places they can see; a step
+          with none left falls back to the normal plan. The day ends after the last step, or at Tasks per day if that is
+          lower. Leave a step empty to remove it, change the order numbers to reorder, and empty every step to go back to
+          the normal plan.
+        </p>
+        <DayProgramForm action={updateHotelDayProgramAction.bind(null, hotel.id)} options={programOptions} steps={dayProgram} />
       </Card>
       <Card className="space-y-3">
         <h2 className="font-medium">Delete hotel</h2>
