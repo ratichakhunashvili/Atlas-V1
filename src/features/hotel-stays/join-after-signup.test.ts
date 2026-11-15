@@ -27,7 +27,8 @@ describe("hotelTokenFromCallback", () => {
     assert.equal(hotelTokenFromCallback("/checkin/GOODCODE"), "GOODCODE");
     assert.equal(hotelTokenFromCallback("/checkin/A%2FB"), "A/B");
     assert.equal(hotelTokenFromCallback("/checkin/confirm"), null, "the switch confirmation screen is not a code");
-    assert.equal(hotelTokenFromCallback("/unlock/PLACECODE"), null, "a place code never starts a stay");
+    assert.equal(hotelTokenFromCallback("/unlock/HOTELCODE"), "HOTELCODE", "a hotel code printed with a /U/ link");
+    assert.equal(hotelTokenFromCallback("/plan/unlocked"), null);
     assert.equal(hotelTokenFromCallback("/"), null);
     assert.equal(hotelTokenFromCallback(null), null);
     assert.equal(hotelTokenFromCallback("/checkin/%E0%A4%A"), null, "a broken encoding is ignored");
@@ -50,11 +51,23 @@ describe("joinScannedHotelAfterSignup", () => {
 
   it("does nothing without a scanned hotel code, and never looks one up", async () => {
     const { d, stays, resolved } = deps();
-    for (const callbackUrl of ["/", "/unlock/GOODCODE", "/checkin/confirm", null]) {
+    for (const callbackUrl of ["/", "/plan", "/checkin/confirm", null]) {
       assert.equal(await joinScannedHotelAfterSignup({ userId: "new-user", callbackUrl, now: NOW }, d), null);
     }
     assert.deepEqual(stays, []);
     assert.deepEqual(resolved, []);
+  });
+
+  it("a place code in an /unlock return address is looked up as a hotel code, refused, and starts nothing", async () => {
+    const { d, stays } = deps();
+    assert.equal(await joinScannedHotelAfterSignup({ userId: "new-user", callbackUrl: "/unlock/PLACECODE", now: NOW }, d), null);
+    assert.deepEqual(stays, []);
+  });
+
+  it("a hotel code printed with a /U/ link starts the stay", async () => {
+    const { d, stays } = deps();
+    assert.equal(await joinScannedHotelAfterSignup({ userId: "new-user", callbackUrl: "/unlock/GOODCODE", now: NOW }, d), "/?checkinOk=Skillwill");
+    assert.equal(stays.length, 1);
   });
 
   it("falls back to the code's page when the stay could not be written", async () => {

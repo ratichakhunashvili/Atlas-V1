@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/shared/button";
 import { STAY_DATES_PARAM } from "@/features/hotel-stays/stay-state";
 import { isDismissKey } from "@/lib/focus";
+import { extractQrToken } from "@/services/qr/extract";
 import { StayDatesForm, type StayDatesView } from "./stay-dates-form";
 
 const QrScannerModal = dynamic(
@@ -343,16 +344,23 @@ export function GuestStartButton({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The code inside a scanned hotel QR: an Atlas link (/checkin/, /unlock/, or the short printed /C/ and /U/ forms) or
+ * a bare code. Whether it really is a hotel entry code is decided on the server by the /checkin landing.
+ */
 function extractHotelEntryToken(decodedText: string): string | null {
   const raw = decodedText.trim();
   if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    const match = url.pathname.match(/\/checkin\/([^/]+)/);
-    return match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    return raw;
+  const token = extractQrToken(raw);
+  if (token !== raw) {
+    try {
+      return decodeURIComponent(token) || null;
+    } catch {
+      return null;
+    }
   }
+  // A link that is not an Atlas code link is not a hotel code; anything else is a typed or bare code.
+  return /^https?:\/\//i.test(raw) ? null : raw;
 }
 
 function formatShortDate(value: string): string {

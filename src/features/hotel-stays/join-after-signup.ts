@@ -12,9 +12,13 @@
  * are loaded lazily from server-only modules, so this file itself stays importable by tests.
  */
 
-/** The hotel code inside a sign-up return address, or null. Only "/checkin/<token>" (where the short /C/ link forwards). */
+/**
+ * The scanned code inside a sign-up return address, or null: "/checkin/<token>" (where /C/ forwards) or
+ * "/unlock/<token>" (where /U/ forwards; a hotel's code may be printed that way). Only a code that the server then
+ * resolves as a HOTEL ENTRY code starts a stay; a place code here simply does nothing.
+ */
 export function hotelTokenFromCallback(callbackUrl: string | null): string | null {
-  const match = callbackUrl?.match(/^\/checkin\/([^/?#]+)$/);
+  const match = callbackUrl?.match(/^\/(?:checkin|unlock)\/([^/?#]+)$/);
   if (!match) return null;
   try {
     const token = decodeURIComponent(match[1]).trim();

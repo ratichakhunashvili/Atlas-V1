@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { resolveHotelFromToken } from "@/features/hotel-stays/resolve-hotel-token";
 import { requireUser } from "@/lib/authorization";
 import { placeCodeHasTask } from "@/services/advisor/check-in-qr";
 import { AtlasBadge, FlowScreen, Spacer, type } from "@/components/atlas-ui/ui";
@@ -16,9 +17,13 @@ import { PlaceCodeCheckIn } from "./place-code-check-in";
 export const metadata: Metadata = { title: "Check in" };
 
 export default async function PlaceCodePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  // A hotel's entry code printed with a place-style link (owner decision, 2026-11-16: Skillwill's printed code)
+  // goes to hotel entry, which checks it again and attaches the guest there. Checked first, so a signed-out guest
+  // who signs up from that code is attached straight away (features/hotel-stays/join-after-signup.ts).
+  if (await resolveHotelFromToken(token, new Date())) redirect(`/checkin/${encodeURIComponent(token)}`);
   // Signed out (anyone scanning a partner's code): Atlas sign-in / register, then back here.
   const user = await requireUser();
-  const { token } = await params;
   // Signed in but no task for this place right now: their Atlas home, not a check-in that would only refuse.
   if (!(await placeCodeHasTask({ userId: user.id, qrToken: token }))) redirect("/");
 
