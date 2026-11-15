@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { after, before, describe, it } from "node:test";
 import { and, eq, sql } from "drizzle-orm";
 import type { Hotel, ItineraryDay, Place } from "@/db/schema";
-import { FEEDBACK_SEGMENTS, type FeedbackAnswers } from "@/features/feedback/segments";
+import type { FeedbackSubmission } from "@/features/feedback/segments";
 import { startDayForUser, type DailyPlanDependencies } from "@/services/advisor/daily-plan";
 import { makeTestPlace } from "@/services/advisor/test-utils";
 import type { EligiblePlace } from "@/services/eligibility/rules";
@@ -76,9 +76,8 @@ async function seedDay(
   return day;
 }
 
-function answers(overrides: Partial<FeedbackAnswers> = {}): FeedbackAnswers {
-  const base = Object.fromEntries(FEEDBACK_SEGMENTS.map((segment) => [segment, { rating: null, note: null }])) as unknown as FeedbackAnswers;
-  return { ...base, overall: { rating: 4, note: null }, ...overrides };
+function answers(overrides: Partial<FeedbackSubmission> = {}): FeedbackSubmission {
+  return { topic: "map", comment: "The route was confusing", ...overrides };
 }
 
 function rawRow(guest: Awaited<ReturnType<typeof seedGuest>>, day: ItineraryDay, values: Record<string, unknown> = {}) {
@@ -114,11 +113,18 @@ describe("plan_day_feedback: the database holds the rules", () => {
     }
   });
 
-  it("requires the overall rating", async () => {
+  it("requires a topic with a comment (or, for the earlier form, an overall rating)", async () => {
     const { db, schema } = database;
     const guest = await seedGuest("overall");
     const day = await seedDay(guest, { dayNumber: 1, visited: 1 });
-    assert.equal(await expectSqlFailure(() => db.insert(schema.planDayFeedback).values(rawRow(guest, day, { overallRating: null }))), "23502");
+    const row = (values: Record<string, unknown>) => rawRow(guest, day, { overallRating: null, ...values });
+    assert.equal(await expectSqlFailure(() => db.insert(schema.planDayFeedback).values(row({}))), "23514", "nothing at all");
+    assert.equal(await expectSqlFailure(() => db.insert(schema.planDayFeedback).values(row({ topic: "map" }))), "23514", "topic without comment");
+    assert.equal(await expectSqlFailure(() => db.insert(schema.planDayFeedback).values(row({ comment: "x" }))), "23514", "comment without topic");
+    assert.equal(await expectSqlFailure(() => db.insert(schema.planDayFeedback).values(row({ topic: "overall", comment: "x" }))), "23514", "unknown topic");
+    assert.equal(await expectSqlFailure(() => db.insert(schema.planDayFeedback).values(row({ topic: "map", comment: "" }))), "23514", "empty comment");
+    assert.equal(await expectSqlFailure(() => db.insert(schema.planDayFeedback).values(row({ topic: "map", comment: "x".repeat(1001) }))), "23514", "long comment");
+    await db.insert(schema.planDayFeedback).values(row({ topic: "map", comment: "x".repeat(1000) }));
   });
 
   it("refuses a note longer than 1000 characters", async () => {
@@ -303,7 +309,7 @@ describe("the start-plan gate", () => {
     assert.deepEqual(await startDayForUser(guest.user.id, 120, NOW, gateDeps(guest)), { ok: false, reason: "feedback_required" });
     assert.equal((await db.select().from(schema.itineraryDays).where(eq(schema.itineraryDays.userId, guest.user.id))).length, 1, "no new day");
 
-    assert.deepEqual(await submitPlanDayFeedback(db, { userId: guest.user.id, dayId: earlier.id, today: NO_TODAY, answers: answers(), now: NOW }), { ok: true });
+    assert.deepEqual(await submitPlanDayFeedback(db, { userId: guest.user.id, dayId: earlier.id, today: NO_TODAY, submission: answers(), now: NOW }), { ok: true });
     assert.deepEqual(await startDayForUser(guest.user.id, 120, NOW, gateDeps(guest)), { ok: true });
   });
 
@@ -321,7 +327,7 @@ describe("the start-plan gate", () => {
 });
 
 describe("submitting feedback", () => {
-  it("stores the answers with the day's own hotel", async () => {
+  it("stores the topic and comment with the day's own hotel", async () => {
     const { db, schema } = database;
     const guest = await seedGuest("submit");
     const day = await seedDay(guest, { dayNumber: 1, visited: 1 });
@@ -329,15 +335,15 @@ describe("submitting feedback", () => {
       userId: guest.user.id,
       dayId: day.id,
       today: NO_TODAY,
-      answers: answers({ overall: { rating: 2, note: "Too much walking" }, money: { rating: 1, note: "Prices higher than shown" } }),
+      submission: answers({ topic: "money", comment: "Prices higher than shown" }),
       now: NOW,
     });
     assert.deepEqual(result, { ok: true });
     const [row] = await db.select().from(schema.planDayFeedback).where(eq(schema.planDayFeedback.itineraryDayId, day.id));
     assert.equal(row.hotelId, guest.hotel.id);
-    assert.equal(row.overallRating, 2);
-    assert.equal(row.moneyNote, "Prices higher than shown");
-    assert.equal(row.technicalRating, null);
+    assert.equal(row.topic, "money");
+    assert.equal(row.comment, "Prices higher than shown");
+    assert.equal(row.overallRating, null, "the simple form has no rating");
   });
 
   it("cannot submit for another guest's day", async () => {
@@ -346,7 +352,7 @@ describe("submitting feedback", () => {
     const intruder = await seedGuest("intruder");
     const day = await seedDay(owner, { dayNumber: 1, visited: 1 });
     assert.deepEqual(
-      await submitPlanDayFeedback(db, { userId: intruder.user.id, dayId: day.id, today: { dayId: day.id, finished: true }, answers: answers(), now: NOW }),
+      await submitPlanDayFeedback(db, { userId: intruder.user.id, dayId: day.id, today: { dayId: day.id, finished: true }, submission: answers(), now: NOW }),
       { ok: false, reason: "not_needed" }
     );
     assert.equal((await db.select().from(schema.planDayFeedback).where(eq(schema.planDayFeedback.itineraryDayId, day.id))).length, 0);
@@ -356,22 +362,22 @@ describe("submitting feedback", () => {
     const { db, schema } = database;
     const guest = await seedGuest("twice");
     const day = await seedDay(guest, { dayNumber: 1, visited: 1 });
-    const first = { userId: guest.user.id, dayId: day.id, today: NO_TODAY, answers: answers({ overall: { rating: 5, note: null } }), now: NOW };
+    const first = { userId: guest.user.id, dayId: day.id, today: NO_TODAY, submission: answers({ comment: "First" }), now: NOW };
     assert.deepEqual(await submitPlanDayFeedback(db, first), { ok: true });
-    assert.deepEqual(await submitPlanDayFeedback(db, { ...first, answers: answers({ overall: { rating: 1, note: null } }) }), {
+    assert.deepEqual(await submitPlanDayFeedback(db, { ...first, submission: answers({ comment: "Second" }) }), {
       ok: false,
       reason: "already_done",
     });
     const rows = await db.select().from(schema.planDayFeedback).where(eq(schema.planDayFeedback.itineraryDayId, day.id));
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].overallRating, 5);
+    assert.equal(rows[0].comment, "First");
   });
 
   it("two submits at once store one row", async () => {
     const { db, schema } = database;
     const guest = await seedGuest("race");
     const day = await seedDay(guest, { dayNumber: 1, visited: 1 });
-    const input = { userId: guest.user.id, dayId: day.id, today: NO_TODAY, answers: answers(), now: NOW };
+    const input = { userId: guest.user.id, dayId: day.id, today: NO_TODAY, submission: answers(), now: NOW };
     const results = await Promise.all([submitPlanDayFeedback(db, input), submitPlanDayFeedback(db, input)]);
     assert.deepEqual(results.filter((r) => r.ok).length, 1);
     assert.equal((await db.select().from(schema.planDayFeedback).where(eq(schema.planDayFeedback.itineraryDayId, day.id))).length, 1);
@@ -386,13 +392,13 @@ describe("submitting feedback", () => {
     const beforeRelease = await seedDay(guest, { dayNumber: 2, visited: 1, feedbackRequested: false });
     for (const day of [today, quiet, setAside, beforeRelease]) {
       assert.deepEqual(
-        await submitPlanDayFeedback(db, { userId: guest.user.id, dayId: day.id, today: { dayId: today.id, finished: false }, answers: answers(), now: NOW }),
+        await submitPlanDayFeedback(db, { userId: guest.user.id, dayId: day.id, today: { dayId: today.id, finished: false }, submission: answers(), now: NOW }),
         { ok: false, reason: "not_needed" },
         `day ${day.dayNumber}`
       );
     }
     assert.deepEqual(
-      await submitPlanDayFeedback(db, { userId: guest.user.id, dayId: today.id, today: { dayId: today.id, finished: true }, answers: answers(), now: NOW }),
+      await submitPlanDayFeedback(db, { userId: guest.user.id, dayId: today.id, today: { dayId: today.id, finished: true }, submission: answers(), now: NOW }),
       { ok: true },
       "once today is finished it can be sent"
     );
@@ -400,37 +406,51 @@ describe("submitting feedback", () => {
 });
 
 describe("admin feedback list", () => {
-  it("lists newest first with hotel and guest, filters by hotel and note, and averages over the filter", async () => {
+  it("lists newest first with hotel and guest, filters by hotel, topic and guest, and counts per topic", async () => {
     const { db } = database;
     const a = await seedGuest("admin-a", "Alpha");
     const b = await seedGuest("admin-b", "Beta");
     const a1 = await seedDay(a, { dayNumber: 1, visited: 1 });
     const a2 = await seedDay(a, { dayNumber: 2, visited: 1 });
     const b1 = await seedDay(b, { dayNumber: 1, visited: 1 });
-    await submitPlanDayFeedback(db, { userId: a.user.id, dayId: a1.id, today: NO_TODAY, answers: answers({ overall: { rating: 2, note: null }, map: { rating: 1, note: "Route went through a wall" } }), now: new Date("2026-11-12T10:00:00Z") });
-    await submitPlanDayFeedback(db, { userId: a.user.id, dayId: a2.id, today: NO_TODAY, answers: answers({ overall: { rating: 4, note: null }, map: { rating: 3, note: null } }), now: new Date("2026-11-12T11:00:00Z") });
-    await submitPlanDayFeedback(db, { userId: b.user.id, dayId: b1.id, today: NO_TODAY, answers: answers({ overall: { rating: 5, note: "Lovely" } }), now: new Date("2026-11-12T12:00:00Z") });
+    await submitPlanDayFeedback(db, { userId: a.user.id, dayId: a1.id, today: NO_TODAY, submission: { topic: "map", comment: "Route went through a wall" }, now: new Date("2026-11-12T10:00:00Z") });
+    await submitPlanDayFeedback(db, { userId: a.user.id, dayId: a2.id, today: NO_TODAY, submission: { topic: "money", comment: "Taxi was expensive" }, now: new Date("2026-11-12T11:00:00Z") });
+    await submitPlanDayFeedback(db, { userId: b.user.id, dayId: b1.id, today: NO_TODAY, submission: { topic: "other", comment: "Lovely" }, now: new Date("2026-11-12T12:00:00Z") });
 
     const hotelA = await listFeedbackForAdmin(db, { hotelId: a.hotel.id, page: 1, pageSize: 20 });
     assert.equal(hotelA.total, 2);
-    assert.deepEqual(hotelA.entries.map((entry) => entry.segments.overall.rating), [4, 2], "newest first");
+    assert.deepEqual(hotelA.entries.map((entry) => entry.topic), ["money", "map"], "newest first");
+    assert.equal(hotelA.entries[1].comment, "Route went through a wall");
     assert.equal(hotelA.entries[0].guestEmail, a.user.email);
     assert.equal(hotelA.entries[0].hotelName, a.hotelPlace.name);
-    assert.equal(hotelA.averages.overall, 3);
-    assert.equal(hotelA.averages.map, 2);
-    assert.equal(hotelA.averages.technical, null, "nobody rated it: no average");
-    assert.equal(hotelA.ratedCounts.map, 2);
+    assert.equal(hotelA.topicCounts.map, 1);
+    assert.equal(hotelA.topicCounts.money, 1);
+    assert.equal(hotelA.topicCounts.other, 0, "counts follow the hotel filter");
 
-    const mapNotes = await listFeedbackForAdmin(db, { hotelId: a.hotel.id, noteFor: "map", page: 1, pageSize: 20 });
-    assert.equal(mapNotes.total, 1);
-    assert.equal(mapNotes.entries[0].segments.map.note, "Route went through a wall");
-    assert.equal(mapNotes.averages.overall, 2, "averages follow the filter");
+    const mapOnly = await listFeedbackForAdmin(db, { hotelId: a.hotel.id, topic: "map", page: 1, pageSize: 20 });
+    assert.equal(mapOnly.total, 1);
+    assert.equal(mapOnly.entries[0].comment, "Route went through a wall");
+    assert.equal(mapOnly.topicCounts.money, 1, "counts ignore the topic filter, so every topic stays visible");
 
     const paged = await listFeedbackForAdmin(db, { hotelId: a.hotel.id, page: 2, pageSize: 1 });
     assert.equal(paged.total, 2);
-    assert.deepEqual(paged.entries.map((entry) => entry.segments.overall.rating), [2]);
+    assert.deepEqual(paged.entries.map((entry) => entry.topic), ["map"]);
 
-    const hotelB = await listFeedbackForAdmin(db, { hotelId: b.hotel.id, page: 1, pageSize: 20 });
-    assert.deepEqual(hotelB.entries.map((entry) => entry.guestEmail), [b.user.email]);
+    const guestA = await listFeedbackForAdmin(db, { guestId: a.user.id, page: 1, pageSize: 20 });
+    assert.equal(guestA.total, 2, "one guest's feedback, across hotels");
+    assert.ok(guestA.entries.every((entry) => entry.guestId === a.user.id && entry.guestEmail === a.user.email));
+    const guestB = await listFeedbackForAdmin(db, { guestId: b.user.id, page: 1, pageSize: 20 });
+    assert.deepEqual(guestB.entries.map((entry) => entry.comment), ["Lovely"]);
+  });
+
+  it("still shows feedback from the earlier rating form, with no topic", async () => {
+    const { db, schema } = database;
+    const guest = await seedGuest("legacy");
+    const day = await seedDay(guest, { dayNumber: 1, visited: 1 });
+    await db.insert(schema.planDayFeedback).values(rawRow(guest, day, { overallRating: 4, mapNote: "Old note" }));
+    const page = await listFeedbackForAdmin(db, { guestId: guest.user.id, page: 1, pageSize: 20 });
+    assert.equal(page.entries[0].topic, null);
+    assert.equal(page.entries[0].segments.overall.rating, 4);
+    assert.equal(page.entries[0].segments.map.note, "Old note");
   });
 });

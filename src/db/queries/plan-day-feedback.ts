@@ -7,7 +7,7 @@ import {
   submitPlanDayFeedback as submitOperation,
   type AdminFeedbackFilter,
 } from "@/db/operations/plan-day-feedback";
-import type { FeedbackAnswers } from "@/features/feedback/segments";
+import type { FeedbackSubmission } from "@/features/feedback/segments";
 import type { TodayPlanDay } from "@/services/feedback/needs-feedback";
 
 /** Thin bindings of the production handle; the SQL lives in db/operations/plan-day-feedback.ts. */
@@ -20,7 +20,7 @@ export async function listDaysNeedingFeedback(userId: string, today: TodayPlanDa
   return listOwedOperation(db, userId, today);
 }
 
-export async function submitPlanDayFeedback(input: { userId: string; dayId: string; today: TodayPlanDay; answers: FeedbackAnswers; now: Date }) {
+export async function submitPlanDayFeedback(input: { userId: string; dayId: string; today: TodayPlanDay; submission: FeedbackSubmission; now: Date }) {
   return submitOperation(db, input);
 }
 

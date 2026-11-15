@@ -1,5 +1,30 @@
 /*
- * The parts of a plan day a guest rates in their private feedback (Phase 2). Order and labels are the owner's.
+ * The simple form (owner decision, 2026-11-15): the guest picks ONE topic from a dropdown and writes a comment. Both
+ * are required. The seven-segment ratings below are kept only to show feedback given before this change.
+ */
+export const FEEDBACK_TOPICS = ["technical", "map", "places", "checkin", "money", "hotel", "other"] as const;
+export type FeedbackTopic = (typeof FEEDBACK_TOPICS)[number];
+
+export const TOPIC_LABELS: Record<FeedbackTopic, string> = {
+  technical: "The app and technical problems",
+  map: "Map and directions",
+  places: "Places and recommendations",
+  checkin: "Check-in and QR codes",
+  money: "Prices and money",
+  hotel: "Hotel and staff",
+  other: "Something else",
+};
+
+export const COMMENT_MAX_LENGTH = 1000;
+
+/** What the guest sends: one topic and a comment (trimmed, 1–1000 characters). */
+export type FeedbackSubmission = { topic: FeedbackTopic; comment: string };
+
+export const isFeedbackTopic = (value: unknown): value is FeedbackTopic =>
+  typeof value === "string" && (FEEDBACK_TOPICS as readonly string[]).includes(value);
+
+/*
+ * Earlier form (before 2026-11-15): the parts of a plan day a guest rates in their private feedback (Phase 2). Order and labels are the owner's.
  * Pure data, shared by the guest form, its validation, the admin screen and the export. Only Atlas platform admins
  * read the answers; guests never see anyone's feedback.
  */

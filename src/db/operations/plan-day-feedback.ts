@@ -1,6 +1,6 @@
-import { and, desc, eq, gt, isNotNull, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, sql, type SQL } from "drizzle-orm";
 import { hotels, itineraryDays, itineraryStops, places, planDayFeedback, users } from "@/db/schema";
-import { FEEDBACK_SEGMENTS, type FeedbackAnswers, type FeedbackSegment } from "@/features/feedback/segments";
+import { FEEDBACK_TOPICS, type FeedbackSegment, type FeedbackSubmission, type FeedbackTopic } from "@/features/feedback/segments";
 import { dayNeedsFeedback, type FeedbackCandidate, type TodayPlanDay } from "@/services/feedback/needs-feedback";
 import type { AtlasDatabase } from "./types";
 
@@ -61,25 +61,6 @@ export function selectDaysNeedingFeedback(candidates: readonly Omit<DayNeedingFe
 
 export type SubmitFeedbackResult = { ok: true } | { ok: false; reason: "already_done" | "not_needed" };
 
-function columnsFor(answers: FeedbackAnswers) {
-  return {
-    overallRating: answers.overall.rating,
-    overallNote: answers.overall.note,
-    technicalRating: answers.technical.rating,
-    technicalNote: answers.technical.note,
-    mapRating: answers.map.rating,
-    mapNote: answers.map.note,
-    placesRating: answers.places.rating,
-    placesNote: answers.places.note,
-    checkinRating: answers.checkin.rating,
-    checkinNote: answers.checkin.note,
-    moneyRating: answers.money.rating,
-    moneyNote: answers.money.note,
-    hotelRating: answers.hotel.rating,
-    hotelNote: answers.hotel.note,
-  };
-}
-
 /**
  * Stores the guest's feedback for one of their own days. The day id came from a form, so it is a claim: the day must
  * belong to this user and be owed feedback right now. A second submit for the same day (double tap, second tab) is
@@ -87,7 +68,7 @@ function columnsFor(answers: FeedbackAnswers) {
  */
 export async function submitPlanDayFeedback(
   db: AtlasDatabase,
-  input: { userId: string; dayId: string; today: TodayPlanDay; answers: FeedbackAnswers; now: Date }
+  input: { userId: string; dayId: string; today: TodayPlanDay; submission: FeedbackSubmission; now: Date }
 ): Promise<SubmitFeedbackResult> {
   return db.transaction(async (tx) => {
     const [day] = await tx
@@ -107,61 +88,46 @@ export async function submitPlanDayFeedback(
     // A request that raced this one past the checks above loses here, quietly (no failed statement in the transaction).
     const inserted = await tx
       .insert(planDayFeedback)
-      .values({ userId: input.userId, itineraryDayId: day.id, hotelId: day.hotelId, createdAt: input.now, ...columnsFor(input.answers) })
+      .values({ userId: input.userId, itineraryDayId: day.id, hotelId: day.hotelId, createdAt: input.now, topic: input.submission.topic, comment: input.submission.comment })
       .onConflictDoNothing({ target: planDayFeedback.itineraryDayId })
       .returning({ id: planDayFeedback.id });
     return inserted.length > 0 ? { ok: true } : { ok: false, reason: "already_done" };
   });
 }
 
-/* ---------- Admin: read-only list with filters and averages ---------- */
+/* ---------- Admin: read-only list with filters and counts per topic ---------- */
 
-const NOTE_COLUMNS = {
-  overall: planDayFeedback.overallNote,
-  technical: planDayFeedback.technicalNote,
-  map: planDayFeedback.mapNote,
-  places: planDayFeedback.placesNote,
-  checkin: planDayFeedback.checkinNote,
-  money: planDayFeedback.moneyNote,
-  hotel: planDayFeedback.hotelNote,
-} as const satisfies Record<FeedbackSegment, unknown>;
-
-const RATING_COLUMNS = {
-  overall: planDayFeedback.overallRating,
-  technical: planDayFeedback.technicalRating,
-  map: planDayFeedback.mapRating,
-  places: planDayFeedback.placesRating,
-  checkin: planDayFeedback.checkinRating,
-  money: planDayFeedback.moneyRating,
-  hotel: planDayFeedback.hotelRating,
-} as const satisfies Record<FeedbackSegment, unknown>;
-
-export type AdminFeedbackFilter = { hotelId?: string; noteFor?: FeedbackSegment };
+export type AdminFeedbackFilter = { hotelId?: string; topic?: FeedbackTopic; guestId?: string };
 
 export type AdminFeedbackEntry = {
   id: string;
   createdAt: Date;
   hotelName: string;
+  guestId: string;
   guestEmail: string;
   dayStartedAt: Date;
   dayNumber: number;
+  /** The simple form: the topic and comment. Null on feedback from the earlier form, which has `segments` instead. */
+  topic: FeedbackTopic | null;
+  comment: string | null;
   segments: Record<FeedbackSegment, { rating: number | null; note: string | null }>;
 };
 
 export type AdminFeedbackPage = {
   entries: AdminFeedbackEntry[];
   total: number;
-  /** Average rating per segment for the whole filter (not only this page); null when nobody rated it. */
-  averages: Record<FeedbackSegment, number | null>;
-  /** How many entries rated each segment (the rest said "didn't use it"). */
-  ratedCounts: Record<FeedbackSegment, number>;
+  /**
+   * How many entries name each topic, for the hotel and guest filters but ignoring the topic filter, so the admin sees
+   * which topics come up most. Feedback from the earlier form has no topic and is counted in `total` only.
+   */
+  topicCounts: Record<FeedbackTopic, number>;
 };
 
 function whereFor(filter: AdminFeedbackFilter): SQL | undefined {
   const conditions: SQL[] = [];
   if (filter.hotelId) conditions.push(eq(planDayFeedback.hotelId, filter.hotelId));
-  // A note of only spaces is never stored (validation trims to null), so "not null" means there is something to read.
-  if (filter.noteFor) conditions.push(isNotNull(NOTE_COLUMNS[filter.noteFor]));
+  if (filter.guestId) conditions.push(eq(planDayFeedback.userId, filter.guestId));
+  if (filter.topic) conditions.push(eq(planDayFeedback.topic, filter.topic));
   return conditions.length ? and(...conditions) : undefined;
 }
 
@@ -174,15 +140,13 @@ export async function listFeedbackForAdmin(
   const pageSize = Math.min(Math.max(Math.trunc(input.pageSize), 1), 100);
   const page = Math.max(Math.trunc(input.page), 1);
 
-  // One aggregate row over the same filter as the list: AVG and COUNT(column) skip NULL ("didn't use it").
-  const summarySelection: Record<string, SQL> = { total: sql`count(*)::int` };
-  for (const segment of FEEDBACK_SEGMENTS) {
-    summarySelection[`${segment}Avg`] = sql`avg(${RATING_COLUMNS[segment]})::float8`;
-    summarySelection[`${segment}Rated`] = sql`count(${RATING_COLUMNS[segment]})::int`;
-  }
-
-  const [[summary], rows] = await Promise.all([
-    db.select(summarySelection).from(planDayFeedback).where(where),
+  const [[summary], topicRows, rows] = await Promise.all([
+    db.select({ total: sql<number>`count(*)::int` }).from(planDayFeedback).where(where),
+    db
+      .select({ topic: planDayFeedback.topic, count: sql<number>`count(*)::int` })
+      .from(planDayFeedback)
+      .where(whereFor({ ...input, topic: undefined }))
+      .groupBy(planDayFeedback.topic),
     db
       .select({
         feedback: planDayFeedback,
@@ -202,29 +166,22 @@ export async function listFeedbackForAdmin(
       .offset((page - 1) * pageSize),
   ]);
 
-  const stats = (summary ?? {}) as Record<string, unknown>;
-  const averages = Object.fromEntries(
-    FEEDBACK_SEGMENTS.map((segment) => {
-      const value = stats[`${segment}Avg`];
-      return [segment, value === null || value === undefined ? null : Math.round(Number(value) * 100) / 100];
-    })
-  ) as Record<FeedbackSegment, number | null>;
-  const ratedCounts = Object.fromEntries(FEEDBACK_SEGMENTS.map((segment) => [segment, Number(stats[`${segment}Rated`] ?? 0)])) as Record<
-    FeedbackSegment,
-    number
-  >;
+  const topicCounts = Object.fromEntries(FEEDBACK_TOPICS.map((topic) => [topic, 0])) as Record<FeedbackTopic, number>;
+  for (const row of topicRows) if (row.topic && row.topic in topicCounts) topicCounts[row.topic as FeedbackTopic] = Number(row.count);
 
   return {
-    total: Number(stats.total ?? 0),
-    averages,
-    ratedCounts,
+    total: Number(summary?.total ?? 0),
+    topicCounts,
     entries: rows.map((row) => ({
       id: row.feedback.id,
       createdAt: row.feedback.createdAt,
       hotelName: row.hotelName,
+      guestId: row.feedback.userId,
       guestEmail: row.guestEmail,
       dayStartedAt: row.dayStartedAt,
       dayNumber: row.dayNumber,
+      topic: (row.feedback.topic as FeedbackTopic | null) ?? null,
+      comment: row.feedback.comment,
       segments: {
         overall: { rating: row.feedback.overallRating, note: row.feedback.overallNote },
         technical: { rating: row.feedback.technicalRating, note: row.feedback.technicalNote },

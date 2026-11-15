@@ -5,7 +5,7 @@ import { selectDaysNeedingFeedback } from "@/db/operations/plan-day-feedback";
 import { dayNeedsFeedback, NO_TODAY, todayFromPlanState } from "@/services/feedback/needs-feedback";
 import { adminFeedbackHref, parseAdminFeedbackParams } from "./admin-filter";
 import { FEEDBACK_COPY } from "./copy";
-import { FEEDBACK_SEGMENTS, NOT_USED_LABEL, OPTIONAL_SEGMENTS, SEGMENT_HINTS, SEGMENT_LABELS } from "./segments";
+import { FEEDBACK_SEGMENTS, FEEDBACK_TOPICS, NOT_USED_LABEL, SEGMENT_HINTS, SEGMENT_LABELS, TOPIC_LABELS } from "./segments";
 import { FEEDBACK_ERRORS, firstInvalidField, parseFeedbackForm } from "./validation";
 
 /* Phase 2, private feedback after a plan day: the pure rules, the form validation and the guest wording. */
@@ -68,50 +68,50 @@ function form(entries: Record<string, string>): FormData {
 }
 
 describe("feedback form validation", () => {
-  it("needs only the overall rating; blank or \"Didn't use it\" means not used", () => {
-    const parsed = parseFeedbackForm(form({ overall_rating: "4", map_rating: "none", technical_rating: "" }));
+  it("needs a topic from the list and a comment, trimmed", () => {
+    const parsed = parseFeedbackForm(form({ topic: "money", comment: "  Taxi cost more than shown\r\nat night  " }));
     assert.ok(parsed.ok);
     assert.equal(parsed.dayId, DAY);
-    assert.deepEqual(parsed.answers.overall, { rating: 4, note: null });
-    for (const segment of OPTIONAL_SEGMENTS) assert.equal(parsed.answers[segment].rating, null, segment);
+    assert.deepEqual(parsed.submission, { topic: "money", comment: "Taxi cost more than shown\nat night" });
+    for (const topic of FEEDBACK_TOPICS) assert.ok(parseFeedbackForm(form({ topic, comment: "x" })).ok, topic);
   });
 
-  it("keeps ratings 1-5 and trimmed notes; an empty note is no note", () => {
-    const parsed = parseFeedbackForm(form({ overall_rating: "1", money_rating: "5", money_note: "  Taxi cost more than shown\r\nat night  ", map_note: "   " }));
-    assert.ok(parsed.ok);
-    assert.deepEqual(parsed.answers.money, { rating: 5, note: "Taxi cost more than shown\nat night" });
-    assert.equal(parsed.answers.map.note, null);
-  });
-
-  it("refuses a missing or out-of-range overall rating and an invalid segment rating", () => {
-    for (const value of [undefined, "", "0", "6", "none", "4.5", "x"]) {
-      const parsed = parseFeedbackForm(form(value === undefined ? {} : { overall_rating: value }));
-      assert.ok(!parsed.ok && parsed.reason === "invalid", String(value));
-      assert.equal(parsed.fieldErrors.overall_rating, FEEDBACK_ERRORS.overallRequired);
+  it("refuses a missing or unknown topic", () => {
+    for (const topic of [undefined, "", "overall", "x' or 1=1", "Money"]) {
+      const parsed = parseFeedbackForm(form(topic === undefined ? { comment: "x" } : { topic, comment: "x" }));
+      assert.ok(!parsed.ok && parsed.reason === "invalid", String(topic));
+      assert.equal(parsed.fieldErrors.topic, FEEDBACK_ERRORS.topicRequired);
     }
-    const parsed = parseFeedbackForm(form({ overall_rating: "3", checkin_rating: "9" }));
-    assert.ok(!parsed.ok && parsed.reason === "invalid");
-    assert.equal(parsed.fieldErrors.checkin_rating, FEEDBACK_ERRORS.ratingInvalid);
   });
 
-  it("refuses a note over 1000 characters, counting a line break once", () => {
-    assert.ok(parseFeedbackForm(form({ overall_rating: "3", hotel_note: "x".repeat(1000) })).ok);
-    assert.ok(parseFeedbackForm(form({ overall_rating: "3", hotel_note: `${"x".repeat(499)}\r\n${"y".repeat(500)}` })).ok);
-    const parsed = parseFeedbackForm(form({ overall_rating: "3", hotel_note: "x".repeat(1001) }));
+  it("refuses an empty comment and one over 1000 characters, counting a line break once", () => {
+    for (const comment of [undefined, "", "   \n  "]) {
+      const parsed = parseFeedbackForm(form(comment === undefined ? { topic: "map" } : { topic: "map", comment }));
+      assert.ok(!parsed.ok && parsed.reason === "invalid", JSON.stringify(comment));
+      assert.equal(parsed.fieldErrors.comment, FEEDBACK_ERRORS.commentRequired);
+    }
+    assert.ok(parseFeedbackForm(form({ topic: "map", comment: "x".repeat(1000) })).ok);
+    assert.ok(parseFeedbackForm(form({ topic: "map", comment: `${"x".repeat(499)}\r\n${"y".repeat(500)}` })).ok);
+    const parsed = parseFeedbackForm(form({ topic: "map", comment: "x".repeat(1001) }));
     assert.ok(!parsed.ok && parsed.reason === "invalid");
-    assert.equal(parsed.fieldErrors.hotel_note, FEEDBACK_ERRORS.noteTooLong);
+    assert.equal(parsed.fieldErrors.comment, FEEDBACK_ERRORS.commentTooLong);
   });
 
   it("refuses a day id that is not a UUID", () => {
-    const data = form({ overall_rating: "3" });
+    const data = form({ topic: "map", comment: "x" });
     data.set("dayId", "../../other-day");
     assert.deepEqual(parseFeedbackForm(data), { ok: false, reason: "invalid_day" });
   });
 
-  it("focuses the first invalid field in screen order", () => {
-    assert.equal(firstInvalidField({ hotel_note: "x", map_rating: "y" }), "map_rating");
-    assert.equal(firstInvalidField({ overall_note: "x", overall_rating: "y" }), "overall_rating");
+  it("focuses the topic first, then the comment", () => {
+    assert.equal(firstInvalidField({ comment: "x", topic: "y" }), "topic");
+    assert.equal(firstInvalidField({ comment: "x" }), "comment");
     assert.equal(firstInvalidField({}), null);
+  });
+
+  it("offers the six topics plus Something else, in this order", () => {
+    assert.deepEqual([...FEEDBACK_TOPICS], ["technical", "map", "places", "checkin", "money", "hotel", "other"]);
+    assert.equal(TOPIC_LABELS.other, "Something else");
   });
 });
 
@@ -140,7 +140,8 @@ describe("feedback wording", () => {
       "Prices and money",
       "Hotel and staff",
     ]);
-    assert.equal(FEEDBACK_COPY.noteLabel, "What went wrong?");
+    assert.equal(FEEDBACK_COPY.commentLabel, "Your comment");
+    assert.equal(FEEDBACK_COPY.topicLabel, "What is it about?");
   });
 
   it("never mentions contracts, commission or approval", () => {
@@ -160,14 +161,22 @@ describe("feedback wording", () => {
 describe("admin filters", () => {
   const hotels = new Set(["h1"]);
 
-  it("keeps only a real hotel, a known segment and a positive page", () => {
-    assert.deepEqual(parseAdminFeedbackParams({ hotel: "h1", note: "map", page: "3" }, hotels), { hotelId: "h1", noteFor: "map", page: 3 });
-    assert.deepEqual(parseAdminFeedbackParams({ hotel: "nope", note: "x' or 1=1", page: "-2" }, hotels), { hotelId: undefined, noteFor: undefined, page: 1 });
-    assert.deepEqual(parseAdminFeedbackParams({ hotel: ["h1", "h2"], page: "1.5" }, hotels), { hotelId: "h1", noteFor: undefined, page: 1 });
+  it("keeps only a real hotel, a known topic and a positive page", () => {
+    assert.deepEqual(parseAdminFeedbackParams({ hotel: "h1", topic: "map", page: "3" }, hotels), { hotelId: "h1", topic: "map", guestId: undefined, page: 3 });
+    assert.deepEqual(parseAdminFeedbackParams({ hotel: "nope", topic: "x' or 1=1", page: "-2" }, hotels), { hotelId: undefined, topic: undefined, guestId: undefined, page: 1 });
+    assert.deepEqual(parseAdminFeedbackParams({ hotel: ["h1", "h2"], page: "1.5" }, hotels), { hotelId: "h1", topic: undefined, guestId: undefined, page: 1 });
+  });
+
+  it("filters to one guest by account id only, never by an email or anything else", () => {
+    const id = "6A2A0000-0000-4000-8000-000000000001";
+    assert.equal(parseAdminFeedbackParams({ guest: id }, hotels).guestId, id.toLowerCase());
+    assert.equal(parseAdminFeedbackParams({ guest: "guest@example.test" }, hotels).guestId, undefined);
+    assert.equal(parseAdminFeedbackParams({ guest: "x' or 1=1" }, hotels).guestId, undefined);
+    assert.equal(adminFeedbackHref({ guestId: "abc", page: 1 }, 2), "/admin/feedback?guest=abc&page=2");
   });
 
   it("keeps the filter across pages", () => {
-    assert.equal(adminFeedbackHref({ hotelId: "h1", noteFor: "money", page: 1 }, 2), "/admin/feedback?hotel=h1&note=money&page=2");
+    assert.equal(adminFeedbackHref({ hotelId: "h1", topic: "money", page: 1 }, 2), "/admin/feedback?hotel=h1&topic=money&page=2");
     assert.equal(adminFeedbackHref({ page: 2 }, 1), "/admin/feedback");
   });
 });

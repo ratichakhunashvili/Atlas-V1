@@ -24,7 +24,7 @@ export type FeedbackFormState = {
 function echo(formData: FormData): Record<string, string> {
   const values: Record<string, string> = {};
   for (const [key, value] of formData.entries()) {
-    if (typeof value === "string" && /^[a-z]+_(rating|note)$/.test(key)) values[key] = value.slice(0, 2000);
+    if (typeof value === "string" && (key === "topic" || key === "comment")) values[key] = value.slice(0, 2000);
   }
   return values;
 }
@@ -39,7 +39,7 @@ export async function submitFeedbackAction(_prev: FeedbackFormState, formData: F
 
   const now = new Date();
   const { today } = await findDaysOwingFeedback(user.id, { now });
-  const result = await submitPlanDayFeedback({ userId: user.id, dayId: parsed.dayId, today, answers: parsed.answers, now });
+  const result = await submitPlanDayFeedback({ userId: user.id, dayId: parsed.dayId, today, submission: parsed.submission, now });
 
   revalidatePath("/", "layout"); // the plan and preferences screens read whether feedback is owed
   // Stored, or already stored by an earlier tap: thank the guest. Not owed: the feedback screen shows what is.

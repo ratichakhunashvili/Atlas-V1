@@ -133,6 +133,8 @@ export async function gatherAccountExport(db: AtlasDatabase, userId: string, now
         hotel: places.name,
         planStartedAt: itineraryDays.generatedAt,
         givenAt: planDayFeedback.createdAt,
+        topic: planDayFeedback.topic,
+        comment: planDayFeedback.comment,
         overallRating: planDayFeedback.overallRating,
         overallNote: planDayFeedback.overallNote,
         technicalRating: planDayFeedback.technicalRating,
@@ -208,7 +210,7 @@ export async function gatherAccountExport(db: AtlasDatabase, userId: string, now
     })),
     visits,
     achievements: unlocks,
-    /** Private feedback on plan days. A null rating means "didn't use it". */
+    /** Private feedback on plan days: a topic and a comment. Older feedback has ratings instead (null = "didn't use it"). */
     planFeedback: feedback,
     guestProfiles: principals.map(({ id, ...principal }) => ({
       ...principal,

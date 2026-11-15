@@ -12,6 +12,10 @@ import { users } from "./users";
  * required; every other rating may be NULL, meaning "didn't use it". Explicit columns rather than JSON, so the
  * database itself holds the 1–5 range, the required overall rating and the note length.
  *
+ * Since 2026-11-15 the form is one topic plus a comment (topic, comment). The rating and note columns hold only
+ * feedback given before that, so overall_rating is now optional; a CHECK keeps every row either a topic with a comment
+ * or an old-style answer with an overall rating.
+ *
  * Deleting the user or the day deletes the feedback. hotel_id is copied from the day on the server (never from the
  * form) so admins can filter by hotel; like the day it belongs to, it RESTRICTs hotel deletion.
  */
@@ -35,7 +39,11 @@ export const planDayFeedback = pgTable(
       .notNull()
       .references(() => hotels.id, { onDelete: "restrict" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    overallRating: rating("overall_rating").notNull(),
+    /** One of features/feedback/segments.ts FEEDBACK_TOPICS. Null only on feedback from the earlier form. */
+    topic: text("topic"),
+    /** The guest's comment, 1–1000 characters. Null only on feedback from the earlier form. */
+    comment: text("comment"),
+    overallRating: rating("overall_rating"),
     overallNote: note("overall_note"),
     technicalRating: rating("technical_rating"),
     technicalNote: note("technical_note"),
@@ -54,6 +62,12 @@ export const planDayFeedback = pgTable(
     uniqueIndex("plan_day_feedback_day_unique").on(table.itineraryDayId),
     index("plan_day_feedback_hotel_created_idx").on(table.hotelId, table.createdAt),
     index("plan_day_feedback_user_idx").on(table.userId),
+    check("plan_day_feedback_topic_check", sql`${table.topic} in ('technical', 'map', 'places', 'checkin', 'money', 'hotel', 'other')`),
+    check("plan_day_feedback_comment_check", sql`char_length(${table.comment}) between 1 and 1000`),
+    check(
+      "plan_day_feedback_answer_check",
+      sql`(${table.topic} is not null and ${table.comment} is not null) or ${table.overallRating} is not null`
+    ),
     check("plan_day_feedback_overall_rating_check", sql`${table.overallRating} between 1 and 5`),
     check("plan_day_feedback_technical_rating_check", sql`${table.technicalRating} between 1 and 5`),
     check("plan_day_feedback_map_rating_check", sql`${table.mapRating} between 1 and 5`),
