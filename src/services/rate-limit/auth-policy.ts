@@ -15,8 +15,9 @@ export const AUTH_RATE_LIMIT_RULES: Record<AuthRateLimitScope, AuthRateLimitRule
   // Failed sign-ins from one network: stops one device trying many emails. Loose on purpose,
   // because every guest on a hotel's wifi shares the same address.
   sign_in_ip: { limit: 50, windowSeconds: 15 * 60 },
-  // Every sign-up attempt from one network: stops scripted account creation.
-  sign_up_ip: { limit: 20, windowSeconds: 60 * 60 },
+  // Every sign-up attempt from one network: stops scripted account creation. 200, not 20 (owner decision,
+  // 2026-11-15): a whole group on one campus or hotel wifi shares an address and may all sign up in the same hour.
+  sign_up_ip: { limit: 200, windowSeconds: 60 * 60 },
   // Reset-link requests for one address: stops mail-bombing one inbox. Counted for every address,
   // known or not, so the limit never reveals whether an account exists.
   password_reset_email: { limit: 3, windowSeconds: 60 * 60 },
