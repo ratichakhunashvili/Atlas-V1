@@ -132,11 +132,11 @@ test("the scenario tool exercises a real scan without holding a secret", () => {
 test("the scanned token stops at the scan: the confirmation flow carries none", () => {
   // The scan landing is the ONE page whose URL already contains the token, so its
   // own button may post that same value back. What must not happen is the token
-  // travelling on to a second page. (Its GET is also write-free — see
+  // travelling on to a second page. (What its page load may write is pinned in
   // app/checkin-get-safety.test.ts.)
   const landing = read("src/app/(app)/checkin/[token]/page.tsx");
   assert.match(landing, /enterHotelFormAction\.bind\(null, token\)/);
-  assert.match(landing, /previewHotelEntryByToken/, "the render path stays read-only");
+  assert.match(landing, /previewHotelEntryByToken/, "the decision starts from the read-only preview");
 
   // The confirmation screen never sees a token: no route param, no bind argument,
   // no hidden field — so nothing to leak through a URL, a log or a shared link.

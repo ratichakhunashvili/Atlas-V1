@@ -26,17 +26,18 @@ function functionBody(source: string, name: string): string {
   return end === -1 ? rest : rest.slice(0, end);
 }
 
-test("the scan landing renders from a read-only preview and writes nothing", () => {
+test("the scan landing reads first, and starts a stay only for a guest who has none", () => {
   const landing = stripComments(read(LANDING));
 
-  assert.match(landing, /previewHotelEntryByToken\(token\)/, "the GET must use the read-only path");
-  // The write helpers must not be reachable from the page body at all.
-  for (const writer of ["enterHotelByToken", "recordPendingHotelSwitch", "createHotelStay", "switchActiveStay", "clearPendingHotelSwitch"]) {
-    assert.doesNotMatch(
-      landing,
-      new RegExp(`${writer}\\s*\\(`),
-      `${LANDING} must not call ${writer} while rendering`
-    );
+  assert.match(landing, /previewHotelEntryByToken\(token\)/, "the decision starts from the read-only preview");
+  // Owner decision (2026-11-16): scanning attaches a guest with no stay at once. That is the ONLY write here, and it
+  // goes through enterHotelByToken (all checks again), inside the not_started branch.
+  const branch = landing.slice(landing.indexOf('if (preview.status === "not_started")'));
+  assert.ok(branch.length < landing.length, "the automatic start lives in the not_started branch");
+  assert.match(branch.slice(0, 400), /await enterHotelByToken\(token\)/);
+  assert.equal((landing.match(/enterHotelByToken\(/g) ?? []).length, 1, "called once, in that branch only");
+  for (const writer of ["recordPendingHotelSwitch", "createHotelStay", "switchActiveStay", "clearPendingHotelSwitch", "confirmPendingHotelSwitch"]) {
+    assert.doesNotMatch(landing, new RegExp(`${writer}\\s*\\(`), `${LANDING} must not call ${writer} directly`);
   }
 });
 
@@ -62,9 +63,10 @@ test("the writes live behind an explicit action the guest has to press", () => {
   // And a form action exists for the landing's button to post to.
   assert.match(actions, /export async function enterHotelFormAction\(token: string\)/);
 
+  // Switching away from a current stay still starts from the landing's button, never from the page load.
   const landing = stripComments(read(LANDING));
   assert.match(landing, /<form action=\{enterHotelFormAction\.bind\(null, token\)\}>/);
-  assert.match(landing, /<Button type="submit">/);
+  assert.match(landing, /<Button type="submit">Continue<\/Button>/);
 });
 
 test("ending a stay still takes its own confirmation, on a page carrying no token", () => {

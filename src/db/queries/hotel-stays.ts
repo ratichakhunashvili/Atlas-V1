@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { hotelStays, hotels, places } from "@/db/schema";
 import {
   createHotelStay as createHotelStayOperation,
+  endActiveStay as endActiveStayOperation,
   switchActiveStay as switchActiveStayOperation,
   stayHasItineraryDays as stayHasItineraryDaysOperation,
   updateStayDates as updateStayDatesOperation,
@@ -62,6 +63,10 @@ export async function findCurrentStayForUser(userId: string) {
 
 export async function switchActiveStay(input: { userId: string; toHotelId: string; now: Date }) {
   return switchActiveStayOperation(db, input);
+}
+
+export async function endActiveStay(input: { userId: string; now: Date }) {
+  return endActiveStayOperation(db, input);
 }
 
 export async function createHotelStay(input: {

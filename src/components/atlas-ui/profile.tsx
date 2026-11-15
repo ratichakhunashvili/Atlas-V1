@@ -1,13 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { logoutAction } from "@/auth/actions";
 import { useState, type ReactNode } from "react";
 import { AtlasIcon, AtlasLogo } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
 import { initialFor, type GuestProfile } from "@/features/profile/guest-profile";
-import { STAY_DATES_HREF } from "@/features/hotel-stays/stay-state";
+import { finishStayFormAction } from "@/features/hotel-stays/actions";
 import { AtlasDialog } from "./dialog";
 import { FrontDeskCall } from "./front-desk";
 import { DemoAction } from "./navigation";
@@ -123,14 +122,21 @@ export function ProfileScreen({ profile, confirmSignOut = false }: { profile: Gu
               <>
                 <span className="w-full font-manrope text-[13px] leading-[18px] text-atlas-linen">{profile.stay.dates}</span>
                 <span className="font-manrope text-[12px] leading-[16px] text-atlas-beige">{profile.stay.progress}</span>
-                {profile.stay.canEditDates ? (
-                  // The one stay-date editor lives in the stay pill's panel; this opens it rather than duplicating it.
-                  <Link
-                    href={STAY_DATES_HREF}
-                    className="mt-[2px] inline-flex min-h-[32px] items-center font-manrope text-[13px] font-semibold leading-[18px] text-atlas-paper underline underline-offset-2"
+                {profile.stay.canFinish ? (
+                  // Ends only this guest's own current stay (features/hotel-stays/actions.ts); asks once first.
+                  <form
+                    action={finishStayFormAction}
+                    onSubmit={(event) => {
+                      if (!window.confirm(`Finish your stay at ${profile.stay?.hotelName ?? "this hotel"}? Your plans and achievements stay saved.`)) event.preventDefault();
+                    }}
                   >
-                    Change dates
-                  </Link>
+                    <button
+                      type="submit"
+                      className="mt-[2px] inline-flex min-h-[32px] items-center font-manrope text-[13px] font-semibold leading-[18px] text-atlas-paper underline underline-offset-2"
+                    >
+                      Finish stay
+                    </button>
+                  </form>
                 ) : null}
               </>
             ) : (

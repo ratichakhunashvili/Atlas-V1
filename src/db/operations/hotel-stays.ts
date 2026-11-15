@@ -49,6 +49,20 @@ export async function switchActiveStay(
   }
 }
 
+/**
+ * "Finish stay": closes the guest's own current stay now. The stay keeps its history (only `check_out` is set), so
+ * plans, visits and achievements stay readable. Returns null when there was no current stay (already finished,
+ * a double tap), which the caller treats as done.
+ */
+export async function endActiveStay(db: AtlasDatabase, input: { userId: string; now: Date }) {
+  const [stay] = await db
+    .update(hotelStays)
+    .set({ checkOut: input.now })
+    .where(and(eq(hotelStays.userId, input.userId), isNull(hotelStays.checkOut)))
+    .returning({ id: hotelStays.id });
+  return stay ?? null;
+}
+
 /** Returns null (instead of throwing) if hotel_stays_active_user_idx rejects this insert — i.e. a concurrent request already created an active stay for this user first. */
 export async function createHotelStay(
   db: AtlasDatabase,

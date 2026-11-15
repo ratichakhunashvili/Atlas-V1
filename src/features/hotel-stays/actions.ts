@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/authorization";
 import {
   createHotelStay,
+  endActiveStay,
   findActiveStayForUser,
   stayHasItineraryDays,
   switchActiveStay,
@@ -264,6 +265,19 @@ export async function enterHotelFormAction(token: string) {
   }
 
   redirect(`/?checkinOk=${encodeURIComponent(result.hotel.name)}`);
+}
+
+/**
+ * "Finish stay" on Profile (owner request, 2026-11-16). Takes no arguments: it only ever ends the signed-in guest's
+ * own current stay. History is kept; the guest lands on "Join your hotel" and can scan the next hotel's code.
+ */
+export async function finishStayFormAction() {
+  const user = await requireUser();
+  await endActiveStay({ userId: user.id, now: new Date() });
+  await clearPendingHotelSwitch(user.id);
+  revalidatePath("/");
+  revalidatePath("/profile");
+  redirect("/");
 }
 
 /** Confirm button on the switch screen. Takes no arguments: the hotel comes from the guest's own pending switch. */

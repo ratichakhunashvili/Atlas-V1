@@ -15,8 +15,8 @@ export type GuestProfile = {
     dates: string;
     /** e.g. "Night 2 of 3", "Stay ended" */
     progress: string;
-    /** The stay is still open (not checked out), so its declared dates can be corrected in the stay-date editor. */
-    canEditDates: boolean;
+    /** The stay is still open (not checked out), so the guest can finish it from Profile. */
+    canFinish: boolean;
   } | null;
   /** The valid current stay's callable hotel; null for no stay, an ended stay, or no dialable number. */
   frontDesk: FrontDesk | null;
