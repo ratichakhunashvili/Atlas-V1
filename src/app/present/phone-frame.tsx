@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type SyntheticEvent } from "react";
+
+const PHONE_STYLE_ID = "atlas-present-phone";
+/**
+ * Scrollbars hidden (scrolling still works) and no sideways page scroll, like on a phone. `clip` on the root only:
+ * `hidden` on body would make body its own scroll area and break the app's sticky bottom bar.
+ */
+export const PHONE_STYLE =
+  "html{overflow-x:clip;overscroll-behavior-x:none}*{scrollbar-width:none}*::-webkit-scrollbar{display:none;width:0;height:0}";
 
 /** The phone screen the app is laid out for (an iPhone 14/15-size viewport), in CSS px. */
 const SCREEN_W = 390;
@@ -29,6 +37,31 @@ export function PhoneFrame({ src }: { src: string }) {
     return () => window.removeEventListener("resize", fit);
   }, []);
 
+  /*
+   * A phone draws no scrollbar, but a laptop browser (Chrome/Edge on Windows) draws a ~15 px one inside the frame.
+   * That took 15 px from the 390 px phone screen, so screens that scroll (Plan, Profile) became 15 px too wide and
+   * could be scrolled sideways. Inside the frame only, scrollbars are hidden (scrolling still works) and sideways
+   * scrolling of the page is switched off. The frame shows this same site, so its document can be styled; this runs
+   * again after every navigation inside the frame. The app itself, opened normally, is unchanged.
+   */
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const fitLikeAPhone = (frame: HTMLIFrameElement | null) => {
+    try {
+      const doc = frame?.contentDocument;
+      if (!doc?.head || doc.getElementById(PHONE_STYLE_ID)) return;
+      const style = doc.createElement("style");
+      style.id = PHONE_STYLE_ID;
+      style.textContent = PHONE_STYLE;
+      doc.head.appendChild(style);
+    } catch {
+      // Not this site's page (should not happen: ?path only accepts this site's paths). Leave it as it is.
+    }
+  };
+  // The first page may finish loading before React attaches onLoad, so it is also applied once on mount.
+  useEffect(() => {
+    if (frameRef.current?.contentDocument?.readyState === "complete") fitLikeAPhone(frameRef.current);
+  }, []);
+
   return (
     <div
       className="h-dvh w-full sm:h-auto sm:w-auto sm:shrink-0 sm:rounded-[52px] sm:bg-atlas-ink sm:p-[var(--bezel)] sm:shadow-[0px_30px_80px_0px_rgba(0,0,0,0.35)] sm:[transform:scale(var(--scale))]"
@@ -39,6 +72,8 @@ export function PhoneFrame({ src }: { src: string }) {
         title="Atlas on a phone"
         // The app asks for location on the map and the camera when scanning; the frame passes both through.
         allow="geolocation; camera; fullscreen"
+        ref={frameRef}
+        onLoad={(event: SyntheticEvent<HTMLIFrameElement>) => fitLikeAPhone(event.currentTarget)}
         className="block h-full w-full border-0 bg-atlas-paper sm:h-[var(--screen-h)] sm:w-[var(--screen-w)] sm:rounded-[40px]"
         style={{ "--screen-w": `${SCREEN_W}px`, "--screen-h": `${SCREEN_H}px` } as CSSProperties}
       />
