@@ -3,6 +3,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { preload } from "react-dom";
+import { OpenJoinHotels } from "@/components/atlas-ui/open-join-hotels";
+import { listJoinableHotels } from "@/db/queries/hotels";
+import { isOpenJoinHotel } from "@/features/hotel-stays/test-hotel-picker";
 import { EntryErrorAlert } from "@/components/atlas-ui/entry-error-alert";
 import { LiveMissionsMap } from "@/components/atlas-ui/map/live-missions-map";
 import { AtlasButton, AtlasField, type } from "@/components/atlas-ui/ui";
@@ -73,6 +76,7 @@ export default async function HomePage({
       stay ? { hotelName: stay.place.name, checkIn: stay.checkIn, checkOut: stay.checkOut, expectedCheckOut: stay.expectedCheckOut } : null,
       new Date()
     );
+    const openHotels = (await listJoinableHotels()).filter((hotel) => isOpenJoinHotel(hotel.id));
     const stateCopy = state.kind === "not_started" || state.kind === "ended" ? stayStateCopy(state) : null;
     return (
       <section
@@ -103,6 +107,7 @@ export default async function HomePage({
               {checkinError}
             </p>
           ) : null}
+          <OpenJoinHotels hotels={openHotels} />
           {/* The camera screen reads the hotel's QR code and opens its /checkin landing (scan-hotel/page.tsx). */}
           <AtlasButton to="ScanHotel">Scan the hotel code</AtlasButton>
           <form action={checkInToHotelFormAction} className="flex w-full flex-col items-start gap-[12px]">
