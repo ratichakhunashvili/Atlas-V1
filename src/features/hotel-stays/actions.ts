@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { currentSession, requireUser } from "@/lib/authorization";
 import { findJoinableHotel } from "@/db/queries/hotels";
-import { isTestHotelPickerAllowed } from "./test-hotel-picker";
+import { isOpenJoinHotel, isTestHotelPickerAllowed } from "./test-hotel-picker";
 import {
   createHotelStay,
   endActiveStay,
@@ -270,9 +270,10 @@ export async function enterTestHotelFormAction(formData: FormData) {
   const user = await requireUser();
   const current = await currentSession();
   const email = current.status === "signed-in" ? current.account.email : null;
-  if (!isTestHotelPickerAllowed(email)) redirect(entryErrorPath("Scan your hotel's Atlas code to join it."));
-
   const hotelId = String(formData.get("hotelId") ?? "");
+  // Anyone may join an open-join hotel (Skillwill, temporary); any other hotel needs the test allow-list.
+  if (!isOpenJoinHotel(hotelId) && !isTestHotelPickerAllowed(email)) redirect(entryErrorPath("Scan your hotel's Atlas code to join it."));
+
   const hotel = UUID.test(hotelId) ? await findJoinableHotel(hotelId) : null;
   if (!hotel) redirect(entryErrorPath("That hotel isn't available."));
 

@@ -319,7 +319,10 @@ const HOTEL_REGION = "atlas-hotel-scan-region";
 /** ScanHotel · Join your hotel: read the hotel's code and open its landing, where the guest confirms the stay. */
 export type TestHotel = { id: string; name: string; address: string | null };
 
-export function HotelScanScreen({ testHotels = null }: { testHotels?: readonly TestHotel[] | null } = {}) {
+export function HotelScanScreen({
+  testHotels = null,
+  openHotels = [],
+}: { testHotels?: readonly TestHotel[] | null; openHotels?: readonly TestHotel[] } = {}) {
   const router = useRouter();
   const [opening, setOpening] = useState(false);
   const open = (scanned: string) => {
@@ -346,6 +349,18 @@ export function HotelScanScreen({ testHotels = null }: { testHotels?: readonly T
         <>
           <div className="hidden flex-col items-center gap-[4px] bg-atlas-teal px-[24px] py-[20px] text-center wide:flex">{heading}</div>
           <section className={`${SHEET} pb-[calc(16px+env(safe-area-inset-bottom))]`}>
+            {openHotels.map((hotel) => (
+              <form key={hotel.id} action={enterTestHotelFormAction} className="flex w-full items-center justify-between gap-[12px] rounded-[16px] bg-atlas-sand px-[16px] py-[12px]">
+                <input type="hidden" name="hotelId" value={hotel.id} />
+                <span className="min-w-0">
+                  <span className="block font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">{hotel.name}</span>
+                  {hotel.address ? <span className="block font-manrope text-[13px] text-atlas-slate">{hotel.address}</span> : null}
+                </span>
+                <button type="submit" className="min-h-[44px] shrink-0 rounded-[22px] bg-atlas-teal px-[20px] font-grotesk text-[15px] font-bold text-atlas-paper">
+                  Join
+                </button>
+              </form>
+            ))}
             <h2 className="font-grotesk text-[17px] font-bold leading-[22px] text-atlas-teal">Can&apos;t scan the code?</h2>
             {cameraProblem ? (
               <button type="button" onClick={restart} className={SOLID_BUTTON}>

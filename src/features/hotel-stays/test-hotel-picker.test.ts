@@ -18,3 +18,12 @@ describe("test hotel picker allow-list", () => {
     assert.equal(parseTestHotelPickerEmails("a@b.ge,a@b.ge").size, 1);
   });
 });
+
+describe("open join", () => {
+  it("is exactly the Skillwill test hotel", async () => {
+    const { SKILLWILL_TEST_IDS } = await import("@/db/operations/skillwill-test");
+    const { OPEN_JOIN_HOTEL_IDS, isOpenJoinHotel } = await import("./test-hotel-picker");
+    assert.deepEqual(OPEN_JOIN_HOTEL_IDS, [SKILLWILL_TEST_IDS.hotel]);
+    assert.equal(isOpenJoinHotel("5c111000-0000-4000-8000-000000000001"), false);
+  });
+});

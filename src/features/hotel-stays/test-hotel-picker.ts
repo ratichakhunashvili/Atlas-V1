@@ -16,3 +16,13 @@ export function isTestHotelPickerAllowed(email: string | null | undefined, value
   if (!email) return false;
   return parseTestHotelPickerEmails(value).has(email.trim().toLowerCase());
 }
+
+/**
+ * Open join (owner request, 2026-11-18, temporary): every signed-in guest sees these hotels on "Join your hotel"
+ * with a Join button, no QR code needed. Only these ids are accepted by the open-join action. Skillwill's test base.
+ */
+export const OPEN_JOIN_HOTEL_IDS: readonly string[] = ["5c111000-0000-4000-8000-000000000002"];
+
+export function isOpenJoinHotel(hotelId: string): boolean {
+  return OPEN_JOIN_HOTEL_IDS.includes(hotelId);
+}
