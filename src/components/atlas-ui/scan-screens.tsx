@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { CAMERA_PROBLEM_COPY, useQrCamera, type QrCameraState, type QrTorch } from "@/components/qr/use-qr-camera";
 import type { CheckInMethod } from "@/db/schema";
+import { enterTestHotelFormAction } from "@/features/hotel-stays/actions";
 import { extractQrToken } from "@/services/qr/extract";
 import { AtlasIcon } from "./asset";
 import { AtlasBottomBar } from "./bottom-bar";
@@ -316,7 +317,9 @@ function StopScanner({ target }: { target: ScanTarget }) {
 const HOTEL_REGION = "atlas-hotel-scan-region";
 
 /** ScanHotel · Join your hotel: read the hotel's code and open its landing, where the guest confirms the stay. */
-export function HotelScanScreen() {
+export type TestHotel = { id: string; name: string; address: string | null };
+
+export function HotelScanScreen({ testHotels = null }: { testHotels?: readonly TestHotel[] | null } = {}) {
   const router = useRouter();
   const [opening, setOpening] = useState(false);
   const open = (scanned: string) => {
@@ -351,10 +354,38 @@ export function HotelScanScreen() {
             ) : null}
             <TypedCode disabled={opening} onSubmit={open} />
             <p className="w-full font-manrope text-[13px] leading-[1.5] text-atlas-slate">Or ask the front desk to confirm your stay.</p>
+            {testHotels ? <TestHotelPicker hotels={testHotels} /> : null}
           </section>
         </>
       }
     />
+  );
+}
+
+/** Test accounts only (TEST_HOTEL_PICKER_EMAILS): pick a hotel instead of scanning. The server re-checks the account. */
+function TestHotelPicker({ hotels }: { hotels: readonly TestHotel[] }) {
+  return (
+    <form action={enterTestHotelFormAction} className="flex w-full flex-col gap-[8px] rounded-[16px] border border-dashed border-atlas-slate/40 p-[12px]">
+      <label htmlFor="test-hotel" className="font-grotesk text-[15px] font-bold text-atlas-teal">
+        Testing: pick a hotel
+      </label>
+      {hotels.length === 0 ? (
+        <p className="font-manrope text-[13px] text-atlas-slate">No hotels to pick.</p>
+      ) : (
+        <>
+          <select id="test-hotel" name="hotelId" required className="min-h-[44px] w-full rounded-[12px] border border-atlas-slate/40 bg-white px-[12px] font-manrope text-[15px] text-atlas-ink">
+            {hotels.map((hotel) => (
+              <option key={hotel.id} value={hotel.id}>
+                {hotel.address ? `${hotel.name} · ${hotel.address}` : hotel.name}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className={SOLID_BUTTON}>
+            Join this hotel
+          </button>
+        </>
+      )}
+    </form>
   );
 }
 

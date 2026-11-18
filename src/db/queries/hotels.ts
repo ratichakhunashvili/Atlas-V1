@@ -133,3 +133,24 @@ export async function listHotelsForAdminOverview(now: Date) {
     .leftJoin(partnerCount, eq(partnerCount.hotelId, hotels.id))
     .orderBy(places.name);
 }
+
+/** Hotels a test account may pick on "Join your hotel" (features/hotel-stays/test-hotel-picker.ts): every hotel whose Place is not archived. */
+export async function listJoinableHotels(): Promise<{ id: string; name: string; address: string | null }[]> {
+  return db
+    .select({ id: hotels.id, name: places.name, address: places.address })
+    .from(hotels)
+    .innerJoin(places, eq(hotels.placeId, places.id))
+    .where(isNull(places.archivedAt))
+    .orderBy(places.name);
+}
+
+/** One joinable hotel by id, or null: the server-side re-check behind the test picker. */
+export async function findJoinableHotel(hotelId: string): Promise<{ id: string; place: { name: string } } | null> {
+  const [row] = await db
+    .select({ id: hotels.id, name: places.name })
+    .from(hotels)
+    .innerJoin(places, eq(hotels.placeId, places.id))
+    .where(and(eq(hotels.id, hotelId), isNull(places.archivedAt)))
+    .limit(1);
+  return row ? { id: row.id, place: { name: row.name } } : null;
+}

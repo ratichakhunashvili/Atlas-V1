@@ -3,7 +3,9 @@
 import { entryErrorPath } from "./entry-errors";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/authorization";
+import { currentSession, requireUser } from "@/lib/authorization";
+import { findJoinableHotel } from "@/db/queries/hotels";
+import { isTestHotelPickerAllowed } from "./test-hotel-picker";
 import {
   createHotelStay,
   endActiveStay,
@@ -112,6 +114,12 @@ export async function enterHotelByToken(rawToken: string, now: Date = new Date()
     return { ok: false, error: "That code isn't a valid hotel entry code." };
   }
 
+  return enterVerifiedHotel(user.id, hotel, now);
+}
+
+/** Starts (or asks to switch to) a hotel the caller has already verified: by its QR code, or by the test allow-list. */
+async function enterVerifiedHotel(userId: string, hotel: { id: string; place: { name: string } }, now: Date): Promise<HotelEntryResult> {
+  const user = { id: userId };
   const existingStay = await findActiveStayForUser(user.id);
   const decision = decideHotelEntry(
     existingStay ? { hotelId: existingStay.hotel.id, hotelName: existingStay.place.name } : null,
@@ -248,6 +256,30 @@ export async function checkInToHotelFormAction(formData: FormData) {
     redirect("/checkin/confirm");
   }
 
+  redirect(`/?checkinOk=${encodeURIComponent(result.hotel.name)}`);
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Test-only: start a stay at a hotel picked from the list on "Join your hotel", without its QR code. Allowed only for
+ * accounts in TEST_HOTEL_PICKER_EMAILS, checked here on the server against the account's stored email; the hotel id
+ * from the form is validated and re-read from the database. Switching hotels still goes through the confirm screen.
+ */
+export async function enterTestHotelFormAction(formData: FormData) {
+  const user = await requireUser();
+  const current = await currentSession();
+  const email = current.status === "signed-in" ? current.account.email : null;
+  if (!isTestHotelPickerAllowed(email)) redirect(entryErrorPath("Scan your hotel's Atlas code to join it."));
+
+  const hotelId = String(formData.get("hotelId") ?? "");
+  const hotel = UUID.test(hotelId) ? await findJoinableHotel(hotelId) : null;
+  if (!hotel) redirect(entryErrorPath("That hotel isn't available."));
+
+  const result = await enterVerifiedHotel(user.id, hotel, new Date());
+  if (result.ok && result.status === "entered") revalidatePath("/");
+  if (!result.ok) redirect(entryErrorPath(result.error));
+  if (result.status === "switch_required") redirect("/checkin/confirm");
   redirect(`/?checkinOk=${encodeURIComponent(result.hotel.name)}`);
 }
 
